@@ -1,0 +1,67 @@
+# ==========================================
+# 1. Environment & API Secrets
+# ==========================================
+*.env
+.env.*
+assets/env/
+lib/env.g.dart
+
+# ==========================================
+# 2. Native Credentials & Release Keys
+# ==========================================
+*.keystore
+*.jks
+android/key.properties
+*service-account*.json
+
+# ==========================================
+# 3. Flutter & Dart Generated Build Output
+# ==========================================
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+/coverage/
+**/doc/api/
+**/ios/Flutter/.last_build_id
+
+# Symbolication & Obfuscation
+app.*.symbols
+app.*.map.json
+
+# Native Android Build Output
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Native iOS Build Output
+**/ios/Flutter/Flutter.podspec
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/profile
+
+# ==========================================
+# 4. IDEs & Editor Configuration
+# ==========================================
+# VS Code
+.vscode/
+
+# IntelliJ / Android Studio
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# ==========================================
+# 5. OS Clutter & System Files
+# ==========================================
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.class
+*.log
+*.swp
+.history
