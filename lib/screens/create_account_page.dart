@@ -1,29 +1,36 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../services/otp_service.dart';
 import '../services/user_service.dart';
-import 'create_account_page.dart';
+import '../utils/user_entity.dart';
 import 'otp_verification_page.dart';
 
-class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+class CreateAccountPage extends StatefulWidget {
+  const CreateAccountPage({super.key});
 
   @override
-  State<LoginPage> createState() => _LoginPageState();
+  State<CreateAccountPage> createState() => _CreateAccountPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _CreateAccountPageState extends State<CreateAccountPage> {
+  final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
+  final _confirmPassCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
 
   final _authService = AuthService();
+  final _otpService = OtpService();
   final _userService = UserService();
 
   @override
   void dispose() {
+    _nameCtrl.dispose();
     _emailCtrl.dispose();
     _passCtrl.dispose();
+    _confirmPassCtrl.dispose();
     super.dispose();
   }
 
@@ -35,29 +42,37 @@ class _LoginPageState extends State<LoginPage> {
     try {
       final email = _emailCtrl.text.trim();
       final pass = _passCtrl.text;
+      final name = _nameCtrl.text.trim();
 
-      final credential = await _authService.signIn(email, pass);
+      final credential = await _authService.signUp(email, pass);
       final userId = credential.user!.uid;
 
-      final isVerified = await _userService.isEmailVerified(userId);
+      final user = UserEntity(
+        userId: userId,
+        displayName: name,
+        email: email,
+        authProvider: 'email',
+        isPremium: false,
+        createdAt: DateTime.now(),
+        isGuest: false,
+        lastActiveAt: DateTime.now(),
+        isEmailVerified: false,
+      );
+
+      await _userService.createUserDocument(user);
+      await _otpService.generateOTP(userId, email);
 
       if (!mounted) return;
 
-      if (!isVerified) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => OtpVerificationPage(
-              userId: userId,
-              email: email,
-            ),
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => OtpVerificationPage(
+            userId: userId,
+            email: email,
           ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Signed in successfully!')),
-        );
-      }
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -122,13 +137,13 @@ class _LoginPageState extends State<LoginPage> {
                   height: 110,
                   decoration: _neumorphicDecoration(color: bg),
                   child: const Center(
-                    child: Icon(Icons.check_circle_outline, size: 60, color: Colors.blue),
+                    child: Icon(Icons.person_add_alt_1, size: 60, color: Colors.blue),
                   ),
                 ),
                 const SizedBox(height: 28),
-                const Text('Welcome back', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
+                const Text('Create Account', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
-                const Text('Sign in to continue', style: TextStyle(color: Colors.black54)),
+                const Text('Sign up to get started', style: TextStyle(color: Colors.black54)),
                 const SizedBox(height: 24),
                 Container(
                   padding: const EdgeInsets.all(18),
@@ -137,6 +152,15 @@ class _LoginPageState extends State<LoginPage> {
                     key: _formKey,
                     child: Column(
                       children: [
+                        TextFormField(
+                          controller: _nameCtrl,
+                          decoration: _inputDecoration('Display Name'),
+                          validator: (v) {
+                            if (v == null || v.isEmpty) return 'Enter your name';
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
                         TextFormField(
                           controller: _emailCtrl,
                           keyboardType: TextInputType.emailAddress,
@@ -155,6 +179,17 @@ class _LoginPageState extends State<LoginPage> {
                           validator: (v) {
                             if (v == null || v.isEmpty) return 'Enter password';
                             if (v.length < 6) return 'Password too short';
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _confirmPassCtrl,
+                          obscureText: true,
+                          decoration: _inputDecoration('Confirm Password'),
+                          validator: (v) {
+                            if (v == null || v.isEmpty) return 'Confirm your password';
+                            if (v != _passCtrl.text) return 'Passwords do not match';
                             return null;
                           },
                         ),
@@ -185,7 +220,7 @@ class _LoginPageState extends State<LoginPage> {
                                         strokeWidth: 2,
                                       ),
                                     )
-                                  : const Text('Sign in',
+                                  : const Text('Create Account',
                                       style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                             ),
                           ),
@@ -196,13 +231,8 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 16),
                 TextButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const CreateAccountPage()),
-                    );
-                  },
-                  child: const Text('Create account'),
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Already have an account? Sign in'),
                 ),
               ],
             ),

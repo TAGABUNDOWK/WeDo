@@ -8,6 +8,7 @@ class UserEntity {
   final DateTime createdAt;
   final bool isGuest;
   final DateTime lastActiveAt;
+  final bool isEmailVerified;
 
   UserEntity({
     required this.userId,
@@ -19,6 +20,7 @@ class UserEntity {
     required this.createdAt,
     required this.isGuest,
     required this.lastActiveAt,
+    this.isEmailVerified = false,
   });
 
   factory UserEntity.fromJson(Map<String, dynamic> json) {
@@ -32,6 +34,7 @@ class UserEntity {
       createdAt: _parseTimestamp(json['created_at']),
       isGuest: json['is_guest'] as bool? ?? false,
       lastActiveAt: _parseTimestamp(json['last_active_at']),
+      isEmailVerified: json['is_email_verified'] as bool? ?? false,
     );
   }
 
@@ -46,6 +49,7 @@ class UserEntity {
       'created_at': createdAt.toIso8601String(),
       'is_guest': isGuest,
       'last_active_at': lastActiveAt.toIso8601String(),
+      'is_email_verified': isEmailVerified,
     };
   }
 
@@ -66,6 +70,7 @@ class UserEntity {
     DateTime? createdAt,
     bool? isGuest,
     DateTime? lastActiveAt,
+    bool? isEmailVerified,
   }) {
     return UserEntity(
       userId: userId ?? this.userId,
@@ -77,6 +82,7 @@ class UserEntity {
       createdAt: createdAt ?? this.createdAt,
       isGuest: isGuest ?? this.isGuest,
       lastActiveAt: lastActiveAt ?? this.lastActiveAt,
+      isEmailVerified: isEmailVerified ?? this.isEmailVerified,
     );
   }
 
@@ -85,6 +91,7 @@ class UserEntity {
     return 'UserEntity(userId: $userId, displayName: $displayName, '
         'email: $email, authProvider: $authProvider, '
         'isPremium: $isPremium, isGuest: $isGuest, '
+        'isEmailVerified: $isEmailVerified, '
         'createdAt: $createdAt, lastActiveAt: $lastActiveAt)';
   }
 
