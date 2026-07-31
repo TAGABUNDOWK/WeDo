@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../services/auth_service.dart';
-import '../services/otp_service.dart';
-import '../services/user_service.dart';
-import '../models/user_entity.dart';
+import '../../services/auth_service.dart';
+import '../../services/otp_service.dart';
+import '../../services/user_service.dart';
+import '../../models/user_entity.dart';
 import 'otp_verification_page.dart';
 
 class CreateAccountPage extends StatefulWidget {
