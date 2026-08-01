@@ -17,10 +17,7 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      throw UnsupportedError(
-        'DefaultFirebaseOptions have not been configured for web - '
-        'you can reconfigure this by running the FlutterFire CLI again.',
-      );
+      return web;
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -36,10 +33,7 @@ class DefaultFirebaseOptions {
           'you can reconfigure this by running the FlutterFire CLI again.',
         );
       case TargetPlatform.windows:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return windows;
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -59,5 +53,26 @@ class DefaultFirebaseOptions {
     projectId: 'wedo-8c865',
     databaseURL: 'https://wedo-8c865-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'wedo-8c865.firebasestorage.app',
+  );
+  static const FirebaseOptions windows = FirebaseOptions(
+    apiKey: 'AIzaSyCJDcACVzm61mULIe69bAkQFrI2mdh1CsY',
+    appId: '1:628439211243:web:154f13b90018013f6572ae',
+    messagingSenderId: '628439211243',
+    projectId: 'wedo-8c865',
+    authDomain: 'wedo-8c865.firebaseapp.com',
+    databaseURL: 'https://wedo-8c865-default-rtdb.asia-southeast1.firebasedatabase.app',
+    storageBucket: 'wedo-8c865.firebasestorage.app',
+    measurementId: 'G-JT3V8TZ9WD',
+  );
+
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyCJDcACVzm61mULIe69bAkQFrI2mdh1CsY',
+    appId: '1:628439211243:web:154f13b90018013f6572ae',
+    messagingSenderId: '628439211243',
+    projectId: 'wedo-8c865',
+    authDomain: 'wedo-8c865.firebaseapp.com',
+    databaseURL: 'https://wedo-8c865-default-rtdb.asia-southeast1.firebasedatabase.app',
+    storageBucket: 'wedo-8c865.firebasestorage.app',
+    measurementId: 'G-JT3V8TZ9WD',
   );
 }

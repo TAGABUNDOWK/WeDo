@@ -1,0 +1,418 @@
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../utils/constants.dart';
+
+const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+String _formatDate(dynamic timestamp) {
+  if (timestamp == null) return '';
+  DateTime dt;
+  if (timestamp is Timestamp) {
+    dt = timestamp.toDate();
+  } else if (timestamp is DateTime) {
+    dt = timestamp;
+  } else {
+    return '';
+  }
+  final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+  final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+  final min = dt.minute.toString().padLeft(2, '0');
+  return '${_months[dt.month - 1]} ${dt.day}, ${dt.year} • $hour:$min $ampm';
+}
+
+class MessageSearchScreen extends StatefulWidget {
+  final String groupId;
+  const MessageSearchScreen({super.key, required this.groupId});
+
+  @override
+  State<MessageSearchScreen> createState() => _MessageSearchScreenState();
+}
+
+class _MessageSearchScreenState extends State<MessageSearchScreen> {
+  final _searchCtrl = TextEditingController();
+  final _scrollCtrl = ScrollController();
+  String? _selectedSenderId;
+  DateTime? _startDate;
+  DateTime? _endDate;
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _results = [];
+  bool _isLoading = false;
+  bool _hasSearched = false;
+
+  List<Map<String, dynamic>> _members = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMembers();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadMembers() async {
+    final groupDoc = await FirebaseFirestore.instance
+        .collection(AppConstants.groupsCollection)
+        .doc(widget.groupId)
+        .get();
+
+    if (!groupDoc.exists) return;
+
+    final memberIds = List<String>.from(groupDoc.data()?['members'] ?? []);
+
+    final memberData = <Map<String, dynamic>>[];
+    for (final uid in memberIds) {
+      final userDoc = await FirebaseFirestore.instance
+          .collection(AppConstants.usersCollection)
+          .doc(uid)
+          .get();
+      if (userDoc.exists) {
+        memberData.add({
+          'uid': uid,
+          'displayName': userDoc.data()?['displayName'] ?? uid,
+        });
+      } else {
+        memberData.add({'uid': uid, 'displayName': uid});
+      }
+    }
+
+    if (mounted) setState(() => _members = memberData);
+  }
+
+  Future<void> _search() async {
+    setState(() {
+      _isLoading = true;
+      _hasSearched = true;
+    });
+
+    try {
+      Query<Map<String, dynamic>> query = FirebaseFirestore.instance
+          .collection(AppConstants.groupsCollection)
+          .doc(widget.groupId)
+          .collection(AppConstants.groupMessagesSubcollection);
+
+      if (_selectedSenderId != null) {
+        query = query.where('senderId', isEqualTo: _selectedSenderId);
+      }
+
+      if (_startDate != null) {
+        query = query.where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(_startDate!));
+      }
+
+      if (_endDate != null) {
+        final endOfDay = DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59);
+        query = query.where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(endOfDay));
+      }
+
+      if (_startDate == null && _endDate == null) {
+        query = query.orderBy('createdAt', descending: true).limit(100);
+      } else {
+        query = query.orderBy('createdAt', descending: true).limit(100);
+      }
+
+      final snapshot = await query.get();
+      var docs = snapshot.docs;
+
+      final searchText = _searchCtrl.text.trim().toLowerCase();
+      if (searchText.isNotEmpty) {
+        docs = docs.where((doc) {
+          final content = (doc.data()['content'] as String? ?? '').toLowerCase();
+          return content.contains(searchText);
+        }).toList();
+      }
+
+      setState(() => _results = docs);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Search error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _pickDate({required bool isStart}) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: isStart ? (_startDate ?? DateTime.now()) : (_endDate ?? DateTime.now()),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) {
+      setState(() {
+        if (isStart) {
+          _startDate = picked;
+        } else {
+          _endDate = picked;
+        }
+      });
+    }
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _selectedSenderId = null;
+      _startDate = null;
+      _endDate = null;
+      _searchCtrl.clear();
+      _results = [];
+      _hasSearched = false;
+    });
+  }
+
+  void _jumpToMessage(String messageId) {
+    Navigator.pop(context, messageId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Search Messages'),
+        actions: [
+          if (_hasSearched)
+            TextButton(
+              onPressed: _clearFilters,
+              child: const Text('Clear'),
+            ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            color: Colors.grey[50],
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: _searchCtrl,
+                  decoration: InputDecoration(
+                    hintText: 'Search message content...',
+                    prefixIcon: const Icon(Icons.search),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                  onSubmitted: (_) => _search(),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String?>(
+                        value: _selectedSenderId,
+                        hint: const Text('Any user'),
+                        decoration: InputDecoration(
+                          labelText: 'From',
+                          border: const OutlineInputBorder(),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          isDense: true,
+                        ),
+                        items: [
+                          const DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text('Any user'),
+                          ),
+                          ..._members.map((m) => DropdownMenuItem<String?>(
+                                value: m['uid'] as String,
+                                child: Text(m['displayName'] as String),
+                              )),
+                        ],
+                        onChanged: (val) {
+                          setState(() => _selectedSenderId = val);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _pickDate(isStart: true),
+                        icon: const Icon(Icons.calendar_today, size: 16),
+                        label: Text(
+                          _startDate != null
+                              ? '${_months[_startDate!.month - 1]} ${_startDate!.day}'
+                              : 'From date',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _pickDate(isStart: false),
+                        icon: const Icon(Icons.calendar_today, size: 16),
+                        label: Text(
+                          _endDate != null
+                              ? '${_months[_endDate!.month - 1]} ${_endDate!.day}'
+                              : 'To date',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: _isLoading ? null : _search,
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Icon(Icons.search),
+                    ),
+                  ],
+                ),
+                if (_selectedSenderId != null || _startDate != null || _endDate != null) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      if (_selectedSenderId != null)
+                        Chip(
+                          label: Text(
+                            _members.firstWhere(
+                              (m) => m['uid'] == _selectedSenderId,
+                              orElse: () => {'displayName': _selectedSenderId},
+                            )['displayName'] as String,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          onDeleted: () => setState(() => _selectedSenderId = null),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      if (_startDate != null)
+                        Chip(
+                          label: Text(
+                            '${_months[_startDate!.month - 1]} ${_startDate!.day}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          onDeleted: () => setState(() => _startDate = null),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      if (_endDate != null)
+                        Chip(
+                          label: Text(
+                            '${_months[_endDate!.month - 1]} ${_endDate!.day}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          onDeleted: () => setState(() => _endDate = null),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Expanded(
+            child: _hasSearched
+                ? _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _results.isEmpty
+                        ? const Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.search_off, size: 64, color: Colors.grey),
+                                SizedBox(height: 12),
+                                Text('No messages found', style: TextStyle(color: Colors.grey, fontSize: 16)),
+                              ],
+                            ),
+                          )
+                        : ListView.builder(
+                            controller: _scrollCtrl,
+                            padding: const EdgeInsets.all(12),
+                            itemCount: _results.length,
+                            itemBuilder: (context, index) {
+                              final data = _results[index].data();
+                              final content = data['content'] as String? ?? '';
+                              final senderName = data['senderName'] as String? ?? 'Unknown';
+                              final createdAt = data['createdAt'] as Timestamp?;
+
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(12),
+                                  onTap: () => _jumpToMessage(_results[index].id),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            CircleAvatar(
+                                              radius: 14,
+                                              child: Text(
+                                                senderName[0].toUpperCase(),
+                                                style: const TextStyle(fontSize: 12),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                senderName,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                            ),
+                                            Text(
+                                              _formatDate(createdAt),
+                                              style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          content,
+                                          maxLines: 3,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(fontSize: 14),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          )
+                : const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.manage_search, size: 64, color: Colors.grey),
+                        SizedBox(height: 12),
+                        Text('Search by content, user, or date', style: TextStyle(color: Colors.grey, fontSize: 16)),
+                      ],
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}

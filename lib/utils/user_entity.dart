@@ -3,10 +3,7 @@ class UserEntity {
   final String displayName;
   final String? email;
   final String? photoUrl;
-  final String authProvider;
-  final bool isPremium;
   final DateTime createdAt;
-  final bool isGuest;
   final DateTime lastActiveAt;
 
   UserEntity({
@@ -14,43 +11,35 @@ class UserEntity {
     required this.displayName,
     this.email,
     this.photoUrl,
-    required this.authProvider,
-    required this.isPremium,
     required this.createdAt,
-    required this.isGuest,
     required this.lastActiveAt,
   });
 
   factory UserEntity.fromJson(Map<String, dynamic> json) {
     return UserEntity(
-      userId: json['user_id'] as String,
-      displayName: json['display_name'] as String,
+      userId: json['userId'] as String,
+      displayName: json['displayName'] as String,
       email: json['email'] as String?,
-      photoUrl: json['photo_url'] as String?,
-      authProvider: json['auth_provider'] as String,
-      isPremium: json['is_premium'] as bool? ?? false,
-      createdAt: _parseTimestamp(json['created_at']),
-      isGuest: json['is_guest'] as bool? ?? false,
-      lastActiveAt: _parseTimestamp(json['last_active_at']),
+      photoUrl: json['photoUrl'] as String?,
+      createdAt: _parseTimestamp(json['createdAt']),
+      lastActiveAt: _parseTimestamp(json['lastActiveAt']),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'user_id': userId,
-      'display_name': displayName,
+      'userId': userId,
+      'displayName': displayName,
       'email': email,
-      'photo_url': photoUrl,
-      'auth_provider': authProvider,
-      'is_premium': isPremium,
-      'created_at': createdAt.toIso8601String(),
-      'is_guest': isGuest,
-      'last_active_at': lastActiveAt.toIso8601String(),
+      'photoUrl': photoUrl,
+      'createdAt': createdAt,
+      'lastActiveAt': lastActiveAt,
     };
   }
 
   static DateTime _parseTimestamp(dynamic value) {
     if (value is DateTime) return value;
+    if (value is Timestamp) return value.toDate();
     if (value is String) return DateTime.parse(value);
     if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
     throw ArgumentError('Unsupported timestamp format: $value');
@@ -61,10 +50,7 @@ class UserEntity {
     String? displayName,
     String? email,
     String? photoUrl,
-    String? authProvider,
-    bool? isPremium,
     DateTime? createdAt,
-    bool? isGuest,
     DateTime? lastActiveAt,
   }) {
     return UserEntity(
@@ -72,20 +58,14 @@ class UserEntity {
       displayName: displayName ?? this.displayName,
       email: email ?? this.email,
       photoUrl: photoUrl ?? this.photoUrl,
-      authProvider: authProvider ?? this.authProvider,
-      isPremium: isPremium ?? this.isPremium,
       createdAt: createdAt ?? this.createdAt,
-      isGuest: isGuest ?? this.isGuest,
       lastActiveAt: lastActiveAt ?? this.lastActiveAt,
     );
   }
 
   @override
   String toString() {
-    return 'UserEntity(userId: $userId, displayName: $displayName, '
-        'email: $email, authProvider: $authProvider, '
-        'isPremium: $isPremium, isGuest: $isGuest, '
-        'createdAt: $createdAt, lastActiveAt: $lastActiveAt)';
+    return 'UserEntity(userId: $userId, displayName: $displayName, email: $email)';
   }
 
   @override

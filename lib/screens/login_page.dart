@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/auth_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -10,23 +11,47 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
+  final _nameCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  final _authService = AuthService();
+  bool _isRegistering = false;
+  bool _isLoading = false;
 
   @override
   void dispose() {
     _emailCtrl.dispose();
     _passCtrl.dispose();
+    _nameCtrl.dispose();
     super.dispose();
   }
 
-  void _onSubmit() {
-    if (!_formKey.currentState!.validate()) return;
-    final email = _emailCtrl.text.trim();
-    final pass = _passCtrl.text;
-    // TODO: wire this up to Firebase Auth if desired
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Email: $email — Password length: ${pass.length}')),
-    );
+  Future<void> _onSubmit() async {
+    if (!_formKey.currentState!.validate() || _isLoading) return;
+
+    setState(() => _isLoading = true);
+    try {
+      if (_isRegistering) {
+        await _authService.register(
+          _emailCtrl.text.trim(),
+          _passCtrl.text,
+          _nameCtrl.text.trim(),
+        );
+      } else {
+        await _authService.signIn(
+          _emailCtrl.text.trim(),
+          _passCtrl.text,
+        );
+      }
+      if (mounted) Navigator.pushReplacementNamed(context, '/home');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   BoxDecoration _neumorphicDecoration({Color? color}) {
@@ -99,6 +124,17 @@ class _LoginPageState extends State<LoginPage> {
                     key: _formKey,
                     child: Column(
                       children: [
+                        if (_isRegistering) ...[
+                          TextFormField(
+                            controller: _nameCtrl,
+                            decoration: _inputDecoration('Display Name'),
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) return 'Enter your name';
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                        ],
                         TextFormField(
                           controller: _emailCtrl,
                           keyboardType: TextInputType.emailAddress,
@@ -122,12 +158,12 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         const SizedBox(height: 18),
                         GestureDetector(
-                          onTap: _onSubmit,
+                          onTap: _isLoading ? null : _onSubmit,
                           child: Container(
                             width: double.infinity,
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             decoration: BoxDecoration(
-                              color: Colors.blue,
+                              color: _isLoading ? Colors.grey : Colors.blue,
                               borderRadius: BorderRadius.circular(12),
                               boxShadow: const [
                                 BoxShadow(
@@ -137,8 +173,17 @@ class _LoginPageState extends State<LoginPage> {
                                 )
                               ],
                             ),
-                            child: const Center(
-                              child: Text('Sign in', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                            child: Center(
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                    )
+                                  : Text(
+                                      _isRegistering ? 'Create account' : 'Sign in',
+                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                                    ),
                             ),
                           ),
                         ),
@@ -148,8 +193,12 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 16),
                 TextButton(
-                  onPressed: () {},
-                  child: const Text('Create account'),
+                  onPressed: _isLoading
+                      ? null
+                      : () {
+                          setState(() => _isRegistering = !_isRegistering);
+                        },
+                  child: Text(_isRegistering ? 'Already have an account? Sign in' : 'Create account'),
                 ),
               ],
             ),

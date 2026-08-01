@@ -1,0 +1,64 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isFriendParticipant() {
+      return isSignedIn() && request.auth.uid in resource.data.userIds;
+    }
+
+    function isGroupMember(groupId) {
+      return isSignedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update, delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /friends/{friendshipId} {
+      allow create: if isSignedIn()
+        && request.resource.data.userIds is list
+        && request.resource.data.userIds.size() == 2
+        && request.resource.data.userIds.hasAll([request.auth.uid])
+        && request.resource.data.status == 'pending'
+        && request.resource.data.requestedBy == request.auth.uid;
+      allow read: if isFriendParticipant();
+      allow update: if isFriendParticipant()
+        && request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['status', 'updatedAt']);
+      allow delete: if isFriendParticipant();
+    }
+
+    match /groups/{groupId} {
+      allow read: if isSignedIn()
+        && request.auth.uid in resource.data.members;
+      allow create: if isSignedIn()
+        && request.resource.data.members is list
+        && request.resource.data.members.hasAny([request.auth.uid])
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isSignedIn()
+        && request.auth.uid in resource.data.members;
+      allow delete: if isSignedIn()
+        && resource.data.createdBy == request.auth.uid;
+
+      match /members/{memberUid} {
+        allow read: if isGroupMember(groupId);
+        allow create: if isSignedIn() && request.auth.uid == memberUid;
+        allow update, delete: if isSignedIn() && request.auth.uid == memberUid;
+      }
+
+      match /messages/{messageId} {
+        allow read: if isGroupMember(groupId);
+        allow create: if isGroupMember(groupId)
+          && request.resource.data.senderId == request.auth.uid;
+        allow update, delete: if isGroupMember(groupId);
+      }
+    }
+  }
+}
