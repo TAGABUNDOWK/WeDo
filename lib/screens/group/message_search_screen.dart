@@ -1,24 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../utils/constants.dart';
-
-const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-String _formatDate(dynamic timestamp) {
-  if (timestamp == null) return '';
-  DateTime dt;
-  if (timestamp is Timestamp) {
-    dt = timestamp.toDate();
-  } else if (timestamp is DateTime) {
-    dt = timestamp;
-  } else {
-    return '';
-  }
-  final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
-  final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-  final min = dt.minute.toString().padLeft(2, '0');
-  return '${_months[dt.month - 1]} ${dt.day}, ${dt.year} • $hour:$min $ampm';
-}
+import '../../services/group/group_service.dart';
+import '../../utils/time_format.dart';
 
 class MessageSearchScreen extends StatefulWidget {
   final String groupId;
@@ -31,6 +14,7 @@ class MessageSearchScreen extends StatefulWidget {
 class _MessageSearchScreenState extends State<MessageSearchScreen> {
   final _searchCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
+  final _groupService = GroupService();
   String? _selectedSenderId;
   DateTime? _startDate;
   DateTime? _endDate;
@@ -54,31 +38,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
   }
 
   Future<void> _loadMembers() async {
-    final groupDoc = await FirebaseFirestore.instance
-        .collection(AppConstants.groupsCollection)
-        .doc(widget.groupId)
-        .get();
-
-    if (!groupDoc.exists) return;
-
-    final memberIds = List<String>.from(groupDoc.data()?['members'] ?? []);
-
-    final memberData = <Map<String, dynamic>>[];
-    for (final uid in memberIds) {
-      final userDoc = await FirebaseFirestore.instance
-          .collection(AppConstants.usersCollection)
-          .doc(uid)
-          .get();
-      if (userDoc.exists) {
-        memberData.add({
-          'uid': uid,
-          'displayName': userDoc.data()?['displayName'] ?? uid,
-        });
-      } else {
-        memberData.add({'uid': uid, 'displayName': uid});
-      }
-    }
-
+    final memberData = await _groupService.getGroupMembersWithNames(widget.groupId);
     if (mounted) setState(() => _members = memberData);
   }
 
@@ -89,31 +49,12 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
     });
 
     try {
-      Query<Map<String, dynamic>> query = FirebaseFirestore.instance
-          .collection(AppConstants.groupsCollection)
-          .doc(widget.groupId)
-          .collection(AppConstants.groupMessagesSubcollection);
-
-      if (_selectedSenderId != null) {
-        query = query.where('senderId', isEqualTo: _selectedSenderId);
-      }
-
-      if (_startDate != null) {
-        query = query.where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(_startDate!));
-      }
-
-      if (_endDate != null) {
-        final endOfDay = DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59);
-        query = query.where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(endOfDay));
-      }
-
-      if (_startDate == null && _endDate == null) {
-        query = query.orderBy('createdAt', descending: true).limit(100);
-      } else {
-        query = query.orderBy('createdAt', descending: true).limit(100);
-      }
-
-      final snapshot = await query.get();
+      final snapshot = await _groupService.searchMessages(
+        groupId: widget.groupId,
+        senderId: _selectedSenderId,
+        startDate: _startDate,
+        endDate: _endDate,
+      );
       var docs = snapshot.docs;
 
       final searchText = _searchCtrl.text.trim().toLowerCase();
@@ -243,7 +184,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
                         icon: const Icon(Icons.calendar_today, size: 16),
                         label: Text(
                           _startDate != null
-                              ? '${_months[_startDate!.month - 1]} ${_startDate!.day}'
+                              ? formatMonthDay(_startDate!)
                               : 'From date',
                           style: const TextStyle(fontSize: 13),
                         ),
@@ -259,7 +200,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
                         icon: const Icon(Icons.calendar_today, size: 16),
                         label: Text(
                           _endDate != null
-                              ? '${_months[_endDate!.month - 1]} ${_endDate!.day}'
+                              ? formatMonthDay(_endDate!)
                               : 'To date',
                           style: const TextStyle(fontSize: 13),
                         ),
@@ -305,7 +246,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
                       if (_startDate != null)
                         Chip(
                           label: Text(
-                            '${_months[_startDate!.month - 1]} ${_startDate!.day}',
+                            formatMonthDay(_startDate!),
                             style: const TextStyle(fontSize: 12),
                           ),
                           onDeleted: () => setState(() => _startDate = null),
@@ -314,7 +255,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
                       if (_endDate != null)
                         Chip(
                           label: Text(
-                            '${_months[_endDate!.month - 1]} ${_endDate!.day}',
+                            formatMonthDay(_endDate!),
                             style: const TextStyle(fontSize: 12),
                           ),
                           onDeleted: () => setState(() => _endDate = null),
@@ -381,7 +322,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
                                               ),
                                             ),
                                             Text(
-                                              _formatDate(createdAt),
+                                              formatSearchDate(createdAt),
                                               style: const TextStyle(fontSize: 11, color: Colors.grey),
                                             ),
                                           ],

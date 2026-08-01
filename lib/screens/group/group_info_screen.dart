@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../utils/constants.dart';
+import '../../services/group/group_service.dart';
 
 class GroupInfoScreen extends StatefulWidget {
   final String groupId;
@@ -12,6 +12,7 @@ class GroupInfoScreen extends StatefulWidget {
 }
 
 class _GroupInfoScreenState extends State<GroupInfoScreen> {
+  final _groupService = GroupService();
   final _currentUser = FirebaseAuth.instance.currentUser;
 
   Future<void> _addMember() async {
@@ -39,46 +40,17 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     );
 
     if (result != null && result.isNotEmpty) {
-      final userQuery = await FirebaseFirestore.instance
-          .collection(AppConstants.usersCollection)
-          .where('email', isEqualTo: result)
-          .limit(1)
-          .get();
+      final matched = await _groupService.findUserByEmail(result);
 
-      String targetUid;
-      String targetName;
+      final targetUid = matched?.uid ?? result;
+      final targetName = matched?.name ?? result;
 
-      if (userQuery.docs.isNotEmpty) {
-        final userData = userQuery.docs.first.data();
-        targetUid = userQuery.docs.first.id;
-        targetName = userData['displayName'] ?? 'Unknown';
-      } else {
-        targetUid = result;
-        targetName = result;
-      }
-
-      final batch = FirebaseFirestore.instance.batch();
-
-      final groupRef = FirebaseFirestore.instance
-          .collection(AppConstants.groupsCollection)
-          .doc(widget.groupId);
-
-      batch.update(groupRef, {
-        'members': FieldValue.arrayUnion([targetUid]),
-        'memberCount': FieldValue.increment(1),
-      });
-
-      batch.set(
-        groupRef.collection(AppConstants.groupMembersSubcollection).doc(targetUid),
-        {
-          'role': 'member',
-          'joinedAt': FieldValue.serverTimestamp(),
-          'invitedBy': _currentUser!.uid,
-          'displayName': targetName,
-        },
+      await _groupService.addMember(
+        groupId: widget.groupId,
+        memberUid: targetUid,
+        displayName: targetName,
+        invitedBy: _currentUser!.uid,
       );
-
-      await batch.commit();
       setState(() {});
     }
   }
@@ -100,22 +72,10 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     );
 
     if (confirm == true) {
-      final batch = FirebaseFirestore.instance.batch();
-
-      final groupRef = FirebaseFirestore.instance
-          .collection(AppConstants.groupsCollection)
-          .doc(widget.groupId);
-
-      batch.update(groupRef, {
-        'members': FieldValue.arrayRemove([memberId]),
-        'memberCount': FieldValue.increment(-1),
-      });
-
-      batch.delete(
-        groupRef.collection(AppConstants.groupMembersSubcollection).doc(memberId),
+      await _groupService.removeMember(
+        groupId: widget.groupId,
+        memberUid: memberId,
       );
-
-      await batch.commit();
       setState(() {});
     }
   }
@@ -125,10 +85,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Group Info')),
       body: FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        future: FirebaseFirestore.instance
-            .collection(AppConstants.groupsCollection)
-            .doc(widget.groupId)
-            .get(),
+        future: _groupService.getGroupDoc(widget.groupId),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -183,10 +140,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
               ...memberIds.map((id) => ListTile(
                     leading: CircleAvatar(child: Text(id[0].toUpperCase())),
                     title: FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                      future: FirebaseFirestore.instance
-                          .collection(AppConstants.usersCollection)
-                          .doc(id)
-                          .get(),
+                      future: _groupService.getUserDoc(id),
                       builder: (context, userSnap) {
                         final name = userSnap.data?.data()?['displayName'] ?? id;
                         return Text(name);
@@ -221,10 +175,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                       ),
                     );
                     if (confirm == true) {
-                      await FirebaseFirestore.instance
-                          .collection(AppConstants.groupsCollection)
-                          .doc(widget.groupId)
-                          .delete();
+                      await _groupService.deleteGroup(widget.groupId);
                       if (context.mounted) Navigator.pop(context);
                     }
                   },

@@ -1,33 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../utils/constants.dart';
+import '../../services/group/group_service.dart';
+import '../../utils/time_format.dart';
 import '../../widgets/message_bubble.dart';
 import 'message_search_screen.dart';
-
-const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-String _formatTime(dynamic timestamp) {
-  if (timestamp == null) return '';
-  DateTime dt;
-  if (timestamp is Timestamp) {
-    dt = timestamp.toDate();
-  } else if (timestamp is DateTime) {
-    dt = timestamp;
-  } else {
-    return '';
-  }
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final msgDate = DateTime(dt.year, dt.month, dt.day);
-  final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
-  final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-  final min = dt.minute.toString().padLeft(2, '0');
-  final time = '$hour:$min $ampm';
-  if (msgDate == today) return time;
-  if (dt.year == now.year) return '${_months[dt.month - 1]} ${dt.day}';
-  return '${_months[dt.month - 1]} ${dt.day}, ${dt.year}';
-}
 
 class GroupChatScreen extends StatefulWidget {
   final String groupId;
@@ -40,6 +17,7 @@ class GroupChatScreen extends StatefulWidget {
 class _GroupChatScreenState extends State<GroupChatScreen> {
   final _messageCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
+  final _groupService = GroupService();
   final _currentUser = FirebaseAuth.instance.currentUser;
   String _groupName = '';
 
@@ -50,10 +28,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   Future<void> _loadGroupInfo() async {
-    final doc = await FirebaseFirestore.instance
-        .collection(AppConstants.groupsCollection)
-        .doc(widget.groupId)
-        .get();
+    final doc = await _groupService.getGroupDoc(widget.groupId);
     if (doc.exists && mounted) {
       setState(() => _groupName = doc.data()?['name'] ?? 'Group');
     }
@@ -70,31 +45,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     final text = _messageCtrl.text.trim();
     if (text.isEmpty || _currentUser == null) return;
 
-    final senderName = _currentUser!.displayName ?? _currentUser!.email ?? 'Unknown';
-
-    FirebaseFirestore.instance
-        .collection(AppConstants.groupsCollection)
-        .doc(widget.groupId)
-        .collection(AppConstants.groupMessagesSubcollection)
-        .add({
-      'senderId': _currentUser!.uid,
-      'senderName': senderName,
-      'type': 'text',
-      'content': text,
-      'reactions': {},
-      'readBy': [_currentUser!.uid],
-      'createdAt': FieldValue.serverTimestamp(),
-      'createdAtLocal': DateTime.now().toIso8601String(),
-      'edited': false,
-    });
-
-    FirebaseFirestore.instance
-        .collection(AppConstants.groupsCollection)
-        .doc(widget.groupId)
-        .update({
-      'lastMessage': text,
-      'lastMessageAt': FieldValue.serverTimestamp(),
-    });
+    _groupService.sendMessage(
+      groupId: widget.groupId,
+      senderId: _currentUser.uid,
+      senderName: _currentUser.displayName ?? _currentUser.email ?? 'Unknown',
+      text: text,
+    );
 
     _messageCtrl.clear();
   }
@@ -172,12 +128,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
               );
               if (messageId != null && _scrollCtrl.hasClients) {
                 // Find the message index and scroll to it
-                final snapshot = await FirebaseFirestore.instance
-                    .collection(AppConstants.groupsCollection)
-                    .doc(widget.groupId)
-                    .collection(AppConstants.groupMessagesSubcollection)
-                    .orderBy('createdAt', descending: false)
-                    .get();
+                final snapshot = await _groupService.getMessagesOnce(widget.groupId);
                 final index = snapshot.docs.indexWhere((doc) => doc.id == messageId);
                 if (index != -1 && _scrollCtrl.hasClients) {
                   _scrollCtrl.animateTo(
@@ -201,12 +152,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         children: [
           Expanded(
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection(AppConstants.groupsCollection)
-                  .doc(widget.groupId)
-                  .collection(AppConstants.groupMessagesSubcollection)
-                  .orderBy('createdAt', descending: false)
-                  .snapshots(),
+              stream: _groupService.getMessagesStream(widget.groupId),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -227,8 +173,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                     final ts = data['createdAt'] as Timestamp?;
                     final localTs = data['createdAtLocal'] as String?;
                     final displayTime = ts != null
-                        ? _formatTime(ts)
-                        : (localTs != null ? _formatTime(DateTime.parse(localTs)) : '');
+                        ? formatChatTime(ts)
+                        : (localTs != null ? formatChatTime(DateTime.parse(localTs)) : '');
 
                     final type = data['type'] as String? ?? 'text';
                     final content = data['content'] as String? ?? '';

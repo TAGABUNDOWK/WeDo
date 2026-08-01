@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../utils/constants.dart';
+import '../../services/group/group_service.dart';
 
 class CreateGroupScreen extends StatefulWidget {
   const CreateGroupScreen({super.key});
@@ -13,6 +12,7 @@ class CreateGroupScreen extends StatefulWidget {
 class _CreateGroupScreenState extends State<CreateGroupScreen> {
   final _nameCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  final _groupService = GroupService();
   final _currentUser = FirebaseAuth.instance.currentUser;
   bool _isLoading = false;
 
@@ -27,29 +27,11 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final groupRef = FirebaseFirestore.instance.collection(AppConstants.groupsCollection).doc();
-
-      final batch = FirebaseFirestore.instance.batch();
-
-      batch.set(groupRef, {
-        'name': _nameCtrl.text.trim(),
-        'photoUrl': null,
-        'createdBy': _currentUser!.uid,
-        'members': [_currentUser!.uid],
-        'memberCount': 1,
-        'createdAt': FieldValue.serverTimestamp(),
-        'lastMessageAt': FieldValue.serverTimestamp(),
-        'lastMessage': null,
-      });
-
-      batch.set(groupRef.collection(AppConstants.groupMembersSubcollection).doc(_currentUser!.uid), {
-        'role': 'admin',
-        'joinedAt': FieldValue.serverTimestamp(),
-        'invitedBy': _currentUser!.uid,
-        'displayName': _currentUser!.displayName ?? _currentUser!.email ?? 'Unknown',
-      });
-
-      await batch.commit();
+      await _groupService.createGroup(
+        name: _nameCtrl.text.trim(),
+        createdBy: _currentUser.uid,
+        displayName: _currentUser.displayName ?? _currentUser.email ?? 'Unknown',
+      );
 
       if (mounted) Navigator.pop(context);
     } catch (e) {

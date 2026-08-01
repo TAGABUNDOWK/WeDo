@@ -1,39 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../utils/constants.dart';
+import '../../services/group/group_service.dart';
+import '../../utils/time_format.dart';
 import 'group_chat_screen.dart';
 import 'create_group_screen.dart';
 
 const _bg = Color(0xFFE7ECEF);
-const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-String _formatListTime(dynamic timestamp) {
-  if (timestamp == null) return '';
-  DateTime dt;
-  if (timestamp is Timestamp) {
-    dt = timestamp.toDate();
-  } else if (timestamp is DateTime) {
-    dt = timestamp;
-  } else {
-    return '';
-  }
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final msgDate = DateTime(dt.year, dt.month, dt.day);
-  if (msgDate == today) {
-    final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
-    final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-    final min = dt.minute.toString().padLeft(2, '0');
-    return '$hour:$min $ampm';
-  }
-  if (msgDate == today.subtract(const Duration(days: 1))) return 'Yesterday';
-  if (dt.year == now.year) return '${_months[dt.month - 1]} ${dt.day}';
-  return '${_months[dt.month - 1]} ${dt.day}, ${dt.year}';
+class GroupChatsPage extends StatefulWidget {
+  const GroupChatsPage({super.key});
+
+  @override
+  State<GroupChatsPage> createState() => _GroupChatsPageState();
 }
 
-class GroupChatsPage extends StatelessWidget {
-  const GroupChatsPage({super.key});
+class _GroupChatsPageState extends State<GroupChatsPage> {
+  final _groupService = GroupService();
 
   Future<void> _openCreateGroup(BuildContext context) {
     return Navigator.push(
@@ -69,11 +52,7 @@ class GroupChatsPage extends StatelessWidget {
       body: currentUser == null
           ? const Center(child: Text('Sign in to view your chats'))
           : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection(AppConstants.groupsCollection)
-                  .where('members', arrayContains: currentUser.uid)
-                  .orderBy('lastMessageAt', descending: true)
-                  .snapshots(),
+              stream: _groupService.getUserGroupsStream(currentUser.uid),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
                   return Center(child: Text('Error: ${snapshot.error}'));
@@ -225,7 +204,7 @@ class _ChatTile extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          _formatListTime(lastMessageAt),
+                          formatListTime(lastMessageAt),
                           style: const TextStyle(fontSize: 11, color: Colors.black38),
                         ),
                       ],
