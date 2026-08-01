@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
-import '../services/auth_service.dart';
+import '../../services/auth/auth_service.dart';
+import '../../services/auth/user_service.dart';
+import 'create_account_page.dart';
+import 'otp_verification_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -11,44 +14,55 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
-  final _nameCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
-  final _authService = AuthService();
-  bool _isRegistering = false;
   bool _isLoading = false;
+
+  final _authService = AuthService();
+  final _userService = UserService();
 
   @override
   void dispose() {
     _emailCtrl.dispose();
     _passCtrl.dispose();
-    _nameCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _onSubmit() async {
-    if (!_formKey.currentState!.validate() || _isLoading) return;
+    if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
+
     try {
-      if (_isRegistering) {
-        await _authService.register(
-          _emailCtrl.text.trim(),
-          _passCtrl.text,
-          _nameCtrl.text.trim(),
+      final email = _emailCtrl.text.trim();
+      final pass = _passCtrl.text;
+
+      final credential = await _authService.signIn(email, pass);
+      final userId = credential.user!.uid;
+
+      final isVerified = await _userService.isEmailVerified(userId);
+
+      if (!mounted) return;
+
+      if (!isVerified) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => OtpVerificationPage(
+              userId: userId,
+              email: email,
+            ),
+          ),
         );
       } else {
-        await _authService.signIn(
-          _emailCtrl.text.trim(),
-          _passCtrl.text,
-        );
-      }
-      if (mounted) Navigator.pushReplacementNamed(context, '/home');
-    } catch (e) {
-      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
+          const SnackBar(content: Text('Signed in successfully!')),
         );
       }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -116,7 +130,6 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 8),
                 const Text('Sign in to continue', style: TextStyle(color: Colors.black54)),
                 const SizedBox(height: 24),
-
                 Container(
                   padding: const EdgeInsets.all(18),
                   decoration: _neumorphicDecoration(color: bg),
@@ -124,17 +137,6 @@ class _LoginPageState extends State<LoginPage> {
                     key: _formKey,
                     child: Column(
                       children: [
-                        if (_isRegistering) ...[
-                          TextFormField(
-                            controller: _nameCtrl,
-                            decoration: _inputDecoration('Display Name'),
-                            validator: (v) {
-                              if (v == null || v.trim().isEmpty) return 'Enter your name';
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                        ],
                         TextFormField(
                           controller: _emailCtrl,
                           keyboardType: TextInputType.emailAddress,
@@ -163,7 +165,7 @@ class _LoginPageState extends State<LoginPage> {
                             width: double.infinity,
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             decoration: BoxDecoration(
-                              color: _isLoading ? Colors.grey : Colors.blue,
+                              color: _isLoading ? Colors.blue.shade200 : Colors.blue,
                               borderRadius: BorderRadius.circular(12),
                               boxShadow: const [
                                 BoxShadow(
@@ -178,12 +180,13 @@ class _LoginPageState extends State<LoginPage> {
                                   ? const SizedBox(
                                       height: 20,
                                       width: 20,
-                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
                                     )
-                                  : Text(
-                                      _isRegistering ? 'Create account' : 'Sign in',
-                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                                    ),
+                                  : const Text('Sign in',
+                                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                             ),
                           ),
                         ),
@@ -193,12 +196,13 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 16),
                 TextButton(
-                  onPressed: _isLoading
-                      ? null
-                      : () {
-                          setState(() => _isRegistering = !_isRegistering);
-                        },
-                  child: Text(_isRegistering ? 'Already have an account? Sign in' : 'Create account'),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const CreateAccountPage()),
+                    );
+                  },
+                  child: const Text('Create account'),
                 ),
               ],
             ),
