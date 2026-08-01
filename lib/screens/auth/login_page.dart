@@ -3,6 +3,7 @@ import '../../services/auth/auth_service.dart';
 import '../../services/auth/user_service.dart';
 import 'create_account_page.dart';
 import 'otp_verification_page.dart';
+import '../home/home_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -54,8 +55,9 @@ class _LoginPageState extends State<LoginPage> {
           ),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Signed in successfully!')),
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const HomePage()),
         );
       }
     } catch (e) {
