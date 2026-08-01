@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'package:geolocator/geolocator.dart';
 import 'package:flutter/material.dart';
 import '../../services/auth/auth_service.dart';
-import '../../services/auth/otp_service.dart';
 import '../../services/auth/user_service.dart';
+import '../../services/location/location_service.dart';
 import '../../models/user_entity.dart';
 import 'otp_verification_page.dart';
+
+enum _LocationDialogAction { retry, openSettings }
 
 class CreateAccountPage extends StatefulWidget {
   const CreateAccountPage({super.key});
@@ -14,7 +17,7 @@ class CreateAccountPage extends StatefulWidget {
 }
 
 class _CreateAccountPageState extends State<CreateAccountPage> {
-  final _nameCtrl = TextEditingController();
+  final _usernameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   final _confirmPassCtrl = TextEditingController();
@@ -22,12 +25,12 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
   bool _isLoading = false;
 
   final _authService = AuthService();
-  final _otpService = OtpService();
   final _userService = UserService();
+  final _locationService = LocationService();
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
+    _usernameCtrl.dispose();
     _emailCtrl.dispose();
     _passCtrl.dispose();
     _confirmPassCtrl.dispose();
@@ -40,16 +43,20 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
     setState(() => _isLoading = true);
 
     try {
+      final position = await _requireLocation();
+
       final email = _emailCtrl.text.trim();
       final pass = _passCtrl.text;
-      final name = _nameCtrl.text.trim();
+      final username = _usernameCtrl.text.trim().toLowerCase();
 
       final credential = await _authService.signUp(email, pass);
       final userId = credential.user!.uid;
 
       final user = UserEntity(
         userId: userId,
-        displayName: name,
+        displayName: username,
+        username: username,
+        usernameLower: username,
         email: email,
         authProvider: 'email',
         isPremium: false,
@@ -60,7 +67,24 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
       );
 
       await _userService.createUserDocument(user);
-      await _otpService.generateOTP(userId, email);
+
+      if (position != null) {
+        try {
+          await _userService.updateLocationIfNeeded(
+            userId,
+            position.latitude,
+            position.longitude,
+          );
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Couldn\'t save your location right now'),
+              ),
+            );
+          }
+        }
+      }
 
       if (!mounted) return;
 
@@ -81,6 +105,124 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<Position?> _requireLocation() async {
+    var hasAsked = false;
+    while (true) {
+      if (!mounted) return null;
+
+      final permission = await _locationService.checkPermission();
+      final granted = permission == LocationPermission.always ||
+          permission == LocationPermission.whileInUse;
+
+      if (granted) {
+        return _locationService.getQuickPosition();
+      }
+
+      final enabled = await _locationService.isLocationServiceEnabled();
+      if (!enabled) {
+        final action = await _showLocationDialog(
+          title: 'Location services off',
+          message:
+              'Your device location services are turned off. Turn them on to find people near you.',
+          showRetry: true,
+          showSettings: true,
+        );
+        if (action == _LocationDialogAction.openSettings) {
+          await _locationService.openLocationSettings();
+        }
+        continue;
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        await _showLocationDialog(
+          title: 'Location blocked',
+          message:
+              'Location access is blocked. Open your device settings to allow WeDo to use your location.',
+          showSettings: true,
+        );
+        await _locationService.openLocationSettings();
+        continue;
+      }
+
+      if (!hasAsked) {
+        await _showExplainDialog();
+        await _locationService.requestPermission();
+        hasAsked = true;
+        continue;
+      }
+
+      final action = await _showLocationDialog(
+        title: 'Location required',
+        message:
+            'We still don\'t have your location. Allow access to continue creating your account.',
+        showRetry: true,
+        showSettings: true,
+      );
+      if (action == _LocationDialogAction.openSettings) {
+        await _locationService.openLocationSettings();
+        continue;
+      }
+      await _locationService.requestPermission();
+    }
+  }
+
+  Future<void> _showExplainDialog() {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFFE7ECEF),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Enable Location'),
+        content: const Text(
+          'WeDo needs your location to show friends and study places near you, and so others can find you.',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Enable Location'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<_LocationDialogAction?> _showLocationDialog({
+    required String title,
+    required String message,
+    bool showRetry = false,
+    bool showSettings = false,
+  }) {
+    return showDialog<_LocationDialogAction>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFFE7ECEF),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          if (showRetry)
+            TextButton(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                _LocationDialogAction.retry,
+              ),
+              child: const Text('Try Again'),
+            ),
+          if (showSettings)
+            FilledButton(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                _LocationDialogAction.openSettings,
+              ),
+              child: const Text('Open Settings'),
+            ),
+        ],
+      ),
+    );
   }
 
   BoxDecoration _neumorphicDecoration({Color? color}) {
@@ -153,10 +295,14 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
                     child: Column(
                       children: [
                         TextFormField(
-                          controller: _nameCtrl,
-                          decoration: _inputDecoration('Display Name'),
+                          controller: _usernameCtrl,
+                          decoration: _inputDecoration('Username'),
                           validator: (v) {
-                            if (v == null || v.isEmpty) return 'Enter your name';
+                            final value = v?.trim() ?? '';
+                            if (value.isEmpty) return 'Enter a username';
+                            if (!RegExp(r'^[a-z0-9_]{3,20}$').hasMatch(value)) {
+                              return '3-20 chars, lowercase letters, numbers, _';
+                            }
                             return null;
                           },
                         ),
