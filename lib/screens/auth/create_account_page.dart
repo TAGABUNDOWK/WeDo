@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../services/auth_service.dart';
-import '../../services/otp_service.dart';
-import '../../services/user_service.dart';
+import '../../services/auth/auth_service.dart';
+import '../../services/auth/otp_service.dart';
+import '../../services/auth/user_service.dart';
 import '../../models/user_entity.dart';
 import 'otp_verification_page.dart';
 
