@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/auth/otp_service.dart';
+import '../home/home_page.dart';
 
 class OtpVerificationPage extends StatefulWidget {
   final String userId;
@@ -22,6 +23,8 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
   bool _isLoading = false;
   bool _canResend = false;
+  bool _sendingCode = true;
+  bool _sendFailed = false;
   int _resendCountdown = 60;
   Timer? _timer;
 
@@ -30,7 +33,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
   @override
   void initState() {
     super.initState();
-    _startResendTimer();
+    _sendCode();
   }
 
   @override
@@ -59,6 +62,29 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
     });
   }
 
+  Future<void> _sendCode() async {
+    setState(() {
+      _sendingCode = true;
+      _sendFailed = false;
+    });
+
+    try {
+      await _otpService.generateOTP(widget.userId, widget.email);
+      if (!mounted) return;
+      setState(() => _sendingCode = false);
+      _startResendTimer();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _sendingCode = false;
+        _sendFailed = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Couldn\'t send code: $e')),
+      );
+    }
+  }
+
   String get _enteredCode => _controllers.map((c) => c.text).join();
 
   Future<void> _onVerify() async {
@@ -81,7 +107,10 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
         const SnackBar(content: Text('Email verified successfully!')),
       );
 
-      Navigator.of(context).popUntil((route) => route.isFirst);
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const HomePage()),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -163,6 +192,21 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
                   widget.email,
                   style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.blue),
                 ),
+                if (_sendingCode) ...[
+                  const SizedBox(height: 16),
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 12),
+                      Text('Sending your verification code...'),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 24),
                 Container(
                   padding: const EdgeInsets.all(18),
@@ -228,7 +272,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
                       ),
                       const SizedBox(height: 24),
                       GestureDetector(
-                        onTap: _isLoading ? null : _onVerify,
+                        onTap: _isLoading || _sendingCode ? null : _onVerify,
                         child: Container(
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(vertical: 14),
@@ -262,15 +306,20 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                _canResend
+                _sendFailed
                     ? TextButton(
-                        onPressed: _onResend,
+                        onPressed: _sendCode,
                         child: const Text('Resend Code'),
                       )
-                    : Text(
-                        'Resend code in $_resendCountdown seconds',
-                        style: const TextStyle(color: Colors.black54),
-                      ),
+                    : _canResend
+                        ? TextButton(
+                            onPressed: _onResend,
+                            child: const Text('Resend Code'),
+                          )
+                        : Text(
+                            'Resend code in $_resendCountdown seconds',
+                            style: const TextStyle(color: Colors.black54),
+                          ),
               ],
             ),
           ),

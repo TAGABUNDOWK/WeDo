@@ -17,11 +17,13 @@ class OtpService {
   }
 
   Future<void> generateOTP(String userId, String email) async {
-    final response = await http.post(
-      Uri.parse('$_baseUrl/generate-otp'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'userId': userId, 'email': email}),
-    );
+    final response = await http
+        .post(
+          Uri.parse('$_baseUrl/generate-otp'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'userId': userId, 'email': email}),
+        )
+        .timeout(const Duration(seconds: 20));
 
     if (response.statusCode != 200) {
       throw Exception(_parseError(response));
@@ -29,11 +31,13 @@ class OtpService {
   }
 
   Future<void> verifyOTP(String userId, String code) async {
-    final response = await http.post(
-      Uri.parse('$_baseUrl/verify-otp'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'userId': userId, 'code': code}),
-    );
+    final response = await http
+        .post(
+          Uri.parse('$_baseUrl/verify-otp'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'userId': userId, 'code': code}),
+        )
+        .timeout(const Duration(seconds: 20));
 
     if (response.statusCode != 200) {
       throw Exception(_parseError(response));
