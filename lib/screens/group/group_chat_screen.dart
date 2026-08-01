@@ -99,6 +99,62 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     _messageCtrl.clear();
   }
 
+  void _showComposerMenu() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Add to chat',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 20),
+              Wrap(
+                spacing: 24,
+                runSpacing: 24,
+                children: [
+                  _ComposerOption(
+                    icon: Icons.photo_outlined,
+                    label: 'Photo',
+                    color: Colors.blue,
+                    onTap: () {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Sending photos coming soon')),
+                      );
+                      // TODO: image_picker + Firebase Storage upload
+                    },
+                  ),
+                  _ComposerOption(
+                    icon: Icons.poll_outlined,
+                    label: 'Poll',
+                    color: Colors.deepPurple,
+                    onTap: () {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Creating polls coming soon')),
+                      );
+                      // TODO: poll creation flow
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -211,10 +267,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.attach_file, color: Colors.grey),
-                    onPressed: () {
-                      // TODO: image_picker
-                    },
+                    icon: const Icon(Icons.add_circle_outline, color: Colors.grey),
+                    onPressed: _showComposerMenu,
                   ),
                   Expanded(
                     child: TextField(
@@ -241,6 +295,43 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ComposerOption extends StatelessWidget {
+  const _ComposerOption({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: SizedBox(
+        width: 64,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircleAvatar(
+              radius: 28,
+              backgroundColor: color.withValues(alpha: 0.12),
+              child: Icon(icon, color: color, size: 28),
+            ),
+            const SizedBox(height: 8),
+            Text(label, style: const TextStyle(fontSize: 12)),
+          ],
+        ),
       ),
     );
   }
