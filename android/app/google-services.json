@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "628439211243",
+    "firebase_url": "https://wedo-8c865-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "wedo-8c865",
+    "storage_bucket": "wedo-8c865.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:628439211243:android:18438602164175ee6572ae",
+        "android_client_info": {
+          "package_name": "com.example.choosly"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBa2-NqrUIHuiIR9MGJivNm2kv7Km1bXDM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
