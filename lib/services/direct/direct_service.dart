@@ -85,6 +85,26 @@ class DirectService {
     await batch.commit();
   }
 
+  Future<void> updateNickname({
+    required String chatId,
+    required String uid,
+    required String nickname,
+  }) async {
+    await _chats.doc(chatId).update({
+      'nicknames.$uid': nickname,
+    });
+  }
+
+  Future<Map<String, String>> getNicknames(String chatId) async {
+    final doc = await _chats.doc(chatId).get();
+    if (!doc.exists) return {};
+    final raw = doc.data()?['nicknames'];
+    if (raw is Map) {
+      return raw.map((k, v) => MapEntry(k.toString(), v.toString()));
+    }
+    return {};
+  }
+
   Stream<List<ChatMessage>> getMessagesStream(String chatId) {
     return _messages(chatId)
         .orderBy('created_at', descending: false)

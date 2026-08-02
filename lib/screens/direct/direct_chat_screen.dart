@@ -5,6 +5,7 @@ import '../../services/direct/direct_service.dart';
 import '../../utils/time_format.dart';
 import '../../widgets/message_bubble.dart';
 import '../../widgets/composer_option.dart';
+import '../search/direct_chat_search_screen.dart';
 
 class DirectChatScreen extends StatefulWidget {
   final String chatId;
@@ -21,18 +22,28 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   final _directService = DirectService();
   final _currentUser = FirebaseAuth.instance.currentUser;
   String _otherName = '';
+  Map<String, String> _nicknames = {};
 
   @override
   void initState() {
     super.initState();
-    _loadOtherUser();
+    _loadData();
   }
 
-  Future<void> _loadOtherUser() async {
+  Future<void> _loadData() async {
     final user = await _directService.getUser(widget.otherUid);
+    final nicknames = await _directService.getNicknames(widget.chatId);
     if (mounted) {
-      setState(() => _otherName = user?.displayName ?? widget.otherUid);
+      setState(() {
+        _otherName = user?.displayName ?? widget.otherUid;
+        _nicknames = nicknames;
+      });
     }
+  }
+
+  String _getDisplayName() {
+    if (_currentUser == null) return _otherName;
+    return _nicknames[_currentUser.uid] ?? _otherName;
   }
 
   @override
@@ -56,7 +67,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     _messageCtrl.clear();
   }
 
-  void _showComposerMenu() {
+  void _showAttachMenu() {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.white,
@@ -71,7 +82,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Add to chat',
+                'Attach',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 20),
@@ -99,15 +110,85 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     );
   }
 
+  Future<void> _changeNickname() async {
+    final currentNickname = _nicknames[_currentUser?.uid] ?? '';
+    final ctrl = TextEditingController(text: currentNickname);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Change Nickname'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'Nickname for yourself',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && _currentUser != null && mounted) {
+      await _directService.updateNickname(
+        chatId: widget.chatId,
+        uid: _currentUser.uid,
+        nickname: result,
+      );
+      _loadData();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_otherName),
+        title: Text(_getDisplayName()),
         actions: [
           IconButton(
-            icon: const Icon(Icons.add_circle_outline, color: Colors.grey),
-            onPressed: _showComposerMenu,
+            icon: const Icon(Icons.search),
+            onPressed: () async {
+              final messageId = await Navigator.push<String>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DirectChatSearchScreen(chatId: widget.chatId),
+                ),
+              );
+              if (messageId != null && _scrollCtrl.hasClients) {
+                final messages = await _directService.getMessagesOnce(widget.chatId);
+                final index = messages.indexWhere((m) => m.id == messageId);
+                if (index != -1 && _scrollCtrl.hasClients) {
+                  _scrollCtrl.animateTo(
+                    index * 80.0,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOut,
+                  );
+                }
+              }
+            },
+          ),
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'nickname') _changeNickname();
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'nickname',
+                child: Row(
+                  children: [
+                    Icon(Icons.badge_outlined, size: 20),
+                    SizedBox(width: 8),
+                    Text('Change Nickname'),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -164,6 +245,10 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
             child: SafeArea(
               child: Row(
                 children: [
+                  IconButton(
+                    icon: const Icon(Icons.add_circle_outline, color: Colors.grey),
+                    onPressed: _showAttachMenu,
+                  ),
                   Expanded(
                     child: TextField(
                       controller: _messageCtrl,
