@@ -19,12 +19,29 @@ class DirectChat {
 
   factory DirectChat.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data()!;
+
+    // Support both old flat format and new nested last_message format
+    String? message;
+    String? senderId;
+    DateTime? sentAt;
+
+    final lastMsg = data['last_message'];
+    if (lastMsg is Map<String, dynamic>) {
+      message = lastMsg['text'] as String?;
+      senderId = lastMsg['senderId'] as String?;
+      sentAt = _parseTimestamp(lastMsg['sentAt']);
+    } else {
+      message = data['lastMessage'] as String?;
+      senderId = data['lastMessageSenderId'] as String?;
+      sentAt = _parseTimestamp(data['lastMessageAt']);
+    }
+
     return DirectChat(
       id: doc.id,
       members: (data['members'] as List?)?.cast<String>() ?? const [],
-      lastMessage: data['lastMessage'] as String?,
-      lastMessageSenderId: data['lastMessageSenderId'] as String?,
-      lastMessageAt: _parseTimestamp(data['lastMessageAt']),
+      lastMessage: message,
+      lastMessageSenderId: senderId,
+      lastMessageAt: sentAt,
       createdAt: _parseTimestamp(data['createdAt']),
     );
   }

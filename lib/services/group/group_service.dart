@@ -77,13 +77,13 @@ class GroupService {
     final batch = _db.batch();
 
     batch.set(_messages(groupId).doc(), {
-      'senderId': senderId,
+      'sender_id': senderId,
       'senderName': senderName,
       'type': 'text',
       'content': text,
       'reactions': {},
-      'readBy': [senderId],
-      'createdAt': FieldValue.serverTimestamp(),
+      'read_by': [senderId],
+      'created_at': FieldValue.serverTimestamp(),
       'createdAtLocal': DateTime.now().toIso8601String(),
       'edited': false,
     });
@@ -105,13 +105,13 @@ class GroupService {
     final batch = _db.batch();
 
     batch.set(_messages(groupId).doc(), {
-      'senderId': 'system',
+      'sender_id': 'system',
       'senderName': senderName,
       'type': 'system',
       'content': content,
       'reactions': {},
-      'readBy': [],
-      'createdAt': FieldValue.serverTimestamp(),
+      'read_by': [],
+      'created_at': FieldValue.serverTimestamp(),
       'createdAtLocal': DateTime.now().toIso8601String(),
       'edited': false,
     });
@@ -127,7 +127,7 @@ class GroupService {
 
   Stream<List<ChatMessage>> getMessagesStream(String groupId) {
     return _messages(groupId)
-        .orderBy('createdAt', descending: false)
+        .orderBy('created_at', descending: false)
         .snapshots()
         .map((snap) =>
             snap.docs.map(ChatMessage.fromFirestore).toList());
@@ -135,7 +135,7 @@ class GroupService {
 
   Future<List<ChatMessage>> getMessagesOnce(String groupId) async {
     final snap = await _messages(groupId)
-        .orderBy('createdAt', descending: false)
+        .orderBy('created_at', descending: false)
         .get();
     return snap.docs.map(ChatMessage.fromFirestore).toList();
   }

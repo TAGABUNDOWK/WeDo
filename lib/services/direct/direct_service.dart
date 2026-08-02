@@ -46,8 +46,7 @@ class DirectService {
 
     await _chats.doc(chatId).set({
       'members': [currentUid, otherUid],
-      'lastMessage': null,
-      'lastMessageSenderId': null,
+      'last_message': null,
       'lastMessageAt': FieldValue.serverTimestamp(),
       'createdAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
@@ -64,19 +63,22 @@ class DirectService {
     final batch = _db.batch();
 
     batch.set(_messages(chatId).doc(), {
-      'senderId': senderId,
+      'sender_id': senderId,
       'senderName': senderName,
       'type': 'text',
       'content': text,
-      'readBy': [senderId],
-      'createdAt': FieldValue.serverTimestamp(),
+      'read_by': [senderId],
+      'created_at': FieldValue.serverTimestamp(),
       'createdAtLocal': DateTime.now().toIso8601String(),
       'edited': false,
     });
 
     batch.update(_chats.doc(chatId), {
-      'lastMessage': text,
-      'lastMessageSenderId': senderId,
+      'last_message': {
+        'text': text,
+        'senderId': senderId,
+        'sentAt': FieldValue.serverTimestamp(),
+      },
       'lastMessageAt': FieldValue.serverTimestamp(),
     });
 
@@ -85,14 +87,14 @@ class DirectService {
 
   Stream<List<ChatMessage>> getMessagesStream(String chatId) {
     return _messages(chatId)
-        .orderBy('createdAt', descending: false)
+        .orderBy('created_at', descending: false)
         .snapshots()
         .map((snap) => snap.docs.map(ChatMessage.fromFirestore).toList());
   }
 
   Future<List<ChatMessage>> getMessagesOnce(String chatId) async {
     final snap = await _messages(chatId)
-        .orderBy('createdAt', descending: false)
+        .orderBy('created_at', descending: false)
         .get();
     return snap.docs.map(ChatMessage.fromFirestore).toList();
   }

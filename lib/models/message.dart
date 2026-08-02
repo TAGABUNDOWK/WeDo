@@ -55,17 +55,38 @@ class ChatMessage {
 
   factory ChatMessage.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data()!;
+
+    // Support both camelCase and snake_case fields
+    final senderId = data['senderId'] as String?
+        ?? data['sender_id'] as String?
+        ?? '';
+    final senderName = data['senderName'] as String?
+        ?? data['sender_name'] as String?
+        ?? '';
+    final content = data['content'] as String? ?? '';
+    final type = MessageType.fromString(data['type'] as String?);
+    final imageUrl = data['imageUrl'] as String?
+        ?? data['image_url'] as String?;
+    final readBy = (data['readBy'] as List?)
+        ?? (data['read_by'] as List?)
+        ?? const [];
+    final reactions = Map<String, dynamic>.from(
+        data['reactions'] as Map? ?? {});
+    final edited = data['edited'] as bool? ?? false;
+    final createdAt = _parseTimestamp(
+        data['createdAt'] ?? data['created_at']);
+
     return ChatMessage(
       id: doc.id,
-      senderId: data['senderId'] as String? ?? '',
-      senderName: data['senderName'] as String? ?? '',
-      content: data['content'] as String? ?? '',
-      type: MessageType.fromString(data['type'] as String?),
-      imageUrl: data['imageUrl'] as String?,
-      readBy: (data['readBy'] as List?)?.cast<String>() ?? const [],
-      reactions: Map<String, dynamic>.from(data['reactions'] as Map? ?? {}),
-      edited: data['edited'] as bool? ?? false,
-      createdAt: _parseTimestamp(data['createdAt']),
+      senderId: senderId,
+      senderName: senderName,
+      content: content,
+      type: type,
+      imageUrl: imageUrl,
+      readBy: readBy.cast<String>(),
+      reactions: reactions,
+      edited: edited,
+      createdAt: createdAt,
     );
   }
 
@@ -80,7 +101,6 @@ class ChatMessage {
       'reactions': reactions,
       'edited': edited,
       'createdAt': Timestamp.fromDate(createdAt),
-      'createdAtLocal': DateTime.now().toIso8601String(),
     };
   }
 

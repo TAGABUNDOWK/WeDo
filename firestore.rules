@@ -12,7 +12,7 @@ service cloud.firestore {
 
     function isGroupMember(groupId) {
       return isSignedIn()
-        && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
+        && request.auth.uid in get(/databases/$(database)/documents/group_chats/$(groupId)).data.members;
     }
 
     function isDirectChatParticipant(chatId) {
@@ -40,7 +40,7 @@ service cloud.firestore {
       allow delete: if isFriendParticipant();
     }
 
-    match /groups/{groupId} {
+    match /group_chats/{groupId} {
       allow read: if isSignedIn()
         && request.auth.uid in resource.data.members;
       allow create: if isSignedIn()
@@ -62,7 +62,9 @@ service cloud.firestore {
         allow read: if isGroupMember(groupId);
         allow create: if isGroupMember(groupId)
           && (request.resource.data.senderId == request.auth.uid
-              || request.resource.data.senderId == 'system');
+              || request.resource.data.sender_id == request.auth.uid
+              || request.resource.data.senderId == 'system'
+              || request.resource.data.sender_id == 'system');
         allow update, delete: if isGroupMember(groupId);
       }
     }
@@ -79,7 +81,8 @@ service cloud.firestore {
       match /messages/{messageId} {
         allow read: if isDirectChatParticipant(chatId);
         allow create: if isDirectChatParticipant(chatId)
-          && request.resource.data.senderId == request.auth.uid;
+          && (request.resource.data.senderId == request.auth.uid
+              || request.resource.data.sender_id == request.auth.uid);
         allow update, delete: if isDirectChatParticipant(chatId);
       }
     }

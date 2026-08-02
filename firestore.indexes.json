@@ -1,7 +1,7 @@
 {
   "indexes": [
     {
-      "collectionGroup": "groups",
+      "collectionGroup": "group_chats",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "members", "arrayConfig": "CONTAINS" },
@@ -12,8 +12,8 @@
       "collectionGroup": "messages",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "senderId", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
+        { "fieldPath": "sender_id", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
       ]
     },
     {
