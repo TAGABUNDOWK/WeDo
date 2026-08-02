@@ -92,6 +92,7 @@ class GroupService {
       'lastMessage': text,
       'lastMessageSenderId': senderId,
       'lastMessageAt': FieldValue.serverTimestamp(),
+      'lastMessageReadBy': [senderId],
     });
 
     await batch.commit();
@@ -144,6 +145,9 @@ class GroupService {
         });
       }
     }
+    batch.update(_groups.doc(groupId), {
+      'lastMessageReadBy': FieldValue.arrayUnion([uid]),
+    });
     await batch.commit();
   }
 

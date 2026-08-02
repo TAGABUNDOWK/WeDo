@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/group_chat.dart';
+import '../../models/message.dart';
 import '../../models/user_entity.dart';
 import '../../services/group/group_service.dart';
 import '../../services/friends/friend_service.dart';
@@ -356,6 +357,12 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                   );
                 }),
                 const Divider(),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Text('Media', style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+                _GroupMediaSection(groupId: widget.groupId),
+                const Divider(),
                 if (isAdmin)
                   ListTile(
                     leading: const Icon(Icons.delete, color: Colors.red),
@@ -372,6 +379,77 @@ class _FriendUser {
   final String uid;
   final UserEntity? user;
   const _FriendUser({required this.uid, required this.user});
+}
+
+class _GroupMediaSection extends StatefulWidget {
+  final String groupId;
+  const _GroupMediaSection({required this.groupId});
+
+  @override
+  State<_GroupMediaSection> createState() => _GroupMediaSectionState();
+}
+
+class _GroupMediaSectionState extends State<_GroupMediaSection> {
+  final _groupService = GroupService();
+  List<String> _imageUrls = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMedia();
+  }
+
+  Future<void> _loadMedia() async {
+    final messages = await _groupService.getMessagesOnce(widget.groupId);
+    final images = messages
+        .where((m) => m.type == MessageType.image && m.imageUrl != null)
+        .map((m) => m.imageUrl!)
+        .toList();
+    if (mounted) {
+      setState(() {
+        _imageUrls = images;
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_imageUrls.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text('No media shared yet', style: TextStyle(color: Colors.grey)),
+        ),
+      );
+    }
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 4,
+        mainAxisSpacing: 4,
+      ),
+      itemCount: _imageUrls.length,
+      itemBuilder: (context, index) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.network(
+            _imageUrls[index],
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => const Center(
+              child: Icon(Icons.broken_image, color: Colors.grey),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
 class _AddMemberScreen extends StatefulWidget {

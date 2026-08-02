@@ -179,7 +179,8 @@ class _ChatTabState extends State<ChatTab> {
                           final group = item.group!;
                           final hasUnread = group.lastMessage != null &&
                               group.lastMessageSenderId != null &&
-                              group.lastMessageSenderId != currentUser.uid;
+                              group.lastMessageSenderId != currentUser.uid &&
+                              !group.lastMessageReadBy.contains(currentUser.uid);
                           return ChatTile(
                             name: group.name,
                             lastMessage: group.lastMessage,
@@ -196,7 +197,8 @@ class _ChatTabState extends State<ChatTab> {
                           final otherUid = chat.otherUserId(currentUser.uid);
                           final hasUnread = chat.lastMessage != null &&
                               chat.lastMessageSenderId != null &&
-                              chat.lastMessageSenderId != currentUser.uid;
+                              chat.lastMessageSenderId != currentUser.uid &&
+                              !chat.lastMessageReadBy.contains(currentUser.uid);
                           return FutureBuilder<UserEntity?>(
                             future: _directService.getUser(otherUid),
                             builder: (context, userSnap) {

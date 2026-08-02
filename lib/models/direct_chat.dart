@@ -6,6 +6,7 @@ class DirectChat {
   final String? lastMessage;
   final String? lastMessageSenderId;
   final DateTime? lastMessageAt;
+  final List<String> lastMessageReadBy;
   final DateTime createdAt;
 
   const DirectChat({
@@ -14,6 +15,7 @@ class DirectChat {
     this.lastMessage,
     this.lastMessageSenderId,
     this.lastMessageAt,
+    this.lastMessageReadBy = const [],
     required this.createdAt,
   });
 
@@ -42,6 +44,7 @@ class DirectChat {
       lastMessage: message,
       lastMessageSenderId: senderId,
       lastMessageAt: sentAt,
+      lastMessageReadBy: (data['lastMessageReadBy'] as List?)?.cast<String>() ?? const [],
       createdAt: _parseTimestamp(data['createdAt']),
     );
   }

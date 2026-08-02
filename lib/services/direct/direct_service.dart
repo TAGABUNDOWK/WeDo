@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/direct_chat.dart';
 import '../../models/message.dart';
 import '../../models/user_entity.dart';
@@ -6,9 +7,12 @@ import '../../utils/constants.dart';
 
 class DirectService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   CollectionReference<Map<String, dynamic>> get _chats =>
       _db.collection(AppConstants.directChatsCollection);
+
+  String? getCurrentUid() => _auth.currentUser?.uid;
 
   CollectionReference<Map<String, dynamic>> _messages(String chatId) =>
       _chats.doc(chatId).collection(AppConstants.directChatMessagesSubcollection);
@@ -80,6 +84,7 @@ class DirectService {
         'sentAt': FieldValue.serverTimestamp(),
       },
       'lastMessageAt': FieldValue.serverTimestamp(),
+      'lastMessageReadBy': [senderId],
     });
 
     await batch.commit();
@@ -123,6 +128,9 @@ class DirectService {
         });
       }
     }
+    batch.update(_chats.doc(chatId), {
+      'lastMessageReadBy': FieldValue.arrayUnion([uid]),
+    });
     await batch.commit();
   }
 

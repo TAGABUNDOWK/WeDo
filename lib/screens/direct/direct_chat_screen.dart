@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/message.dart';
+import '../../models/user_entity.dart';
 import '../../services/direct/direct_service.dart';
 import '../../utils/time_format.dart';
 import '../../widgets/message_bubble.dart';
@@ -22,6 +23,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   final _directService = DirectService();
   final _currentUser = FirebaseAuth.instance.currentUser;
   String _otherName = '';
+  UserEntity? _otherUser;
   Map<String, String> _nicknames = {};
 
   @override
@@ -38,6 +40,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     final nicknames = await _directService.getNicknames(widget.chatId);
     if (mounted) {
       setState(() {
+        _otherUser = user;
         _otherName = user?.displayName ?? widget.otherUid;
         _nicknames = nicknames;
       });
@@ -113,101 +116,6 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     );
   }
 
-  void _showChatInfo() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (_) => Container(
-        margin: const EdgeInsets.all(16),
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: const Color(0xFFE7ECEF),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 88,
-              height: 88,
-              margin: const EdgeInsets.only(top: 16),
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: Color(0xFFE7ECEF),
-                boxShadow: [
-                  BoxShadow(color: Colors.white, offset: Offset(-4, -4), blurRadius: 8),
-                  BoxShadow(color: Color(0xFFB8C6CC), offset: Offset(4, 4), blurRadius: 8),
-                ],
-              ),
-              child: CircleAvatar(
-                radius: 44,
-                child: Text(
-                  _otherName.isNotEmpty ? _otherName[0].toUpperCase() : '?',
-                  style: const TextStyle(fontSize: 32),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              _otherName,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 16),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.badge_outlined, color: Colors.blue),
-              title: const Text('Change Nickname'),
-              subtitle: Text(
-                'Set how you appear in this chat',
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                _changeNickname();
-              },
-            ),
-            const Divider(height: 1),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _changeNickname() async {
-    final currentNickname = _nicknames[_currentUser?.uid] ?? '';
-    final ctrl = TextEditingController(text: currentNickname);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Change Nickname'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Nickname for yourself',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-
-    if (result != null && _currentUser != null && mounted) {
-      await _directService.updateNickname(
-        chatId: widget.chatId,
-        uid: _currentUser.uid,
-        nickname: result,
-      );
-      _loadData();
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -238,7 +146,18 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.info_outline),
-            onPressed: _showChatInfo,
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => _DirectChatInfoScreen(
+                    chatId: widget.chatId,
+                    otherUid: widget.otherUid,
+                  ),
+                ),
+              );
+              _loadData();
+            },
           ),
         ],
       ),
@@ -325,6 +244,205 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _DirectChatInfoScreen extends StatefulWidget {
+  final String chatId;
+  final String otherUid;
+  const _DirectChatInfoScreen({required this.chatId, required this.otherUid});
+
+  @override
+  State<_DirectChatInfoScreen> createState() => _DirectChatInfoScreenState();
+}
+
+class _DirectChatInfoScreenState extends State<_DirectChatInfoScreen> {
+  final _directService = DirectService();
+  UserEntity? _otherUser;
+  Map<String, String> _nicknames = {};
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final user = await _directService.getUser(widget.otherUid);
+    final nicks = await _directService.getNicknames(widget.chatId);
+    if (mounted) {
+      setState(() {
+        _otherUser = user;
+        _nicknames = nicks;
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _changeNickname() async {
+    final currentUid = _directService.getCurrentUid();
+    final currentNickname = currentUid != null ? _nicknames[currentUid] ?? '' : '';
+    final ctrl = TextEditingController(text: currentNickname);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Change Nickname'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'Nickname for yourself',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && currentUid != null && mounted) {
+      await _directService.updateNickname(
+        chatId: widget.chatId,
+        uid: currentUid,
+        nickname: result,
+      );
+      _loadData();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final name = _otherUser?.displayName ?? widget.otherUid;
+    final currentUid = _directService.getCurrentUid();
+    final myNickname = currentUid != null ? _nicknames[currentUid] : null;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Chat Info')),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Center(
+                  child: CircleAvatar(
+                    radius: 50,
+                    child: Text(
+                      name.isNotEmpty ? name[0].toUpperCase() : '?',
+                      style: const TextStyle(fontSize: 32),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Center(
+                  child: Text(
+                    name,
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                if (_otherUser?.email != null) ...[
+                  const SizedBox(height: 4),
+                  Center(
+                    child: Text(
+                      _otherUser!.email!,
+                      style: const TextStyle(color: Colors.grey),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.badge_outlined, color: Colors.blue),
+                  title: const Text('Your Nickname'),
+                  subtitle: Text(myNickname ?? 'Tap to set'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _changeNickname,
+                ),
+                const Divider(),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Text('Media', style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+                _MediaSection(chatId: widget.chatId),
+              ],
+            ),
+    );
+  }
+}
+
+class _MediaSection extends StatefulWidget {
+  final String chatId;
+  const _MediaSection({required this.chatId});
+
+  @override
+  State<_MediaSection> createState() => _MediaSectionState();
+}
+
+class _MediaSectionState extends State<_MediaSection> {
+  final _directService = DirectService();
+  List<String> _imageUrls = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMedia();
+  }
+
+  Future<void> _loadMedia() async {
+    final messages = await _directService.getMessagesOnce(widget.chatId);
+    final images = messages
+        .where((m) => m.type == MessageType.image && m.imageUrl != null)
+        .map((m) => m.imageUrl!)
+        .toList();
+    if (mounted) {
+      setState(() {
+        _imageUrls = images;
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_imageUrls.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text('No media shared yet', style: TextStyle(color: Colors.grey)),
+        ),
+      );
+    }
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 4,
+        mainAxisSpacing: 4,
+      ),
+      itemCount: _imageUrls.length,
+      itemBuilder: (context, index) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.network(
+            _imageUrls[index],
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => const Center(
+              child: Icon(Icons.broken_image, color: Colors.grey),
+            ),
+          ),
+        );
+      },
     );
   }
 }

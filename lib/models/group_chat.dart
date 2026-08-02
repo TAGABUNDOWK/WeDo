@@ -10,6 +10,7 @@ class GroupChat {
   final String? lastMessage;
   final String? lastMessageSenderId;
   final DateTime? lastMessageAt;
+  final List<String> lastMessageReadBy;
   final DateTime createdAt;
 
   const GroupChat({
@@ -22,6 +23,7 @@ class GroupChat {
     this.lastMessage,
     this.lastMessageSenderId,
     this.lastMessageAt,
+    this.lastMessageReadBy = const [],
     required this.createdAt,
   });
 
@@ -37,6 +39,7 @@ class GroupChat {
       lastMessage: data['lastMessage'] as String?,
       lastMessageSenderId: data['lastMessageSenderId'] as String?,
       lastMessageAt: _parseTimestamp(data['lastMessageAt']),
+      lastMessageReadBy: (data['lastMessageReadBy'] as List?)?.cast<String>() ?? const [],
       createdAt: _parseTimestamp(data['createdAt']),
     );
   }
@@ -53,6 +56,7 @@ class GroupChat {
       'lastMessageAt': lastMessageAt != null
           ? Timestamp.fromDate(lastMessageAt!)
           : FieldValue.serverTimestamp(),
+      'lastMessageReadBy': lastMessageReadBy,
       'createdAt': Timestamp.fromDate(createdAt),
     };
   }
