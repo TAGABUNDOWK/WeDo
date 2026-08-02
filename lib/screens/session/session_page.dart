@@ -3,6 +3,7 @@ import '../../models/topic_entity.dart';
 import '../../services/session/session_service.dart';
 import 'session_game_screen.dart';
 import 'places_to_go_screen.dart';
+import 'where_to_eat_screen.dart';
 
 class SessionPage extends StatefulWidget {
   const SessionPage({super.key});
@@ -115,6 +116,13 @@ class _SessionPageState extends State<SessionPage> {
                                   context,
                                   MaterialPageRoute(
                                     builder: (_) => const PlacesToGoScreen(),
+                                  ),
+                                );
+                              } else if (topic.title == 'Where should we eat?') {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const WhereToEatScreen(),
                                   ),
                                 );
                               } else {

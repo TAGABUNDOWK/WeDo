@@ -1,24 +1,29 @@
 import 'package:flutter/material.dart';
-import '../../services/location/overpass_service.dart';
+import '../../models/admin_division.dart';
+import '../../utils/location_data.dart';
 import 'city_places_screen.dart';
 
 class CityPickerScreen extends StatefulWidget {
   final String provinceName;
+  final bool foodMode;
 
-  const CityPickerScreen({super.key, required this.provinceName});
+  const CityPickerScreen({
+    super.key,
+    required this.provinceName,
+    this.foodMode = false,
+  });
 
   @override
   State<CityPickerScreen> createState() => _CityPickerScreenState();
 }
 
 class _CityPickerScreenState extends State<CityPickerScreen> {
-  final _overpassService = OverpassService();
   final _searchCtrl = TextEditingController();
   final _bg = const Color(0xFFE7ECEF);
 
-  List<String> _cities = [];
-  List<String> _filtered = [];
-  String? _selectedCity;
+  List<AdminDivision> _cities = [];
+  List<AdminDivision> _filtered = [];
+  AdminDivision? _selectedCity;
   bool _isLoading = true;
   String? _error;
 
@@ -41,7 +46,7 @@ class _CityPickerScreenState extends State<CityPickerScreen> {
     });
 
     try {
-      final cities = await _overpassService.getCities(widget.provinceName);
+      final cities = await LocationData.getCities(widget.provinceName);
       if (!mounted) return;
       setState(() {
         _cities = cities;
@@ -61,7 +66,7 @@ class _CityPickerScreenState extends State<CityPickerScreen> {
     final q = query.toLowerCase();
     setState(() {
       _filtered = _cities
-          .where((c) => c.toLowerCase().contains(q))
+          .where((c) => c.name.toLowerCase().contains(q))
           .toList();
     });
   }
@@ -72,8 +77,8 @@ class _CityPickerScreenState extends State<CityPickerScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => CityPlacesScreen(
-          provinceName: widget.provinceName,
-          cityName: _selectedCity!,
+          city: _selectedCity!,
+          foodMode: widget.foodMode,
         ),
       ),
     );
@@ -157,7 +162,7 @@ class _CityPickerScreenState extends State<CityPickerScreen> {
                                 final city = _filtered[index];
                                 final isSelected = city == _selectedCity;
                                 return ListTile(
-                                  title: Text(city),
+                                  title: Text(city.name),
                                   trailing: isSelected
                                       ? const Icon(Icons.check_circle, color: Colors.blue)
                                       : const Icon(Icons.radio_button_unchecked, color: Colors.black26),

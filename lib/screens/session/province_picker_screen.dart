@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
-import '../../services/location/overpass_service.dart';
+import '../../utils/location_data.dart';
 import 'city_picker_screen.dart';
 
 class ProvincePickerScreen extends StatefulWidget {
-  const ProvincePickerScreen({super.key});
+  final bool foodMode;
+
+  const ProvincePickerScreen({super.key, this.foodMode = false});
 
   @override
   State<ProvincePickerScreen> createState() => _ProvincePickerScreenState();
 }
 
 class _ProvincePickerScreenState extends State<ProvincePickerScreen> {
-  final _overpassService = OverpassService();
   final _searchCtrl = TextEditingController();
   final _bg = const Color(0xFFE7ECEF);
 
@@ -38,7 +39,7 @@ class _ProvincePickerScreenState extends State<ProvincePickerScreen> {
     });
 
     try {
-      final provinces = await _overpassService.getProvinces();
+      final provinces = await LocationData.getProvinces();
       if (!mounted) return;
       setState(() {
         _provinces = provinces;
@@ -138,6 +139,7 @@ class _ProvincePickerScreenState extends State<ProvincePickerScreen> {
                                       MaterialPageRoute(
                                         builder: (_) => CityPickerScreen(
                                           provinceName: province,
+                                          foodMode: widget.foodMode,
                                         ),
                                       ),
                                     );

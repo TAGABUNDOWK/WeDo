@@ -1,12 +1,18 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import '../../models/place_entity.dart';
 import '../../services/location/location_service.dart';
 import '../../services/location/overpass_service.dart';
 
 class NearbyPlacesScreen extends StatefulWidget {
-  const NearbyPlacesScreen({super.key});
+  final String title;
+  final bool foodMode;
+
+  const NearbyPlacesScreen({
+    super.key,
+    this.title = 'Nearby places',
+    this.foodMode = false,
+  });
 
   @override
   State<NearbyPlacesScreen> createState() => _NearbyPlacesScreenState();
@@ -19,7 +25,6 @@ class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
 
   List<PlaceEntity> _places = [];
   bool _isLoading = true;
-  String? _error;
   bool _permissionDenied = false;
 
   @override
@@ -29,9 +34,9 @@ class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
-      _error = null;
       _permissionDenied = false;
     });
 
@@ -46,11 +51,17 @@ class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
     }
 
     try {
-      final allPlaces = await _overpassService.getHangoutPlaces(
-        position.latitude,
-        position.longitude,
-        radiusM: 5000,
-      );
+      final allPlaces = widget.foodMode
+          ? await _overpassService.getNearbyFoodPlaces(
+              position.latitude,
+              position.longitude,
+              radiusM: 5000,
+            )
+          : await _overpassService.getHangoutPlaces(
+              position.latitude,
+              position.longitude,
+              radiusM: 5000,
+            );
 
       final withDistance = allPlaces.map((p) {
         final dist = PlaceEntity.distanceBetween(
@@ -66,16 +77,21 @@ class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
       final picked = shuffled.take(10).toList();
 
       if (!mounted) return;
+
+      if (picked.isEmpty) {
+        await Future.delayed(const Duration(seconds: 3));
+        if (mounted) _load();
+        return;
+      }
+
       setState(() {
         _places = picked;
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
+      await Future.delayed(const Duration(seconds: 3));
+      if (mounted) _load();
     }
   }
 
@@ -86,20 +102,49 @@ class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
       appBar: AppBar(
         backgroundColor: _bg,
         elevation: 0,
-        title: const Text(
-          'Nearby places',
-          style: TextStyle(fontWeight: FontWeight.w600),
+        title: Text(
+          widget.title,
+          style: const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? _buildSearching()
           : _permissionDenied
               ? _buildPermissionDenied()
-              : _error != null
-                  ? _buildError()
-                  : _places.isEmpty
-                      ? _buildEmpty()
-                      : _buildList(),
+              : _buildList(),
+    );
+  }
+
+  Widget _buildSearching() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 20),
+            const Text(
+              'Please wait, searching for places...',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: Colors.black54,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'This may take a moment',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.black38,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -117,10 +162,10 @@ class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Allow location access to find hangout spots near you.',
+            Text(
+              'Allow location access to find ${widget.foodMode ? 'places to eat' : 'hangout spots'} near you.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.black45),
+              style: const TextStyle(color: Colors.black45),
             ),
             const SizedBox(height: 24),
             Row(
@@ -142,52 +187,6 @@ class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildError() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
-            const SizedBox(height: 12),
-            Text(
-              _error!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.redAccent),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: _load,
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmpty() {
-    return const Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.search_off, size: 64, color: Colors.grey),
-          SizedBox(height: 12),
-          Text(
-            'No hangout spots found nearby',
-            style: TextStyle(color: Colors.grey, fontSize: 16),
-          ),
-          SizedBox(height: 4),
-          Text(
-            'Try again later or expand your search area',
-            style: TextStyle(color: Colors.black38, fontSize: 13),
-          ),
-        ],
       ),
     );
   }

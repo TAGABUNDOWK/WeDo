@@ -6,8 +6,9 @@ class OverpassService {
   static const String _endpoint = 'https://overpass-api.de/api/interpreter';
   static const String _userAgent = 'WeDoApp/1.0 (contact: dev@wedo.app)';
 
-  static const String _amenityTags =
-      'cafe|restaurant|bar|pub|ice_cream|cinema|theatre|fast_food|food_court|bakery|nightclub|karaoke|juice_bar';
+  static const String _amenityTags = 'cinema|theatre|nightclub|karaoke';
+  static const String _foodAmenityTags =
+      'cafe|restaurant|bar|pub|ice_cream|fast_food|food_court|bakery|juice_bar';
   static const String _leisureTags =
       'park|garden|bowling_alley|amusement_arcade|fitness_centre|sports_centre|swimming_pool|skatepark|nature_reserve';
   static const String _tourismTags = 'art_gallery|museum|viewpoint|camp_site';
@@ -15,8 +16,6 @@ class OverpassService {
 
   static final Map<String, _CacheEntry<String?>> _labelCache = {};
   static final Map<String, _CacheEntry<List<String>>> _poiCache = {};
-  static final Map<String, _CacheEntry<List<String>>> _provinceCache = {};
-  static final Map<String, _CacheEntry<List<String>>> _cityCache = {};
 
   Future<String?> labelArea(double lat, double lng) async {
     final key = _roundKey(lat, lng);
@@ -27,8 +26,12 @@ class OverpassService {
 
     final query =
         '[out:json][timeout:15];node["place"](around:20000,$lat,$lng);out tags 5;';
-    final result = await _fetch(query);
-    if (result == null) return null;
+    List<Map<String, dynamic>> result;
+    try {
+      result = await _fetch(query);
+    } catch (_) {
+      return null;
+    }
 
     for (final element in result) {
       final tags = element['tags'] as Map<String, dynamic>?;
@@ -54,8 +57,12 @@ class OverpassService {
 
     final query =
         '[out:json][timeout:20];node["amenity"~"^(school|library|university|college|community_centre|study)\$"](around:$radiusM,$lat,$lng);out tags 50;';
-    final result = await _fetch(query);
-    if (result == null) return const [];
+    List<Map<String, dynamic>> result;
+    try {
+      result = await _fetch(query);
+    } catch (_) {
+      return const [];
+    }
 
     final names = <String>{};
     for (final element in result) {
@@ -69,76 +76,6 @@ class OverpassService {
 
     final list = names.take(8).toList();
     _poiCache[key] = _CacheEntry(list, const Duration(minutes: 30));
-    return list;
-  }
-
-  Future<List<String>> getProvinces() async {
-    const cacheKey = 'ph_provinces';
-    final cached = _provinceCache[cacheKey];
-    if (cached != null && !cached.isExpired()) {
-      return cached.value;
-    }
-
-    const minLat = 4.6;
-    const minLng = 116.9;
-    const maxLat = 21.1;
-    const maxLng = 126.6;
-    final query = '''
-[out:json][timeout:30];
-relation["boundary"="administrative"]["admin_level"="4"]($minLat,$minLng,$maxLat,$maxLng);
-out tags;
-''';
-    final result = await _fetch(query);
-    if (result == null) return const [];
-
-    final names = <String>{};
-    for (final element in result) {
-      final tags = element['tags'] as Map<String, dynamic>?;
-      final name = tags?['name'];
-      if (name is String && name.isNotEmpty) {
-        names.add(name);
-      }
-    }
-
-    final list = names.toList()..sort();
-    _provinceCache[cacheKey] = _CacheEntry(list, const Duration(hours: 24));
-    return list;
-  }
-
-  Future<List<String>> getCities(String provinceName) async {
-    final cacheKey = 'cities_$provinceName';
-    final cached = _cityCache[cacheKey];
-    if (cached != null && !cached.isExpired()) {
-      return cached.value;
-    }
-
-    final center = await _getRelationCenter(
-      'administrative',
-      '4',
-      provinceName,
-    );
-    if (center == null) return const [];
-
-    const radiusM = 50000;
-    final query = '''
-[out:json][timeout:30];
-relation["boundary"="administrative"]["admin_level"="6"](around:$radiusM,${center['lat']},${center['lng']});
-out tags;
-''';
-    final result = await _fetch(query);
-    if (result == null) return const [];
-
-    final names = <String>{};
-    for (final element in result) {
-      final tags = element['tags'] as Map<String, dynamic>?;
-      final name = tags?['name'];
-      if (name is String && name.isNotEmpty) {
-        names.add(name);
-      }
-    }
-
-    final list = names.toList()..sort();
-    _cityCache[cacheKey] = _CacheEntry(list, const Duration(hours: 24));
     return list;
   }
 
@@ -162,73 +99,70 @@ out tags;
 out center tags;
 ''';
     final result = await _fetch(query);
-    if (result == null) return const [];
 
     return _parsePlaces(result, lat, lng);
   }
 
   Future<List<PlaceEntity>> getCityPlaces(
-    String provinceName,
-    String cityName, {
+    double cityLat,
+    double cityLng, {
     double? userLat,
     double? userLng,
+    int radiusM = 20000,
   }) async {
-    final center = await _getRelationCenter(
-      'administrative',
-      '6',
-      cityName,
-    );
-    if (center == null) return const [];
-
-    final lat = center['lat']!;
-    final lng = center['lng']!;
-    const radiusM = 20000;
-
     final query = '''
 [out:json][timeout:30];
 (
-  node["amenity"~"^($_amenityTags)\$"](around:$radiusM,$lat,$lng);
-  way["amenity"~"^($_amenityTags)\$"](around:$radiusM,$lat,$lng);
-  node["leisure"~"^($_leisureTags)\$"](around:$radiusM,$lat,$lng);
-  way["leisure"~"^($_leisureTags)\$"](around:$radiusM,$lat,$lng);
-  node["tourism"~"^($_tourismTags)\$"](around:$radiusM,$lat,$lng);
-  way["tourism"~"^($_tourismTags)\$"](around:$radiusM,$lat,$lng);
-  node["shop"~"^($_shopTags)\$"](around:$radiusM,$lat,$lng);
-  way["shop"~"^($_shopTags)\$"](around:$radiusM,$lat,$lng);
+  node["amenity"~"^($_amenityTags)\$"](around:$radiusM,$cityLat,$cityLng);
+  way["amenity"~"^($_amenityTags)\$"](around:$radiusM,$cityLat,$cityLng);
+  node["leisure"~"^($_leisureTags)\$"](around:$radiusM,$cityLat,$cityLng);
+  way["leisure"~"^($_leisureTags)\$"](around:$radiusM,$cityLat,$cityLng);
+  node["tourism"~"^($_tourismTags)\$"](around:$radiusM,$cityLat,$cityLng);
+  way["tourism"~"^($_tourismTags)\$"](around:$radiusM,$cityLat,$cityLng);
+  node["shop"~"^($_shopTags)\$"](around:$radiusM,$cityLat,$cityLng);
+  way["shop"~"^($_shopTags)\$"](around:$radiusM,$cityLat,$cityLng);
 );
 out center tags;
 ''';
     final result = await _fetch(query);
-    if (result == null) return const [];
 
     return _parsePlaces(result, userLat, userLng);
   }
 
-  Future<Map<String, double>?> _getRelationCenter(
-    String boundary,
-    String adminLevel,
-    String name,
-  ) async {
+  Future<List<PlaceEntity>> getNearbyFoodPlaces(
+    double lat,
+    double lng, {
+    int radiusM = 5000,
+  }) async {
     final query = '''
-[out:json][timeout:15];
-relation["boundary"="$boundary"]["admin_level"="$adminLevel"]["name"="$name"];
-out center;
+[out:json][timeout:30];
+(
+  node["amenity"~"^($_foodAmenityTags)\$"](around:$radiusM,$lat,$lng);
+  way["amenity"~"^($_foodAmenityTags)\$"](around:$radiusM,$lat,$lng);
+);
+out center tags;
 ''';
     final result = await _fetch(query);
-    if (result == null || result.isEmpty) return null;
+    return _parsePlaces(result, lat, lng);
+  }
 
-    final element = result.first;
-    final center = element['center'] as Map<String, dynamic>?;
-    if (center == null) return null;
-
-    final lat = center['lat'] as num?;
-    final lon = center['lon'] as num?;
-    if (lat == null || lon == null) return null;
-
-    return {
-      'lat': lat.toDouble(),
-      'lng': lon.toDouble(),
-    };
+  Future<List<PlaceEntity>> getCityFoodPlaces(
+    double cityLat,
+    double cityLng, {
+    double? userLat,
+    double? userLng,
+    int radiusM = 20000,
+  }) async {
+    final query = '''
+[out:json][timeout:30];
+(
+  node["amenity"~"^($_foodAmenityTags)\$"](around:$radiusM,$cityLat,$cityLng);
+  way["amenity"~"^($_foodAmenityTags)\$"](around:$radiusM,$cityLat,$cityLng);
+);
+out center tags;
+''';
+    final result = await _fetch(query);
+    return _parsePlaces(result, userLat, userLng);
   }
 
   List<PlaceEntity> _parsePlaces(
@@ -239,8 +173,8 @@ out center;
     final places = <PlaceEntity>[];
     for (final element in elements) {
       final tags = element['tags'] as Map<String, dynamic>?;
-      final name = tags?['name'];
-      if (name == null || (name as String).isEmpty) continue;
+      final name = tags?['name'] as String?;
+      if (name == null || name.isEmpty) continue;
 
       final lat = element['lat'] as double? ??
           (element['center'] as Map<String, dynamic>?)?['lat'] as double?;
@@ -261,7 +195,7 @@ out center;
 
       places.add(PlaceEntity(
         id: id,
-        name: name as String,
+        name: name,
         amenity: amenity,
         latitude: lat,
         longitude: lng,
@@ -279,19 +213,17 @@ out center;
     return '';
   }
 
-  Future<List<Map<String, dynamic>>?> _fetch(String query) async {
-    try {
-      final response = await http
-          .get(Uri.parse('$_endpoint?data=${Uri.encodeQueryComponent(query)}'),
-              headers: {'User-Agent': _userAgent})
-          .timeout(const Duration(seconds: 30));
-      if (response.statusCode != 200) return null;
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      final elements = body['elements'] as List? ?? [];
-      return elements.cast<Map<String, dynamic>>();
-    } catch (_) {
-      return null;
+  Future<List<Map<String, dynamic>>> _fetch(String query) async {
+    final response = await http
+        .get(Uri.parse('$_endpoint?data=${Uri.encodeQueryComponent(query)}'),
+            headers: {'User-Agent': _userAgent})
+        .timeout(const Duration(seconds: 30));
+    if (response.statusCode != 200) {
+      throw Exception('Overpass API HTTP ${response.statusCode}');
     }
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final elements = body['elements'] as List? ?? [];
+    return elements.cast<Map<String, dynamic>>();
   }
 
   static String _roundKey(double lat, double lng) {
