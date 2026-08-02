@@ -133,6 +133,20 @@ class GroupService {
             snap.docs.map(ChatMessage.fromFirestore).toList());
   }
 
+  Future<void> markMessagesAsRead(String groupId, String uid) async {
+    final allDocs = await _messages(groupId).get();
+    final batch = _db.batch();
+    for (final doc in allDocs.docs) {
+      final readBy = List<String>.from(doc.data()['read_by'] ?? []);
+      if (!readBy.contains(uid)) {
+        batch.update(doc.reference, {
+          'read_by': FieldValue.arrayUnion([uid]),
+        });
+      }
+    }
+    await batch.commit();
+  }
+
   Future<List<ChatMessage>> getMessagesOnce(String groupId) async {
     final snap = await _messages(groupId)
         .orderBy('created_at', descending: false)

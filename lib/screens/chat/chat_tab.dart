@@ -88,6 +88,30 @@ class _ChatTabState extends State<ChatTab> {
     );
   }
 
+  void _openGroupChat(String groupId) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => GroupChatScreen(groupId: groupId),
+      ),
+    ).then((_) {
+      if (uid != null) _groupService.markMessagesAsRead(groupId, uid);
+    });
+  }
+
+  void _openDirectChat(String chatId, String otherUid) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DirectChatScreen(chatId: chatId, otherUid: otherUid),
+      ),
+    ).then((_) {
+      if (uid != null) _directService.markMessagesAsRead(chatId, uid);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUser = FirebaseAuth.instance.currentUser;
@@ -153,22 +177,26 @@ class _ChatTabState extends State<ChatTab> {
                         final item = allChats[index];
                         if (item.isGroup) {
                           final group = item.group!;
+                          final hasUnread = group.lastMessage != null &&
+                              group.lastMessageSenderId != null &&
+                              group.lastMessageSenderId != currentUser.uid;
                           return ChatTile(
                             name: group.name,
                             lastMessage: group.lastMessage,
                             lastMessageAt: group.lastMessageAt,
                             memberCount: group.memberCount,
                             isGroup: true,
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => GroupChatScreen(groupId: group.id),
-                              ),
-                            ),
+                            hasUnread: hasUnread,
+                            lastSenderId: group.lastMessageSenderId,
+                            currentUserId: currentUser.uid,
+                            onTap: () => _openGroupChat(group.id),
                           );
                         } else {
                           final chat = item.direct!;
                           final otherUid = chat.otherUserId(currentUser.uid);
+                          final hasUnread = chat.lastMessage != null &&
+                              chat.lastMessageSenderId != null &&
+                              chat.lastMessageSenderId != currentUser.uid;
                           return FutureBuilder<UserEntity?>(
                             future: _directService.getUser(otherUid),
                             builder: (context, userSnap) {
@@ -179,15 +207,10 @@ class _ChatTabState extends State<ChatTab> {
                                 lastMessageAt: chat.lastMessageAt,
                                 memberCount: 2,
                                 isGroup: false,
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => DirectChatScreen(
-                                      chatId: chat.id,
-                                      otherUid: otherUid,
-                                    ),
-                                  ),
-                                ),
+                                hasUnread: hasUnread,
+                                lastSenderId: chat.lastMessageSenderId,
+                                currentUserId: currentUser.uid,
+                                onTap: () => _openDirectChat(chat.id, otherUid),
                               );
                             },
                           );

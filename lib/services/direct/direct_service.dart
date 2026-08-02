@@ -112,6 +112,20 @@ class DirectService {
         .map((snap) => snap.docs.map(ChatMessage.fromFirestore).toList());
   }
 
+  Future<void> markMessagesAsRead(String chatId, String uid) async {
+    final unreadDocs = await _messages(chatId).get();
+    final batch = _db.batch();
+    for (final doc in unreadDocs.docs) {
+      final readBy = List<String>.from(doc.data()['read_by'] ?? []);
+      if (!readBy.contains(uid)) {
+        batch.update(doc.reference, {
+          'read_by': FieldValue.arrayUnion([uid]),
+        });
+      }
+    }
+    await batch.commit();
+  }
+
   Future<List<ChatMessage>> getMessagesOnce(String chatId) async {
     final snap = await _messages(chatId)
         .orderBy('created_at', descending: false)

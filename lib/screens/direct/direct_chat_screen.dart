@@ -28,6 +28,9 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   void initState() {
     super.initState();
     _loadData();
+    if (_currentUser != null) {
+      _directService.markMessagesAsRead(widget.chatId, _currentUser.uid);
+    }
   }
 
   Future<void> _loadData() async {
@@ -110,6 +113,66 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     );
   }
 
+  void _showChatInfo() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE7ECEF),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 88,
+              height: 88,
+              margin: const EdgeInsets.only(top: 16),
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0xFFE7ECEF),
+                boxShadow: [
+                  BoxShadow(color: Colors.white, offset: Offset(-4, -4), blurRadius: 8),
+                  BoxShadow(color: Color(0xFFB8C6CC), offset: Offset(4, 4), blurRadius: 8),
+                ],
+              ),
+              child: CircleAvatar(
+                radius: 44,
+                child: Text(
+                  _otherName.isNotEmpty ? _otherName[0].toUpperCase() : '?',
+                  style: const TextStyle(fontSize: 32),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _otherName,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.badge_outlined, color: Colors.blue),
+              title: const Text('Change Nickname'),
+              subtitle: Text(
+                'Set how you appear in this chat',
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                _changeNickname();
+              },
+            ),
+            const Divider(height: 1),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _changeNickname() async {
     final currentNickname = _nicknames[_currentUser?.uid] ?? '';
     final ctrl = TextEditingController(text: currentNickname);
@@ -173,22 +236,9 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
               }
             },
           ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              if (value == 'nickname') _changeNickname();
-            },
-            itemBuilder: (_) => [
-              const PopupMenuItem(
-                value: 'nickname',
-                child: Row(
-                  children: [
-                    Icon(Icons.badge_outlined, size: 20),
-                    SizedBox(width: 8),
-                    Text('Change Nickname'),
-                  ],
-                ),
-              ),
-            ],
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            onPressed: _showChatInfo,
           ),
         ],
       ),

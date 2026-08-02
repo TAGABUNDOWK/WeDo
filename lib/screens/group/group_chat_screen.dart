@@ -27,6 +27,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   void initState() {
     super.initState();
     _loadGroupInfo();
+    if (_currentUser != null) {
+      _groupService.markMessagesAsRead(widget.groupId, _currentUser.uid);
+    }
   }
 
   Future<void> _loadGroupInfo() async {

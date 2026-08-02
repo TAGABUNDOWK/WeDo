@@ -9,6 +9,9 @@ class ChatTile extends StatelessWidget {
   final dynamic lastMessageAt;
   final int memberCount;
   final bool isGroup;
+  final bool hasUnread;
+  final String? lastSenderId;
+  final String? currentUserId;
   final VoidCallback onTap;
 
   const ChatTile({
@@ -18,11 +21,17 @@ class ChatTile extends StatelessWidget {
     required this.lastMessageAt,
     required this.memberCount,
     this.isGroup = true,
+    this.hasUnread = false,
+    this.lastSenderId,
+    this.currentUserId,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isFromMe = lastSenderId != null && lastSenderId == currentUserId;
+    final showUnread = hasUnread && !isFromMe;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -40,17 +49,35 @@ class ChatTile extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  isGroup ? Icons.group : Icons.person,
-                  color: Colors.blue,
-                ),
+              Stack(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      isGroup ? Icons.group : Icons.person,
+                      color: Colors.blue,
+                    ),
+                  ),
+                  if (showUnread)
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: Colors.blue,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -61,7 +88,10 @@ class ChatTile extends StatelessWidget {
                       name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                      style: TextStyle(
+                        fontWeight: showUnread ? FontWeight.w700 : FontWeight.w600,
+                        fontSize: 15,
+                      ),
                     ),
                     const SizedBox(height: 3),
                     Row(
@@ -73,8 +103,9 @@ class ChatTile extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 13,
+                              fontWeight: showUnread ? FontWeight.w600 : FontWeight.w400,
                               color: lastMessage?.isNotEmpty == true
-                                  ? Colors.black54
+                                  ? (showUnread ? Colors.black87 : Colors.black54)
                                   : Colors.black26,
                             ),
                           ),
@@ -82,7 +113,11 @@ class ChatTile extends StatelessWidget {
                         const SizedBox(width: 8),
                         Text(
                           formatListTime(lastMessageAt),
-                          style: const TextStyle(fontSize: 11, color: Colors.black38),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: showUnread ? Colors.blue : Colors.black38,
+                            fontWeight: showUnread ? FontWeight.w600 : FontWeight.w400,
+                          ),
                         ),
                       ],
                     ),
