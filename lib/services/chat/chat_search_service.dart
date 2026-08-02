@@ -19,12 +19,12 @@ class ChatSearchService {
         .collection(AppConstants.groupMessagesSubcollection);
 
     if (senderId != null) {
-      query = query.where('senderId', isEqualTo: senderId);
+      query = query.where('sender_id', isEqualTo: senderId);
     }
 
     if (startDate != null) {
       query = query.where(
-        'createdAt',
+        'created_at',
         isGreaterThanOrEqualTo: Timestamp.fromDate(startDate),
       );
     }
@@ -33,12 +33,12 @@ class ChatSearchService {
       final endOfDay =
           DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
       query = query.where(
-        'createdAt',
+        'created_at',
         isLessThanOrEqualTo: Timestamp.fromDate(endOfDay),
       );
     }
 
-    final snap = await query.orderBy('createdAt', descending: true).limit(limit).get();
+    final snap = await query.orderBy('created_at', descending: true).limit(limit).get();
     var messages = snap.docs.map(ChatMessage.fromFirestore).toList();
 
     if (textQuery != null && textQuery.isNotEmpty) {
