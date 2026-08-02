@@ -29,5 +29,15 @@ service cloud.firestore {
            .hasOnly(['status', 'updatedAt']);
       allow delete: if isFriendParticipant();
     }
+
+    match /topics/{topicId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+
+      match /cards/{cardId} {
+        allow read: if true;
+        allow write: if isSignedIn();
+      }
+    }
   }
 }

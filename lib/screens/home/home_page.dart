@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../friends/friends_page.dart';
+import '../session/session_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -15,7 +16,7 @@ class _HomePageState extends State<HomePage> {
     _HomeTab(),
     _PlaceholderTab(icon: Icons.chat_bubble_outline, label: 'Chat'),
     FriendsPage(),
-    _PlaceholderTab(icon: Icons.casino_outlined, label: 'Session'),
+    const SessionPage(),
   ];
 
   BoxDecoration _neumorphicDecoration({Color? color}) {
