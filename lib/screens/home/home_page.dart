@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../friends/friends_page.dart';
+import '../chat/chat_tab.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -13,7 +14,7 @@ class _HomePageState extends State<HomePage> {
 
   static const _tabs = [
     _HomeTab(),
-    _PlaceholderTab(icon: Icons.chat_bubble_outline, label: 'Chat'),
+    ChatTab(),
     FriendsPage(),
     _PlaceholderTab(icon: Icons.casino_outlined, label: 'Session'),
   ];
@@ -152,26 +153,55 @@ class _HomeTab extends StatelessWidget {
                 'WeDo',
                 style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
               ),
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: bg,
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0xFFFFFFFF),
-                      offset: Offset(-4, -4),
-                      blurRadius: 8,
+              Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.pushNamed(context, '/migration'),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: bg,
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0xFFFFFFFF),
+                            offset: Offset(-4, -4),
+                            blurRadius: 8,
+                          ),
+                          BoxShadow(
+                            color: Color(0xFFB8C6CC),
+                            offset: Offset(4, 4),
+                            blurRadius: 8,
+                          ),
+                        ],
+                      ),
+                      child: const Icon(Icons.settings, color: Colors.blue),
                     ),
-                    BoxShadow(
-                      color: Color(0xFFB8C6CC),
-                      offset: Offset(4, 4),
-                      blurRadius: 8,
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: bg,
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0xFFFFFFFF),
+                          offset: Offset(-4, -4),
+                          blurRadius: 8,
+                        ),
+                        BoxShadow(
+                          color: Color(0xFFB8C6CC),
+                          offset: Offset(4, 4),
+                          blurRadius: 8,
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                child: const Icon(Icons.person_outline, color: Colors.blue),
+                    child: const Icon(Icons.person_outline, color: Colors.blue),
+                  ),
+                ],
               ),
             ],
           ),
