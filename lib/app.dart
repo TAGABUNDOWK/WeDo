@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'screens/login_page.dart';
 import 'screens/group/group_info_screen.dart';
-import 'screens/migration_screen.dart';
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -17,7 +16,6 @@ class MyApp extends StatelessWidget {
           final args = ModalRoute.of(context)?.settings.arguments;
           return GroupInfoScreen(groupId: args as String? ?? '');
         },
-        '/migration': (context) => const MigrationScreen(),
       },
     );
   }

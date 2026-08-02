@@ -154,56 +154,6 @@ class _HomeTab extends StatelessWidget {
                 'WeDo',
                 style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
               ),
-              Row(
-                children: [
-                  GestureDetector(
-                    onTap: () => Navigator.pushNamed(context, '/migration'),
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: bg,
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0xFFFFFFFF),
-                            offset: Offset(-4, -4),
-                            blurRadius: 8,
-                          ),
-                          BoxShadow(
-                            color: Color(0xFFB8C6CC),
-                            offset: Offset(4, 4),
-                            blurRadius: 8,
-                          ),
-                        ],
-                      ),
-                      child: const Icon(Icons.settings, color: Colors.blue),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: bg,
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0xFFFFFFFF),
-                          offset: Offset(-4, -4),
-                          blurRadius: 8,
-                        ),
-                        BoxShadow(
-                          color: Color(0xFFB8C6CC),
-                          offset: Offset(4, 4),
-                          blurRadius: 8,
-                        ),
-                      ],
-                    ),
-                    child: const Icon(Icons.person_outline, color: Colors.blue),
-                  ),
-                ],
-              ),
             ],
           ),
           const SizedBox(height: 8),
