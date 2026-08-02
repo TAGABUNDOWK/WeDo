@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter/material.dart';
-import '../../services/auth/auth_service.dart';
-import '../../services/auth/user_service.dart';
-import '../../services/location/location_service.dart';
-import '../../models/user_entity.dart';
+import '../services/auth/auth_service.dart';
+import '../services/auth/user_service.dart';
+import '../services/location/location_service.dart';
+import '../models/user_entity.dart';
 import 'otp_verification_page.dart';
 
 enum _LocationDialogAction { retry, openSettings }

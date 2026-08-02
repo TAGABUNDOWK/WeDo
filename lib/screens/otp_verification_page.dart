@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../services/auth/otp_service.dart';
-import '../home/home_page.dart';
+import '../services/auth/otp_service.dart';
+import 'home/home_page.dart';
 
 class OtpVerificationPage extends StatefulWidget {
   final String userId;
