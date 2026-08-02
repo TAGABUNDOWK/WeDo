@@ -1,47 +1,38 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/message.dart';
-import '../../services/group/group_service.dart';
+import '../../services/direct/direct_service.dart';
 import '../../utils/time_format.dart';
 import '../../widgets/message_bubble.dart';
 import '../../widgets/composer_option.dart';
-import '../search/chat_search_screen.dart';
 
-class GroupChatScreen extends StatefulWidget {
-  final String groupId;
-  const GroupChatScreen({super.key, required this.groupId});
+class DirectChatScreen extends StatefulWidget {
+  final String chatId;
+  final String otherUid;
+  const DirectChatScreen({super.key, required this.chatId, required this.otherUid});
 
   @override
-  State<GroupChatScreen> createState() => _GroupChatScreenState();
+  State<DirectChatScreen> createState() => _DirectChatScreenState();
 }
 
-class _GroupChatScreenState extends State<GroupChatScreen> {
+class _DirectChatScreenState extends State<DirectChatScreen> {
   final _messageCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
-  final _groupService = GroupService();
+  final _directService = DirectService();
   final _currentUser = FirebaseAuth.instance.currentUser;
-  String _groupName = '';
-  Map<String, String> _nicknames = {};
+  String _otherName = '';
 
   @override
   void initState() {
     super.initState();
-    _loadGroupInfo();
+    _loadOtherUser();
   }
 
-  Future<void> _loadGroupInfo() async {
-    final group = await _groupService.getGroup(widget.groupId);
-    final nicknames = await _groupService.getMemberNicknames(widget.groupId);
-    if (group != null && mounted) {
-      setState(() {
-        _groupName = group.name;
-        _nicknames = nicknames;
-      });
+  Future<void> _loadOtherUser() async {
+    final user = await _directService.getUser(widget.otherUid);
+    if (mounted) {
+      setState(() => _otherName = user?.displayName ?? widget.otherUid);
     }
-  }
-
-  String _getDisplayName(String uid, String fallback) {
-    return _nicknames[uid] ?? fallback;
   }
 
   @override
@@ -55,10 +46,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     final text = _messageCtrl.text.trim();
     if (text.isEmpty || _currentUser == null) return;
 
-    _groupService.sendMessage(
-      groupId: widget.groupId,
+    _directService.sendMessage(
+      chatId: widget.chatId,
       senderId: _currentUser.uid,
-      senderName: _getDisplayName(_currentUser.uid, _currentUser.displayName ?? _currentUser.email ?? 'Unknown'),
+      senderName: _currentUser.displayName ?? _currentUser.email ?? 'Unknown',
       text: text,
     );
 
@@ -99,17 +90,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                       );
                     },
                   ),
-                  ComposerOption(
-                    icon: Icons.poll_outlined,
-                    label: 'Poll',
-                    color: Colors.deepPurple,
-                    onTap: () {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Creating polls coming soon')),
-                      );
-                    },
-                  ),
                 ],
               ),
             ],
@@ -123,45 +103,11 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: StreamBuilder<dynamic>(
-          stream: _groupService.getGroupStream(widget.groupId),
-          builder: (context, snapshot) {
-            final group = snapshot.data;
-            if (group != null) {
-              _groupName = group.name;
-            }
-            return Text(_groupName);
-          },
-        ),
+        title: Text(_otherName),
         actions: [
           IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () async {
-              final messageId = await Navigator.push<String>(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ChatSearchScreen(groupId: widget.groupId),
-                ),
-              );
-              if (messageId != null && _scrollCtrl.hasClients) {
-                final messages = await _groupService.getMessagesOnce(widget.groupId);
-                final index = messages.indexWhere((m) => m.id == messageId);
-                if (index != -1 && _scrollCtrl.hasClients) {
-                  _scrollCtrl.animateTo(
-                    index * 80.0,
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeOut,
-                  );
-                }
-              }
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            onPressed: () async {
-              await Navigator.pushNamed(context, '/group-info', arguments: widget.groupId);
-              _loadGroupInfo();
-            },
+            icon: const Icon(Icons.add_circle_outline, color: Colors.grey),
+            onPressed: _showComposerMenu,
           ),
         ],
       ),
@@ -169,7 +115,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         children: [
           Expanded(
             child: StreamBuilder<List<ChatMessage>>(
-              stream: _groupService.getMessagesStream(widget.groupId),
+              stream: _directService.getMessagesStream(widget.chatId),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -185,29 +131,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                   itemBuilder: (context, index) {
                     final msg = messages[index];
                     final isMe = msg.senderId == _currentUser?.uid;
-                    final isSystem = msg.type == MessageType.system;
-
-                    if (isSystem) {
-                      return MessageBubble(
-                        content: msg.content,
-                        isMe: false,
-                        senderName: msg.senderName.isNotEmpty ? msg.senderName : null,
-                        time: formatChatTime(msg.createdAt),
-                        isSystem: true,
-                      );
-                    }
-
-                    final displayName = _getDisplayName(
-                      msg.senderId,
-                      msg.senderName,
-                    );
 
                     if (msg.type == MessageType.image && msg.imageUrl != null) {
                       return MessageBubble(
                         content: msg.content,
                         imageUrl: msg.imageUrl,
                         isMe: isMe,
-                        senderName: isMe ? null : displayName,
+                        senderName: null,
                         time: formatChatTime(msg.createdAt),
                       );
                     }
@@ -215,7 +145,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                     return MessageBubble(
                       content: msg.content,
                       isMe: isMe,
-                      senderName: isMe ? null : displayName,
+                      senderName: null,
                       time: formatChatTime(msg.createdAt),
                     );
                   },
@@ -234,10 +164,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
             child: SafeArea(
               child: Row(
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.add_circle_outline, color: Colors.grey),
-                    onPressed: _showComposerMenu,
-                  ),
                   Expanded(
                     child: TextField(
                       controller: _messageCtrl,

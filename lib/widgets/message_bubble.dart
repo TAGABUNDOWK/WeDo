@@ -6,6 +6,7 @@ class MessageBubble extends StatelessWidget {
   final String? senderName;
   final String time;
   final String? imageUrl;
+  final bool isSystem;
 
   const MessageBubble({
     super.key,
@@ -14,10 +15,47 @@ class MessageBubble extends StatelessWidget {
     this.senderName,
     required this.time,
     this.imageUrl,
+    this.isSystem = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (isSystem) {
+      return Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.grey[200],
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (senderName != null)
+                Text(
+                  senderName!,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black54,
+                  ),
+                ),
+              Text(
+                content,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.black54,
+                  fontStyle: FontStyle.italic,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(

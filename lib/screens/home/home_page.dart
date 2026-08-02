@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../friends/friends_page.dart';
-import '../group/group_chats_page.dart';
+import '../chat/chat_tab.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -14,7 +14,7 @@ class _HomePageState extends State<HomePage> {
 
   static const _tabs = [
     _HomeTab(),
-    GroupChatsPage(),
+    ChatTab(),
     FriendsPage(),
     _PlaceholderTab(icon: Icons.casino_outlined, label: 'Session'),
   ];

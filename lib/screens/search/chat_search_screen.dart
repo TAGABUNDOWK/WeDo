@@ -1,27 +1,27 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../models/message.dart';
+import '../../services/chat/chat_search_service.dart';
 import '../../services/group/group_service.dart';
 import '../../utils/time_format.dart';
 
-class MessageSearchScreen extends StatefulWidget {
+class ChatSearchScreen extends StatefulWidget {
   final String groupId;
-  const MessageSearchScreen({super.key, required this.groupId});
+  const ChatSearchScreen({super.key, required this.groupId});
 
   @override
-  State<MessageSearchScreen> createState() => _MessageSearchScreenState();
+  State<ChatSearchScreen> createState() => _ChatSearchScreenState();
 }
 
-class _MessageSearchScreenState extends State<MessageSearchScreen> {
+class _ChatSearchScreenState extends State<ChatSearchScreen> {
   final _searchCtrl = TextEditingController();
-  final _scrollCtrl = ScrollController();
   final _groupService = GroupService();
+  final _searchService = ChatSearchService();
   String? _selectedSenderId;
   DateTime? _startDate;
   DateTime? _endDate;
-  List<QueryDocumentSnapshot<Map<String, dynamic>>> _results = [];
+  List<ChatMessage> _results = [];
   bool _isLoading = false;
   bool _hasSearched = false;
-
   List<Map<String, dynamic>> _members = [];
 
   @override
@@ -33,7 +33,6 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
   @override
   void dispose() {
     _searchCtrl.dispose();
-    _scrollCtrl.dispose();
     super.dispose();
   }
 
@@ -49,23 +48,14 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
     });
 
     try {
-      final snapshot = await _groupService.searchMessages(
+      final results = await _searchService.searchGroupMessages(
         groupId: widget.groupId,
         senderId: _selectedSenderId,
         startDate: _startDate,
         endDate: _endDate,
+        textQuery: _searchCtrl.text.trim(),
       );
-      var docs = snapshot.docs;
-
-      final searchText = _searchCtrl.text.trim().toLowerCase();
-      if (searchText.isNotEmpty) {
-        docs = docs.where((doc) {
-          final content = (doc.data()['content'] as String? ?? '').toLowerCase();
-          return content.contains(searchText);
-        }).toList();
-      }
-
-      setState(() => _results = docs);
+      if (mounted) setState(() => _results = results);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -150,7 +140,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<String?>(
-                        value: _selectedSenderId,
+                        initialValue: _selectedSenderId,
                         hint: const Text('Any user'),
                         decoration: InputDecoration(
                           labelText: 'From',
@@ -183,9 +173,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
                         onPressed: () => _pickDate(isStart: true),
                         icon: const Icon(Icons.calendar_today, size: 16),
                         label: Text(
-                          _startDate != null
-                              ? formatMonthDay(_startDate!)
-                              : 'From date',
+                          _startDate != null ? formatMonthDay(_startDate!) : 'From date',
                           style: const TextStyle(fontSize: 13),
                         ),
                         style: OutlinedButton.styleFrom(
@@ -199,9 +187,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
                         onPressed: () => _pickDate(isStart: false),
                         icon: const Icon(Icons.calendar_today, size: 16),
                         label: Text(
-                          _endDate != null
-                              ? formatMonthDay(_endDate!)
-                              : 'To date',
+                          _endDate != null ? formatMonthDay(_endDate!) : 'To date',
                           style: const TextStyle(fontSize: 13),
                         ),
                         style: OutlinedButton.styleFrom(
@@ -245,19 +231,13 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
                         ),
                       if (_startDate != null)
                         Chip(
-                          label: Text(
-                            formatMonthDay(_startDate!),
-                            style: const TextStyle(fontSize: 12),
-                          ),
+                          label: Text(formatMonthDay(_startDate!), style: const TextStyle(fontSize: 12)),
                           onDeleted: () => setState(() => _startDate = null),
                           visualDensity: VisualDensity.compact,
                         ),
                       if (_endDate != null)
                         Chip(
-                          label: Text(
-                            formatMonthDay(_endDate!),
-                            style: const TextStyle(fontSize: 12),
-                          ),
+                          label: Text(formatMonthDay(_endDate!), style: const TextStyle(fontSize: 12)),
                           onDeleted: () => setState(() => _endDate = null),
                           visualDensity: VisualDensity.compact,
                         ),
@@ -283,20 +263,15 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
                             ),
                           )
                         : ListView.builder(
-                            controller: _scrollCtrl,
                             padding: const EdgeInsets.all(12),
                             itemCount: _results.length,
                             itemBuilder: (context, index) {
-                              final data = _results[index].data();
-                              final content = data['content'] as String? ?? '';
-                              final senderName = data['senderName'] as String? ?? 'Unknown';
-                              final createdAt = data['createdAt'] as Timestamp?;
-
+                              final msg = _results[index];
                               return Card(
                                 margin: const EdgeInsets.only(bottom: 8),
                                 child: InkWell(
                                   borderRadius: BorderRadius.circular(12),
-                                  onTap: () => _jumpToMessage(_results[index].id),
+                                  onTap: () => _jumpToMessage(msg.id),
                                   child: Padding(
                                     padding: const EdgeInsets.all(12),
                                     child: Column(
@@ -307,29 +282,28 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
                                             CircleAvatar(
                                               radius: 14,
                                               child: Text(
-                                                senderName[0].toUpperCase(),
+                                                msg.senderName.isNotEmpty
+                                                    ? msg.senderName[0].toUpperCase()
+                                                    : '?',
                                                 style: const TextStyle(fontSize: 12),
                                               ),
                                             ),
                                             const SizedBox(width: 8),
                                             Expanded(
                                               child: Text(
-                                                senderName,
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.w600,
-                                                  fontSize: 13,
-                                                ),
+                                                msg.senderName,
+                                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                                               ),
                                             ),
                                             Text(
-                                              formatSearchDate(createdAt),
+                                              formatSearchDate(msg.createdAt),
                                               style: const TextStyle(fontSize: 11, color: Colors.grey),
                                             ),
                                           ],
                                         ),
                                         const SizedBox(height: 8),
                                         Text(
-                                          content,
+                                          msg.content,
                                           maxLines: 3,
                                           overflow: TextOverflow.ellipsis,
                                           style: const TextStyle(fontSize: 14),

@@ -15,6 +15,11 @@ service cloud.firestore {
         && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
     }
 
+    function isDirectChatParticipant(chatId) {
+      return isSignedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/direct_chats/$(chatId)).data.members;
+    }
+
     match /users/{userId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.auth.uid == userId;
@@ -49,15 +54,33 @@ service cloud.firestore {
 
       match /members/{memberUid} {
         allow read: if isGroupMember(groupId);
-        allow create: if isSignedIn() && request.auth.uid == memberUid;
-        allow update, delete: if isSignedIn() && request.auth.uid == memberUid;
+        allow create: if isSignedIn() && (request.auth.uid == memberUid || isGroupMember(groupId));
+        allow update, delete: if isSignedIn() && (request.auth.uid == memberUid || isGroupMember(groupId));
       }
 
       match /messages/{messageId} {
         allow read: if isGroupMember(groupId);
         allow create: if isGroupMember(groupId)
-          && request.resource.data.senderId == request.auth.uid;
+          && (request.resource.data.senderId == request.auth.uid
+              || request.resource.data.senderId == 'system');
         allow update, delete: if isGroupMember(groupId);
+      }
+    }
+
+    match /direct_chats/{chatId} {
+      allow read: if isSignedIn()
+        && request.auth.uid in resource.data.members;
+      allow create: if isSignedIn()
+        && request.resource.data.members is list
+        && request.resource.data.members.hasAny([request.auth.uid]);
+      allow update: if isSignedIn()
+        && request.auth.uid in resource.data.members;
+
+      match /messages/{messageId} {
+        allow read: if isDirectChatParticipant(chatId);
+        allow create: if isDirectChatParticipant(chatId)
+          && request.resource.data.senderId == request.auth.uid;
+        allow update, delete: if isDirectChatParticipant(chatId);
       }
     }
   }

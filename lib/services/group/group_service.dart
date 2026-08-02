@@ -1,23 +1,40 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../models/group_chat.dart';
+import '../../models/message.dart';
 import '../../utils/constants.dart';
 
 class GroupService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> getUserGroupsStream(String uid) {
-    return _db
-        .collection(AppConstants.groupsCollection)
+  CollectionReference<Map<String, dynamic>> get _groups =>
+      _db.collection(AppConstants.groupsCollection);
+
+  CollectionReference<Map<String, dynamic>> _messages(String groupId) =>
+      _groups.doc(groupId).collection(AppConstants.groupMessagesSubcollection);
+
+  CollectionReference<Map<String, dynamic>> _members(String groupId) =>
+      _groups.doc(groupId).collection(AppConstants.groupMembersSubcollection);
+
+  Stream<List<GroupChat>> getUserGroupsStream(String uid) {
+    return _groups
         .where('members', arrayContains: uid)
         .orderBy('lastMessageAt', descending: true)
-        .snapshots();
+        .snapshots()
+        .map((snap) =>
+            snap.docs.map(GroupChat.fromFirestore).toList());
   }
 
-  Future<DocumentSnapshot<Map<String, dynamic>>> getGroupDoc(String groupId) {
-    return _db.collection(AppConstants.groupsCollection).doc(groupId).get();
+  Future<GroupChat?> getGroup(String groupId) async {
+    final doc = await _groups.doc(groupId).get();
+    if (!doc.exists) return null;
+    return GroupChat.fromFirestore(doc);
   }
 
-  Future<DocumentSnapshot<Map<String, dynamic>>> getUserDoc(String uid) {
-    return _db.collection(AppConstants.usersCollection).doc(uid).get();
+  Stream<GroupChat?> getGroupStream(String groupId) {
+    return _groups.doc(groupId).snapshots().map((doc) {
+      if (!doc.exists) return null;
+      return GroupChat.fromFirestore(doc);
+    });
   }
 
   Future<void> createGroup({
@@ -26,8 +43,7 @@ class GroupService {
     required String displayName,
     String? photoUrl,
   }) async {
-    final groupRef = _db.collection(AppConstants.groupsCollection).doc();
-
+    final groupRef = _groups.doc();
     final batch = _db.batch();
 
     batch.set(groupRef, {
@@ -39,17 +55,15 @@ class GroupService {
       'createdAt': FieldValue.serverTimestamp(),
       'lastMessageAt': FieldValue.serverTimestamp(),
       'lastMessage': null,
+      'lastMessageSenderId': null,
     });
 
-    batch.set(
-      groupRef.collection(AppConstants.groupMembersSubcollection).doc(createdBy),
-      {
-        'role': 'admin',
-        'joinedAt': FieldValue.serverTimestamp(),
-        'invitedBy': createdBy,
-        'displayName': displayName,
-      },
-    );
+    batch.set(_members(groupRef.id).doc(createdBy), {
+      'role': 'admin',
+      'joinedAt': FieldValue.serverTimestamp(),
+      'invitedBy': createdBy,
+      'displayName': displayName,
+    });
 
     await batch.commit();
   }
@@ -60,11 +74,9 @@ class GroupService {
     required String senderName,
     required String text,
   }) async {
-    await _db
-        .collection(AppConstants.groupsCollection)
-        .doc(groupId)
-        .collection(AppConstants.groupMessagesSubcollection)
-        .add({
+    final batch = _db.batch();
+
+    batch.set(_messages(groupId).doc(), {
       'senderId': senderId,
       'senderName': senderName,
       'type': 'text',
@@ -76,86 +88,117 @@ class GroupService {
       'edited': false,
     });
 
-    await _db.collection(AppConstants.groupsCollection).doc(groupId).update({
+    batch.update(_groups.doc(groupId), {
       'lastMessage': text,
+      'lastMessageSenderId': senderId,
       'lastMessageAt': FieldValue.serverTimestamp(),
     });
+
+    await batch.commit();
   }
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> getMessagesStream(String groupId) {
-    return _db
-        .collection(AppConstants.groupsCollection)
-        .doc(groupId)
-        .collection(AppConstants.groupMessagesSubcollection)
+  Future<void> sendSystemMessage({
+    required String groupId,
+    required String content,
+    String senderName = '',
+  }) async {
+    final batch = _db.batch();
+
+    batch.set(_messages(groupId).doc(), {
+      'senderId': 'system',
+      'senderName': senderName,
+      'type': 'system',
+      'content': content,
+      'reactions': {},
+      'readBy': [],
+      'createdAt': FieldValue.serverTimestamp(),
+      'createdAtLocal': DateTime.now().toIso8601String(),
+      'edited': false,
+    });
+
+    batch.update(_groups.doc(groupId), {
+      'lastMessage': content,
+      'lastMessageSenderId': 'system',
+      'lastMessageAt': FieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
+  }
+
+  Stream<List<ChatMessage>> getMessagesStream(String groupId) {
+    return _messages(groupId)
         .orderBy('createdAt', descending: false)
-        .snapshots();
+        .snapshots()
+        .map((snap) =>
+            snap.docs.map(ChatMessage.fromFirestore).toList());
   }
 
-  Future<QuerySnapshot<Map<String, dynamic>>> getMessagesOnce(String groupId) {
-    return _db
-        .collection(AppConstants.groupsCollection)
-        .doc(groupId)
-        .collection(AppConstants.groupMessagesSubcollection)
+  Future<List<ChatMessage>> getMessagesOnce(String groupId) async {
+    final snap = await _messages(groupId)
         .orderBy('createdAt', descending: false)
         .get();
-  }
-
-  Future<QuerySnapshot<Map<String, dynamic>>> searchMessages({
-    required String groupId,
-    String? senderId,
-    DateTime? startDate,
-    DateTime? endDate,
-    int limit = 100,
-  }) async {
-    Query<Map<String, dynamic>> query = _db
-        .collection(AppConstants.groupsCollection)
-        .doc(groupId)
-        .collection(AppConstants.groupMessagesSubcollection);
-
-    if (senderId != null) {
-      query = query.where('senderId', isEqualTo: senderId);
-    }
-
-    if (startDate != null) {
-      query = query.where(
-        'createdAt',
-        isGreaterThanOrEqualTo: Timestamp.fromDate(startDate),
-      );
-    }
-
-    if (endDate != null) {
-      final endOfDay =
-          DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
-      query = query.where(
-        'createdAt',
-        isLessThanOrEqualTo: Timestamp.fromDate(endOfDay),
-      );
-    }
-
-    return query.orderBy('createdAt', descending: true).limit(limit).get();
+    return snap.docs.map(ChatMessage.fromFirestore).toList();
   }
 
   Future<List<Map<String, dynamic>>> getGroupMembersWithNames(
     String groupId,
   ) async {
-    final groupDoc = await getGroupDoc(groupId);
+    final groupDoc = await _groups.doc(groupId).get();
     if (!groupDoc.exists) return [];
 
-    final memberIds = List<String>.from(groupDoc.data()?['members'] ?? []);
-
+    final memberIds =
+        List<String>.from(groupDoc.data()?['members'] ?? []);
     final memberData = <Map<String, dynamic>>[];
+
     for (final uid in memberIds) {
-      final userDoc = await getUserDoc(uid);
-      if (userDoc.exists) {
-        memberData.add({
-          'uid': uid,
-          'displayName': userDoc.data()?['displayName'] ?? uid,
-        });
-      } else {
-        memberData.add({'uid': uid, 'displayName': uid});
-      }
+      final memberDoc = await _members(groupId).doc(uid).get();
+      final nickname = memberDoc.data()?['displayName'] as String?;
+
+      final userDoc =
+          await _db.collection(AppConstants.usersCollection).doc(uid).get();
+      memberData.add({
+        'uid': uid,
+        'displayName':
+            nickname ?? userDoc.data()?['displayName'] ?? userDoc.data()?['display_name'] ?? uid,
+      });
     }
     return memberData;
+  }
+
+  Future<Map<String, String>> getMemberNicknames(String groupId) async {
+    final snap = await _members(groupId).get();
+    final nicknames = <String, String>{};
+    for (final doc in snap.docs) {
+      final name = doc.data()['displayName'] as String?;
+      if (name != null) {
+        nicknames[doc.id] = name;
+      }
+    }
+    return nicknames;
+  }
+
+  Future<void> updateMemberNickname({
+    required String groupId,
+    required String memberUid,
+    required String displayName,
+  }) async {
+    await _members(groupId).doc(memberUid).update({
+      'displayName': displayName,
+    });
+  }
+
+  Future<void> updateGroupName({
+    required String groupId,
+    required String name,
+  }) async {
+    await _groups.doc(groupId).update({'name': name});
+  }
+
+  Future<void> updateGroupPhoto({
+    required String groupId,
+    required String photoUrl,
+  }) async {
+    await _groups.doc(groupId).update({'photoUrl': photoUrl});
   }
 
   Future<({String uid, String name})?> findUserByEmail(String email) async {
@@ -180,24 +223,19 @@ class GroupService {
     required String invitedBy,
     String role = 'member',
   }) async {
-    final groupRef = _db.collection(AppConstants.groupsCollection).doc(groupId);
-
     final batch = _db.batch();
 
-    batch.update(groupRef, {
+    batch.update(_groups.doc(groupId), {
       'members': FieldValue.arrayUnion([memberUid]),
       'memberCount': FieldValue.increment(1),
     });
 
-    batch.set(
-      groupRef.collection(AppConstants.groupMembersSubcollection).doc(memberUid),
-      {
-        'role': role,
-        'joinedAt': FieldValue.serverTimestamp(),
-        'invitedBy': invitedBy,
-        'displayName': displayName,
-      },
-    );
+    batch.set(_members(groupId).doc(memberUid), {
+      'role': role,
+      'joinedAt': FieldValue.serverTimestamp(),
+      'invitedBy': invitedBy,
+      'displayName': displayName,
+    });
 
     await batch.commit();
   }
@@ -206,23 +244,19 @@ class GroupService {
     required String groupId,
     required String memberUid,
   }) async {
-    final groupRef = _db.collection(AppConstants.groupsCollection).doc(groupId);
-
     final batch = _db.batch();
 
-    batch.update(groupRef, {
+    batch.update(_groups.doc(groupId), {
       'members': FieldValue.arrayRemove([memberUid]),
       'memberCount': FieldValue.increment(-1),
     });
 
-    batch.delete(
-      groupRef.collection(AppConstants.groupMembersSubcollection).doc(memberUid),
-    );
+    batch.delete(_members(groupId).doc(memberUid));
 
     await batch.commit();
   }
 
   Future<void> deleteGroup(String groupId) async {
-    await _db.collection(AppConstants.groupsCollection).doc(groupId).delete();
+    await _groups.doc(groupId).delete();
   }
 }
