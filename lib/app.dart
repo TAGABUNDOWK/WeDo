@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'screens/auth/login_page.dart';
+import 'screens/login_page.dart';
 import 'screens/group/group_info_screen.dart';
 import 'screens/migration_screen.dart';
 
