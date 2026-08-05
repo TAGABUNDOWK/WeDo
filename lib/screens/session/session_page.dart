@@ -4,6 +4,7 @@ import '../../services/session/session_service.dart';
 import 'session_game_screen.dart';
 import 'places_to_go_screen.dart';
 import 'where_to_eat_screen.dart';
+import 'movie_category_screen.dart';
 
 class SessionPage extends StatefulWidget {
   const SessionPage({super.key});
@@ -125,9 +126,12 @@ class _SessionPageState extends State<SessionPage> {
                                     builder: (_) => const WhereToEatScreen(),
                                   ),
                                 );
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Coming soon')),
+                              } else if (topic.title == 'Movies to watch') {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const MovieCategoryScreen(),
+                                  ),
                                 );
                               }
                             },
