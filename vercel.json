@@ -1,31 +1,17 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "api/generate-otp.js",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "api/verify-otp.js",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "api/tmdb.js",
-      "use": "@vercel/node"
-    }
-  ],
   "routes": [
     {
       "src": "/generate-otp",
-      "dest": "api/generate-otp.js"
+      "dest": "/api/generate-otp"
     },
     {
       "src": "/verify-otp",
-      "dest": "api/verify-otp.js"
+      "dest": "/api/verify-otp"
     },
     {
       "src": "/tmdb",
-      "dest": "api/tmdb.js"
+      "dest": "/api/tmdb"
     }
   ]
 }
