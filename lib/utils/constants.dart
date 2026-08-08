@@ -6,6 +6,10 @@ class AppConstants {
   static const String directChatsCollection = 'direct_chats';
   static const String directChatMessagesSubcollection = 'messages';
   static const String friendsCollection = 'friends';
+  static const String topicsCollection = 'topics';
+  static const String cardsSubcollection = 'cards';
+  static const String sessionsCollection = 'sessions';
+  static const String participantsSubcollection = 'participants';
 
   // TMDB API (proxied through Vercel)
   static const String tmdbProxyUrl = 'https://wedo-api.vercel.app/tmdb';

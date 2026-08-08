@@ -20,6 +20,17 @@ service cloud.firestore {
         && request.auth.uid in get(/databases/$(database)/documents/direct_chats/$(chatId)).data.members;
     }
 
+    function isSessionHost(sessionId) {
+      return isSignedIn()
+        && request.auth.uid == get(/databases/$(database)/documents/sessions/$(sessionId)).data.hostId;
+    }
+
+    function isSessionParticipant(sessionId) {
+      return isSignedIn()
+        && (request.auth.uid == get(/databases/$(database)/documents/sessions/$(sessionId)).data.hostId
+            || exists(/databases/$(database)/documents/sessions/$(sessionId)/participants/$(request.auth.uid)));
+    }
+
     match /users/{userId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.auth.uid == userId;
@@ -84,6 +95,34 @@ service cloud.firestore {
           && (request.resource.data.senderId == request.auth.uid
               || request.resource.data.sender_id == request.auth.uid);
         allow update, delete: if isDirectChatParticipant(chatId);
+      }
+    }
+
+    match /topics/{topicId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn();
+
+      match /cards/{cardId} {
+        allow read: if true;
+        allow create: if isSignedIn();
+        allow update, delete: if isSignedIn();
+      }
+    }
+
+    match /sessions/{sessionId} {
+      allow read: if isSignedIn() && isSessionParticipant(sessionId);
+      allow create: if isSignedIn()
+        && request.resource.data.hostId == request.auth.uid
+        && request.resource.data.sessionId == sessionId;
+      allow update: if isSignedIn() && isSessionParticipant(sessionId);
+      allow delete: if isSignedIn() && isSessionHost(sessionId);
+
+      match /participants/{userId} {
+        allow read: if isSignedIn() && isSessionParticipant(sessionId);
+        allow create: if isSignedIn() && request.auth.uid == userId;
+        allow update: if isSignedIn() && request.auth.uid == userId;
+        allow delete: if isSignedIn() && isSessionHost(sessionId);
       }
     }
   }
