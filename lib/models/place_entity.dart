@@ -16,7 +16,7 @@ class PlaceEntity {
     required this.longitude,
     this.distanceFromUser,
   });
-
+ 
   PlaceEntity copyWith({double? distanceFromUser}) {
     return PlaceEntity(
       id: id,
