@@ -31,7 +31,9 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
 
   Future<void> _loadData() async {
     final group = await _groupService.getGroup(widget.groupId);
-    final members = await _groupService.getGroupMembersWithNames(widget.groupId);
+    final members = await _groupService.getGroupMembersWithNames(
+      widget.groupId,
+    );
     if (mounted) {
       setState(() {
         _group = group;
@@ -62,7 +64,10 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
             child: const Text('Save'),
@@ -72,7 +77,10 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     );
 
     if (result != null && result.isNotEmpty && mounted) {
-      await _groupService.updateGroupName(groupId: widget.groupId, name: result);
+      await _groupService.updateGroupName(
+        groupId: widget.groupId,
+        name: result,
+      );
       _loadData();
     }
   }
@@ -92,7 +100,10 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
             child: const Text('Save'),
@@ -102,7 +113,10 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     );
 
     if (result != null && result.isNotEmpty && mounted) {
-      await _groupService.updateGroupPhoto(groupId: widget.groupId, photoUrl: result);
+      await _groupService.updateGroupPhoto(
+        groupId: widget.groupId,
+        photoUrl: result,
+      );
       _loadData();
     }
   }
@@ -123,7 +137,10 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
             child: const Text('Save'),
@@ -133,7 +150,8 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     );
 
     if (result != null && result.isNotEmpty && mounted) {
-      final senderName = _currentUser?.displayName ?? _currentUser?.email ?? 'Someone';
+      final senderName =
+          _currentUser?.displayName ?? _currentUser?.email ?? 'Someone';
       await _groupService.updateMemberNickname(
         groupId: widget.groupId,
         memberUid: memberUid,
@@ -141,7 +159,8 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
       );
       await _groupService.sendSystemMessage(
         groupId: widget.groupId,
-        content: '$senderName changed ${_getMemberName(memberUid)}\'s nickname to "$result"',
+        content:
+            '$senderName changed ${_getMemberName(memberUid)}\'s nickname to "$result"',
         senderName: senderName,
       );
       _loadData();
@@ -172,13 +191,12 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
 
     final selected = await Navigator.push<List<String>>(
       context,
-      MaterialPageRoute(
-        builder: (_) => _AddMemberScreen(friends: friends),
-      ),
+      MaterialPageRoute(builder: (_) => _AddMemberScreen(friends: friends)),
     );
 
     if (selected != null && selected.isNotEmpty && mounted) {
-      final senderName = _currentUser?.displayName ?? _currentUser?.email ?? 'Someone';
+      final senderName =
+          _currentUser.displayName ?? _currentUser.email ?? 'Someone';
       for (final uid in selected) {
         final friend = friends.firstWhere((f) => f.uid == uid);
         final name = friend.user?.displayName ?? uid;
@@ -206,7 +224,10 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
         title: const Text('Remove Member?'),
         content: Text('Remove $memberName from this group?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Remove', style: TextStyle(color: Colors.red)),
@@ -216,8 +237,12 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     );
 
     if (confirm == true && mounted) {
-      final senderName = _currentUser?.displayName ?? _currentUser?.email ?? 'Someone';
-      await _groupService.removeMember(groupId: widget.groupId, memberUid: memberId);
+      final senderName =
+          _currentUser?.displayName ?? _currentUser?.email ?? 'Someone';
+      await _groupService.removeMember(
+        groupId: widget.groupId,
+        memberUid: memberId,
+      );
       await _groupService.sendSystemMessage(
         groupId: widget.groupId,
         content: '$senderName removed $memberName',
@@ -234,7 +259,10 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
         title: const Text('Delete Group?'),
         content: const Text('This cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
@@ -268,12 +296,17 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                       children: [
                         CircleAvatar(
                           radius: 50,
-                          backgroundImage: group.photoUrl != null && group.photoUrl!.isNotEmpty
+                          backgroundImage:
+                              group.photoUrl != null &&
+                                  group.photoUrl!.isNotEmpty
                               ? NetworkImage(group.photoUrl!)
                               : null,
-                          child: group.photoUrl == null || group.photoUrl!.isEmpty
+                          child:
+                              group.photoUrl == null || group.photoUrl!.isEmpty
                               ? Text(
-                                  group.name.isNotEmpty ? group.name[0].toUpperCase() : '?',
+                                  group.name.isNotEmpty
+                                      ? group.name[0].toUpperCase()
+                                      : '?',
                                   style: const TextStyle(fontSize: 32),
                                 )
                               : null,
@@ -288,7 +321,11 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                                 color: Colors.blue,
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(Icons.camera_alt, size: 16, color: Colors.white),
+                              child: const Icon(
+                                Icons.camera_alt,
+                                size: 16,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                       ],
@@ -304,9 +341,13 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                       children: [
                         Text(
                           group.name,
-                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                        if (isAdmin) const Icon(Icons.edit, size: 16, color: Colors.grey),
+                        if (isAdmin)
+                          const Icon(Icons.edit, size: 16, color: Colors.grey),
                       ],
                     ),
                   ),
@@ -329,7 +370,10 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                 const Divider(),
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Text('Members', style: TextStyle(fontWeight: FontWeight.w600)),
+                  child: Text(
+                    'Members',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
                 ),
                 ...group.members.map((id) {
                   final isMe = id == _currentUser?.uid;
@@ -343,13 +387,20 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.edit, size: 18, color: Colors.grey),
+                          icon: const Icon(
+                            Icons.edit,
+                            size: 18,
+                            color: Colors.grey,
+                          ),
                           onPressed: () => _changeNickname(id),
                           tooltip: 'Change nickname',
                         ),
                         if (isAdmin && !isMe)
                           IconButton(
-                            icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
+                            icon: const Icon(
+                              Icons.remove_circle_outline,
+                              color: Colors.red,
+                            ),
                             onPressed: () => _removeMember(id),
                           ),
                       ],
@@ -359,14 +410,20 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                 const Divider(),
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Text('Media', style: TextStyle(fontWeight: FontWeight.w600)),
+                  child: Text(
+                    'Media',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
                 ),
                 _GroupMediaSection(groupId: widget.groupId),
                 const Divider(),
                 if (isAdmin)
                   ListTile(
                     leading: const Icon(Icons.delete, color: Colors.red),
-                    title: const Text('Delete Group', style: TextStyle(color: Colors.red)),
+                    title: const Text(
+                      'Delete Group',
+                      style: TextStyle(color: Colors.red),
+                    ),
                     onTap: _deleteGroup,
                   ),
               ],
@@ -423,7 +480,10 @@ class _GroupMediaSectionState extends State<_GroupMediaSection> {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(24),
-          child: Text('No media shared yet', style: TextStyle(color: Colors.grey)),
+          child: Text(
+            'No media shared yet',
+            style: TextStyle(color: Colors.grey),
+          ),
         ),
       );
     }
@@ -442,7 +502,7 @@ class _GroupMediaSectionState extends State<_GroupMediaSection> {
           child: Image.network(
             _imageUrls[index],
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => const Center(
+            errorBuilder: (_, _, _) => const Center(
               child: Icon(Icons.broken_image, color: Colors.grey),
             ),
           ),
@@ -492,7 +552,10 @@ class _AddMemberScreenState extends State<_AddMemberScreen> {
               onPressed: () => Navigator.pop(context, _selected.toList()),
               child: Text(
                 'Add (${_selected.length})',
-                style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  color: Colors.blue,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
         ],
@@ -537,8 +600,10 @@ class _AddMemberScreenState extends State<_AddMemberScreen> {
                         ),
                         title: Text(name),
                         subtitle: friend.user?.email != null
-                            ? Text(friend.user!.email!,
-                                style: const TextStyle(fontSize: 12))
+                            ? Text(
+                                friend.user!.email!,
+                                style: const TextStyle(fontSize: 12),
+                              )
                             : null,
                         trailing: Checkbox(
                           value: isSelected,

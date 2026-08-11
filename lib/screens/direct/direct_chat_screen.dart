@@ -11,7 +11,11 @@ import '../search/direct_chat_search_screen.dart';
 class DirectChatScreen extends StatefulWidget {
   final String chatId;
   final String otherUid;
-  const DirectChatScreen({super.key, required this.chatId, required this.otherUid});
+  const DirectChatScreen({
+    super.key,
+    required this.chatId,
+    required this.otherUid,
+  });
 
   @override
   State<DirectChatScreen> createState() => _DirectChatScreenState();
@@ -103,7 +107,9 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                     onTap: () {
                       Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Sending photos coming soon')),
+                        const SnackBar(
+                          content: Text('Sending photos coming soon'),
+                        ),
                       );
                     },
                   ),
@@ -132,7 +138,9 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                 ),
               );
               if (messageId != null && _scrollCtrl.hasClients) {
-                final messages = await _directService.getMessagesOnce(widget.chatId);
+                final messages = await _directService.getMessagesOnce(
+                  widget.chatId,
+                );
                 final index = messages.indexWhere((m) => m.id == messageId);
                 if (index != -1 && _scrollCtrl.hasClients) {
                   _scrollCtrl.animateTo(
@@ -208,14 +216,21 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
             decoration: BoxDecoration(
               color: Colors.white,
               boxShadow: [
-                BoxShadow(color: Colors.black12, blurRadius: 4, offset: const Offset(0, -2)),
+                BoxShadow(
+                  color: Colors.black12,
+                  blurRadius: 4,
+                  offset: const Offset(0, -2),
+                ),
               ],
             ),
             child: SafeArea(
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.add_circle_outline, color: Colors.grey),
+                    icon: const Icon(
+                      Icons.add_circle_outline,
+                      color: Colors.grey,
+                    ),
                     onPressed: _showAttachMenu,
                   ),
                   Expanded(
@@ -229,7 +244,10 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                         ),
                         filled: true,
                         fillColor: Colors.grey[100],
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
                       ),
                     ),
                   ),
@@ -283,7 +301,9 @@ class _DirectChatInfoScreenState extends State<_DirectChatInfoScreen> {
 
   Future<void> _changeNickname() async {
     final currentUid = _directService.getCurrentUid();
-    final currentNickname = currentUid != null ? _nicknames[currentUid] ?? '' : '';
+    final currentNickname = currentUid != null
+        ? _nicknames[currentUid] ?? ''
+        : '';
     final ctrl = TextEditingController(text: currentNickname);
     final result = await showDialog<String>(
       context: context,
@@ -298,7 +318,10 @@ class _DirectChatInfoScreenState extends State<_DirectChatInfoScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
             child: const Text('Save'),
@@ -343,7 +366,10 @@ class _DirectChatInfoScreenState extends State<_DirectChatInfoScreen> {
                 Center(
                   child: Text(
                     name,
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
                 if (_otherUser?.email != null) ...[
@@ -367,7 +393,10 @@ class _DirectChatInfoScreenState extends State<_DirectChatInfoScreen> {
                 const Divider(),
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Text('Media', style: TextStyle(fontWeight: FontWeight.w600)),
+                  child: Text(
+                    'Media',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
                 ),
                 _MediaSection(chatId: widget.chatId),
               ],
@@ -418,7 +447,10 @@ class _MediaSectionState extends State<_MediaSection> {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(24),
-          child: Text('No media shared yet', style: TextStyle(color: Colors.grey)),
+          child: Text(
+            'No media shared yet',
+            style: TextStyle(color: Colors.grey),
+          ),
         ),
       );
     }
@@ -437,7 +469,7 @@ class _MediaSectionState extends State<_MediaSection> {
           child: Image.network(
             _imageUrls[index],
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => const Center(
+            errorBuilder: (_, _, _) => const Center(
               child: Icon(Icons.broken_image, color: Colors.grey),
             ),
           ),
