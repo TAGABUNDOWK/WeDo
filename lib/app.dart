@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'screens/splash/splash_page.dart';
 import 'screens/welcome/welcome_page.dart';
+import 'screens/group/group_info_screen.dart';
 
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
@@ -41,6 +42,12 @@ class _MyAppState extends State<MyApp> {
                 key: ValueKey('welcome'),
               ),
       ),
+      routes: {
+        '/group-info': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          return GroupInfoScreen(groupId: args as String? ?? '');
+        },
+      },
     );
   }
 }

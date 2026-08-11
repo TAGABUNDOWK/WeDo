@@ -91,17 +91,14 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => OtpVerificationPage(
-            userId: userId,
-            email: email,
-          ),
+          builder: (_) => OtpVerificationPage(userId: userId, email: email),
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -113,7 +110,8 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
       if (!mounted) return null;
 
       final permission = await _locationService.checkPermission();
-      final granted = permission == LocationPermission.always ||
+      final granted =
+          permission == LocationPermission.always ||
           permission == LocationPermission.whileInUse;
 
       if (granted) {
@@ -206,10 +204,8 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
         actions: [
           if (showRetry)
             TextButton(
-              onPressed: () => Navigator.pop(
-                dialogContext,
-                _LocationDialogAction.retry,
-              ),
+              onPressed: () =>
+                  Navigator.pop(dialogContext, _LocationDialogAction.retry),
               child: const Text('Try Again'),
             ),
           if (showSettings)
@@ -279,13 +275,23 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
                   height: 110,
                   decoration: _neumorphicDecoration(color: bg),
                   child: const Center(
-                    child: Icon(Icons.person_add_alt_1, size: 60, color: Colors.blue),
+                    child: Icon(
+                      Icons.person_add_alt_1,
+                      size: 60,
+                      color: Colors.blue,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 28),
-                const Text('Create Account', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
+                const Text(
+                  'Create Account',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 8),
-                const Text('Sign up to get started', style: TextStyle(color: Colors.black54)),
+                const Text(
+                  'Sign up to get started',
+                  style: TextStyle(color: Colors.black54),
+                ),
                 const SizedBox(height: 24),
                 Container(
                   padding: const EdgeInsets.all(18),
@@ -334,8 +340,12 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
                           obscureText: true,
                           decoration: _inputDecoration('Confirm Password'),
                           validator: (v) {
-                            if (v == null || v.isEmpty) return 'Confirm your password';
-                            if (v != _passCtrl.text) return 'Passwords do not match';
+                            if (v == null || v.isEmpty) {
+                              return 'Confirm your password';
+                            }
+                            if (v != _passCtrl.text) {
+                              return 'Passwords do not match';
+                            }
                             return null;
                           },
                         ),
@@ -346,14 +356,16 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
                             width: double.infinity,
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             decoration: BoxDecoration(
-                              color: _isLoading ? Colors.blue.shade200 : Colors.blue,
+                              color: _isLoading
+                                  ? Colors.blue.shade200
+                                  : Colors.blue,
                               borderRadius: BorderRadius.circular(12),
                               boxShadow: const [
                                 BoxShadow(
                                   color: Color(0xFF2A6FD6),
                                   offset: Offset(0, 6),
                                   blurRadius: 10,
-                                )
+                                ),
                               ],
                             ),
                             child: Center(
@@ -366,8 +378,13 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
                                         strokeWidth: 2,
                                       ),
                                     )
-                                  : const Text('Create Account',
-                                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                                  : const Text(
+                                      'Create Account',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
                             ),
                           ),
                         ),

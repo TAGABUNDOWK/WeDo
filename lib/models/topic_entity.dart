@@ -1,30 +1,22 @@
 /// Entities for the `/topics/{topicId}` and
 /// `/topics/{topicId}/cards/{cardId}` Firestore structure.
+library;
 
 /// Document at `/topics/{topicId}`.
 class TopicEntity {
   final String id;
   final String title;
 
-  const TopicEntity({
-    required this.id,
-    required this.title,
-  });
+  const TopicEntity({required this.id, required this.title});
 
   factory TopicEntity.fromMap(String id, Map<String, dynamic> map) {
-    return TopicEntity(
-      id: id,
-      title: map['title'] as String? ?? '',
-    );
+    return TopicEntity(id: id, title: map['title'] as String? ?? '');
   }
 
   Map<String, dynamic> toMap() => {'title': title};
 
   TopicEntity copyWith({String? id, String? title}) {
-    return TopicEntity(
-      id: id ?? this.id,
-      title: title ?? this.title,
-    );
+    return TopicEntity(id: id ?? this.id, title: title ?? this.title);
   }
 
   @override

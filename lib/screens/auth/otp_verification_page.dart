@@ -19,7 +19,10 @@ class OtpVerificationPage extends StatefulWidget {
 }
 
 class _OtpVerificationPageState extends State<OtpVerificationPage> {
-  final List<TextEditingController> _controllers = List.generate(6, (_) => TextEditingController());
+  final List<TextEditingController> _controllers = List.generate(
+    6,
+    (_) => TextEditingController(),
+  );
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
   bool _isLoading = false;
   bool _canResend = false;
@@ -79,9 +82,9 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
         _sendingCode = false;
         _sendFailed = true;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Couldn\'t send code: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Couldn\'t send code: $e')));
     }
   }
 
@@ -113,9 +116,9 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -128,15 +131,15 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
       await _otpService.generateOTP(widget.userId, widget.email);
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('New code sent!')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('New code sent!')));
       _startResendTimer();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -177,11 +180,18 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
                   height: 110,
                   decoration: _neumorphicDecoration(color: bg),
                   child: const Center(
-                    child: Icon(Icons.mark_email_unread_outlined, size: 60, color: Colors.blue),
+                    child: Icon(
+                      Icons.mark_email_unread_outlined,
+                      size: 60,
+                      color: Colors.blue,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 28),
-                const Text('Verify Your Email', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
+                const Text(
+                  'Verify Your Email',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 8),
                 Text(
                   'We sent a 6-digit code to',
@@ -190,7 +200,10 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
                 const SizedBox(height: 4),
                 Text(
                   widget.email,
-                  style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.blue),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.blue,
+                  ),
                 ),
                 if (_sendingCode) ...[
                   const SizedBox(height: 16),
@@ -223,7 +236,8 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
                               focusNode: FocusNode(),
                               onKeyEvent: (event) {
                                 if (event is KeyDownEvent &&
-                                    event.logicalKey == LogicalKeyboardKey.backspace &&
+                                    event.logicalKey ==
+                                        LogicalKeyboardKey.backspace &&
                                     _controllers[index].text.isEmpty &&
                                     index > 0) {
                                   _controllers[index - 1].clear();
@@ -236,7 +250,10 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
                                 textAlign: TextAlign.center,
                                 keyboardType: TextInputType.number,
                                 maxLength: 1,
-                                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                                style: const TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                ),
                                 decoration: InputDecoration(
                                   counterText: '',
                                   filled: true,
@@ -248,7 +265,10 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
-                                    borderSide: const BorderSide(color: Colors.blue, width: 2),
+                                    borderSide: const BorderSide(
+                                      color: Colors.blue,
+                                      width: 2,
+                                    ),
                                   ),
                                 ),
                                 inputFormatters: [
@@ -277,14 +297,16 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           decoration: BoxDecoration(
-                            color: _isLoading ? Colors.blue.shade200 : Colors.blue,
+                            color: _isLoading
+                                ? Colors.blue.shade200
+                                : Colors.blue,
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: const [
                               BoxShadow(
                                 color: Color(0xFF2A6FD6),
                                 offset: Offset(0, 6),
                                 blurRadius: 10,
-                              )
+                              ),
                             ],
                           ),
                           child: Center(
@@ -297,8 +319,13 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
                                       strokeWidth: 2,
                                     ),
                                   )
-                                : const Text('Verify',
-                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                                : const Text(
+                                    'Verify',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
                           ),
                         ),
                       ),
@@ -312,14 +339,14 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
                         child: const Text('Resend Code'),
                       )
                     : _canResend
-                        ? TextButton(
-                            onPressed: _onResend,
-                            child: const Text('Resend Code'),
-                          )
-                        : Text(
-                            'Resend code in $_resendCountdown seconds',
-                            style: const TextStyle(color: Colors.black54),
-                          ),
+                    ? TextButton(
+                        onPressed: _onResend,
+                        child: const Text('Resend Code'),
+                      )
+                    : Text(
+                        'Resend code in $_resendCountdown seconds',
+                        style: const TextStyle(color: Colors.black54),
+                      ),
               ],
             ),
           ),
