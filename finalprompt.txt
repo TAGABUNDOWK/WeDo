@@ -1,0 +1,17 @@
+on the remaining 3 topics: Where should we eat?, Places to go, Movies to watch
+
+they have exisiting logics read through exisiting codes 
+
+after reading plan how are you going to integrate 
+
+on the cards that the places related topics I want the cards to reflect 
+Card name
+tag: ex(restaurant, bar, museum)
+km
+
+on movie topic 
+make their layout like this
+name & rating side by side
+year of release then 
+description
+

@@ -1,8 +1,11 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/place_entity.dart';
 import '../../services/location/location_service.dart';
 import '../../services/location/overpass_service.dart';
+import '../../services/session/session_service.dart';
+import 'waiting_lobby_screen.dart';
 
 class NearbyPlacesScreen extends StatefulWidget {
   final String title;
@@ -21,11 +24,14 @@ class NearbyPlacesScreen extends StatefulWidget {
 class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
   final _locationService = LocationService();
   final _overpassService = OverpassService();
+  final _sessionService = SessionService();
+  final _currentUser = FirebaseAuth.instance.currentUser;
   final _bg = const Color(0xFFE7ECEF);
 
   List<PlaceEntity> _places = [];
   bool _isLoading = true;
   bool _permissionDenied = false;
+  bool _isCreatingSession = false;
 
   @override
   void initState() {
@@ -95,6 +101,48 @@ class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
     }
   }
 
+  Future<void> _startSession() async {
+    if (_currentUser == null || _isCreatingSession || _places.isEmpty) return;
+
+    setState(() => _isCreatingSession = true);
+
+    try {
+      final cardMaps = _places.map((p) => {
+        'id': p.id,
+        'title': p.name,
+        'description': PlaceEntity.friendlyAmenity(p.amenity),
+        'tag': p.amenity,
+        'distance': p.formattedDistance,
+      }).toList();
+
+      final code = await _sessionService.createSession(
+        hostId: _currentUser.uid,
+        topic: widget.title,
+        cards: cardMaps,
+      );
+
+      await _sessionService.joinSession(
+        sessionId: code,
+        userId: _currentUser.uid,
+        userName: _currentUser.displayName ?? _currentUser.email ?? 'Host',
+      );
+
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => WaitingLobbyScreen(sessionId: code, isHost: true),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isCreatingSession = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -107,6 +155,24 @@ class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
+      floatingActionButton: _places.isNotEmpty
+          ? FloatingActionButton.extended(
+              onPressed: _isCreatingSession ? null : _startSession,
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+              label: Text(_isCreatingSession ? 'Creating...' : 'Start Session'),
+              icon: _isCreatingSession
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.play_arrow),
+            )
+          : null,
       body: _isLoading
           ? _buildSearching()
           : _permissionDenied

@@ -217,7 +217,7 @@ class SessionService {
   }
 
   /// Aggregates results from all finished participants.
-  /// Computes card tally, Speed Shield, winner card, and standings.
+  /// Computes card tally, winner card, and time-based standings.
   /// Should be called by the host or first finisher.
   Future<void> aggregateResults(String sessionId) async {
     try {
@@ -288,25 +288,11 @@ class SessionService {
         winnerCardTitle = winnerCard['title'] as String? ?? '';
       }
 
-      // ── Speed Shield: lowest elapsed time among non-timeout players ──
-      final nonTimeout = finished.where((p) => p.timeoutCount == 0).toList();
-      String? speedShieldWinnerId;
-      if (nonTimeout.isNotEmpty) {
-        nonTimeout.sort(
-            (a, b) => (a.elapsedTimeMs ?? 0).compareTo(b.elapsedTimeMs ?? 0));
-        speedShieldWinnerId = nonTimeout.first.id;
-      }
-
-      // ── Standings: 1 point per elimination, Speed Shield subtracts 1 ──
+      // ── Standings: sorted by elapsed time (fastest first) ──
       final Map<String, dynamic> standings = {};
       for (final p in finished) {
-        int score = p.eliminatedCardIds.length;
-        if (p.id == speedShieldWinnerId && score > 0) {
-          score -= 1;
-        }
         standings[p.id] = {
           'userName': p.userName,
-          'score': score,
           'elapsedTimeMs': p.elapsedTimeMs,
           'timeoutCount': p.timeoutCount,
           'chosenWinnerCardId': p.chosenWinnerCardId,
@@ -315,9 +301,6 @@ class SessionService {
 
       final sortedEntries = standings.entries.toList()
         ..sort((a, b) {
-          final scoreA = a.value['score'] as int;
-          final scoreB = b.value['score'] as int;
-          if (scoreB != scoreA) return scoreB.compareTo(scoreA);
           final timeA = a.value['elapsedTimeMs'] as int? ?? 999999;
           final timeB = b.value['elapsedTimeMs'] as int? ?? 999999;
           return timeA.compareTo(timeB);
@@ -330,7 +313,6 @@ class SessionService {
 
       await _sessions.doc(sessionId).update({
         'status': SessionStatus.completed.value,
-        'speedShieldWinnerId': speedShieldWinnerId,
         'aggregatedResults': {
           'cardTally': cardTally,
           'winnerCardId': winnerCardId,

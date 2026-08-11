@@ -343,6 +343,9 @@ class _SwipingScreenState extends State<SwipingScreen> {
     required bool isChampion,
   }) {
     final color = isChampion ? Colors.blue.shade50 : Colors.orange.shade50;
+    final isPlaceCard = card.containsKey('tag');
+    final isMovieCard = card.containsKey('posterUrl') &&
+        (card['posterUrl'] as String? ?? '').isNotEmpty;
 
     return AnimatedOpacity(
       duration: const Duration(milliseconds: 300),
@@ -380,50 +383,12 @@ class _SwipingScreenState extends State<SwipingScreen> {
               ),
               const SizedBox(height: 12),
             ],
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 8,
-                  ),
-                ],
-              ),
-              child: Icon(
-                isChampion ? Icons.emoji_events : Icons.casino_outlined,
-                size: 28,
-                color: isChampion ? Colors.amber : Colors.blue,
-              ),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              card['title'] as String? ?? 'Card',
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            if (card['description'] != null &&
-                (card['description'] as String).isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(
-                card['description'] as String,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.black54,
-                ),
-              ),
-            ],
+            if (isMovieCard)
+              _buildMovieCardContent(card: card, isChampion: isChampion)
+            else if (isPlaceCard)
+              _buildPlaceCardContent(card: card, isChampion: isChampion)
+            else
+              _buildDefaultCardContent(card: card, isChampion: isChampion),
             const Spacer(),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
@@ -443,6 +408,240 @@ class _SwipingScreenState extends State<SwipingScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildMovieCardContent({
+    required Map<String, dynamic> card,
+    required bool isChampion,
+  }) {
+    final posterUrl = card['posterUrl'] as String? ?? '';
+    final rating = card['rating'] as String? ?? '';
+    final year = card['year'] as String? ?? '';
+    final description = card['description'] as String? ?? '';
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.network(
+                posterUrl,
+                width: 80,
+                height: 120,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  width: 80,
+                  height: 120,
+                  color: Colors.grey.shade200,
+                  child: const Icon(Icons.movie, color: Colors.black26),
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    card['title'] as String? ?? 'Movie',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      if (rating.isNotEmpty) ...[
+                        const Icon(Icons.star, size: 16, color: Colors.amber),
+                        const SizedBox(width: 4),
+                        Text(
+                          rating,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                      if (year.isNotEmpty) ...[
+                        const SizedBox(width: 12),
+                        Text(
+                          year,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.black45,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        if (description.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text(
+            description,
+            textAlign: TextAlign.center,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.black54,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildPlaceCardContent({
+    required Map<String, dynamic> card,
+    required bool isChampion,
+  }) {
+    final tag = card['tag'] as String? ?? '';
+    final distance = card['distance'] as String? ?? '';
+    final description = card['description'] as String? ?? '';
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 8,
+              ),
+            ],
+          ),
+          child: Icon(
+            isChampion ? Icons.emoji_events : Icons.location_on,
+            size: 28,
+            color: isChampion ? Colors.amber : Colors.blue,
+          ),
+        ),
+        const SizedBox(height: 14),
+        Text(
+          card['title'] as String? ?? 'Place',
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (description.isNotEmpty) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  description,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.blue,
+                  ),
+                ),
+              ),
+            ],
+            if (description.isNotEmpty && distance.isNotEmpty)
+              const SizedBox(width: 8),
+            if (distance.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  distance,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.blue,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDefaultCardContent({
+    required Map<String, dynamic> card,
+    required bool isChampion,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 8,
+              ),
+            ],
+          ),
+          child: Icon(
+            isChampion ? Icons.emoji_events : Icons.casino_outlined,
+            size: 28,
+            color: isChampion ? Colors.amber : Colors.blue,
+          ),
+        ),
+        const SizedBox(height: 14),
+        Text(
+          card['title'] as String? ?? 'Card',
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        if (card['description'] != null &&
+            (card['description'] as String).isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            card['description'] as String,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.black54,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
