@@ -3,6 +3,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/topic_entity.dart';
 import '../../services/session/session_service.dart';
 import 'waiting_lobby_screen.dart';
+import 'places_to_go_screen.dart';
+import 'where_to_eat_screen.dart';
+import 'movie_category_screen.dart';
 
 class CreateSessionScreen extends StatefulWidget {
   const CreateSessionScreen({super.key});
@@ -20,6 +23,12 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
   bool _isLoading = true;
   bool _isCreating = false;
   String? _error;
+
+  static const _hardcodedTopics = [
+    _HardcodedTopic(title: 'Where should we eat?', icon: Icons.restaurant),
+    _HardcodedTopic(title: 'Places to go', icon: Icons.location_on),
+    _HardcodedTopic(title: 'Movies to watch', icon: Icons.movie),
+  ];
 
   @override
   void initState() {
@@ -118,42 +127,90 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
         crossAxisCount: 2,
         mainAxisSpacing: 16,
         crossAxisSpacing: 16,
-        children: _topics.map((topic) {
-          return GestureDetector(
-            onTap: () => _createSession(topic),
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: _bg,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: const [
-                  BoxShadow(color: Color(0xFFFFFFFF), offset: Offset(-6, -6), blurRadius: 12),
-                  BoxShadow(color: Color(0xFFB8C6CC), offset: Offset(6, 6), blurRadius: 12),
-                ],
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      shape: BoxShape.circle,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        children: [
+          ..._topics.map((topic) {
+            return GestureDetector(
+              onTap: () => _createSession(topic),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: _bg,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: const [
+                    BoxShadow(color: Color(0xFFFFFFFF), offset: Offset(-6, -6), blurRadius: 12),
+                    BoxShadow(color: Color(0xFFB8C6CC), offset: Offset(6, 6), blurRadius: 12),
+                  ],
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.casino_outlined, size: 28, color: Colors.blue),
                     ),
-                    child: const Icon(Icons.casino_outlined, size: 28, color: Colors.blue),
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    topic.title,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                  ),
-                ],
+                    const SizedBox(height: 14),
+                    Text(
+                      topic.title,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          );
-        }).toList(),
+            );
+          }),
+          ..._hardcodedTopics.map((topic) {
+            return GestureDetector(
+              onTap: () {
+                if (topic.title == 'Where should we eat?') {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const WhereToEatScreen()));
+                } else if (topic.title == 'Places to go') {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const PlacesToGoScreen()));
+                } else if (topic.title == 'Movies to watch') {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const MovieCategoryScreen()));
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: _bg,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: const [
+                    BoxShadow(color: Color(0xFFFFFFFF), offset: Offset(-6, -6), blurRadius: 12),
+                    BoxShadow(color: Color(0xFFB8C6CC), offset: Offset(6, 6), blurRadius: 12),
+                  ],
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(topic.icon, size: 28, color: Colors.blue),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      topic.title,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ],
       ),
     );
   }
@@ -202,4 +259,10 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
       ),
     );
   }
+}
+
+class _HardcodedTopic {
+  final String title;
+  final IconData icon;
+  const _HardcodedTopic({required this.title, required this.icon});
 }

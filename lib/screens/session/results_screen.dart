@@ -70,7 +70,6 @@ class _ResultsScreenState extends State<ResultsScreen> {
     final winnerCardTitle = results['winnerCardTitle'] as String? ?? '';
     final totalParticipants = results['totalParticipants'] as int? ?? 0;
     final standings = results['standings'] as Map<String, dynamic>? ?? {};
-    final speedShieldId = session.speedShieldWinnerId;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -87,15 +86,16 @@ class _ResultsScreenState extends State<ResultsScreen> {
           ),
           const SizedBox(height: 12),
           _buildCardTally(cardTally, winnerCardId),
-          if (speedShieldId != null) ...[
-            const SizedBox(height: 24),
-            _buildSpeedShieldBanner(),
-          ],
           if (standings.isNotEmpty) ...[
             const SizedBox(height: 24),
             _buildSectionTitle('Leaderboard'),
+            const SizedBox(height: 4),
+            Text(
+              'Ranked by decision time (fastest first)',
+              style: TextStyle(color: Colors.black38, fontSize: 12),
+            ),
             const SizedBox(height: 12),
-            _buildStandings(standings, speedShieldId),
+            _buildStandings(standings),
           ],
           const SizedBox(height: 24),
           _buildBackButton(),
@@ -268,53 +268,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
     );
   }
 
-  Widget _buildSpeedShieldBanner() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF4FC3F7), Color(0xFF0288D1)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0288D1).withValues(alpha: 0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: const Row(
-        children: [
-          Icon(Icons.shield, color: Colors.white, size: 28),
-          SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Speed Shield',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                Text(
-                  'Fastest player with no timeouts',
-                  style: TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStandings(Map<String, dynamic> standings, String? speedShieldId) {
+  Widget _buildStandings(Map<String, dynamic> standings) {
     final entries = standings.entries.toList();
 
     return ListView.builder(
@@ -324,14 +278,11 @@ class _ResultsScreenState extends State<ResultsScreen> {
       itemBuilder: (context, index) {
         final entry = entries[index];
         final data = entry.value as Map<String, dynamic>;
-        final isSpeedShield = entry.key == speedShieldId;
         return _buildStandingCard(
           rank: index + 1,
           userName: data['userName'] as String? ?? 'Player',
-          score: data['score'] as int? ?? 0,
           elapsedTimeMs: data['elapsedTimeMs'] as int? ?? 0,
           timeoutCount: data['timeoutCount'] as int? ?? 0,
-          isSpeedShield: isSpeedShield,
         );
       },
     );
@@ -340,23 +291,18 @@ class _ResultsScreenState extends State<ResultsScreen> {
   Widget _buildStandingCard({
     required int rank,
     required String userName,
-    required int score,
     required int elapsedTimeMs,
     required int timeoutCount,
-    required bool isSpeedShield,
   }) {
     final timeSeconds = (elapsedTimeMs / 1000).toStringAsFixed(1);
-    final medal = rank == 1 ? '🥇' : rank == 2 ? '🥈' : rank == 3 ? '🥉' : '';
+    final medal = rank == 1 ? '\u{1F947}' : rank == 2 ? '\u{1F948}' : rank == 3 ? '\u{1F949}' : '';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isSpeedShield ? const Color(0xFFE3F2FD) : _bg,
+        color: _bg,
         borderRadius: BorderRadius.circular(14),
-        border: isSpeedShield
-            ? Border.all(color: const Color(0xFF0288D1), width: 2)
-            : null,
         boxShadow: const [
           BoxShadow(color: Color(0xFFFFFFFF), offset: Offset(-3, -3), blurRadius: 6),
           BoxShadow(color: Color(0xFFB8C6CC), offset: Offset(3, 3), blurRadius: 6),
@@ -395,24 +341,16 @@ class _ResultsScreenState extends State<ResultsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Text(
-                      userName,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    if (isSpeedShield) ...[
-                      const SizedBox(width: 4),
-                      const Icon(Icons.shield, color: Color(0xFF0288D1), size: 14),
-                    ],
-                  ],
+                Text(
+                  userName,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  '$score eliminations · $timeSeconds s${timeoutCount > 0 ? ' · $timeoutCount timeout${timeoutCount == 1 ? '' : 's'}' : ''}',
+                  '$timeSeconds s${timeoutCount > 0 ? ' \u00b7 $timeoutCount timeout${timeoutCount == 1 ? '' : 's'}' : ''}',
                   style: const TextStyle(color: Colors.black54, fontSize: 11),
                 ),
               ],
@@ -425,7 +363,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
               borderRadius: BorderRadius.circular(16),
             ),
             child: Text(
-              '$score pts',
+              '$timeSeconds s',
               style: TextStyle(
                 fontWeight: FontWeight.w700,
                 color: rank == 1 ? Colors.amber.shade800 : Colors.blue,

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/movie.dart';
 import '../../services/movie/tmdb_service.dart';
+import '../../services/session/session_service.dart';
+import 'waiting_lobby_screen.dart';
 
 class MovieResultsScreen extends StatefulWidget {
   final String category;
@@ -18,11 +21,14 @@ class MovieResultsScreen extends StatefulWidget {
 
 class _MovieResultsScreenState extends State<MovieResultsScreen> {
   final _service = TmdbService();
+  final _sessionService = SessionService();
+  final _currentUser = FirebaseAuth.instance.currentUser;
   final _bg = const Color(0xFFE7ECEF);
 
   List<Movie> _movies = [];
   bool _isLoading = true;
   String? _error;
+  bool _isCreatingSession = false;
 
   @override
   void initState() {
@@ -52,6 +58,49 @@ class _MovieResultsScreenState extends State<MovieResultsScreen> {
     }
   }
 
+  Future<void> _startSession() async {
+    if (_currentUser == null || _isCreatingSession || _movies.isEmpty) return;
+
+    setState(() => _isCreatingSession = true);
+
+    try {
+      final cardMaps = _movies.map((m) => {
+        'id': 'movie_${m.id}',
+        'title': m.title,
+        'description': m.overview,
+        'rating': m.formattedRating,
+        'year': m.releaseYear,
+        'posterUrl': m.posterUrl ?? '',
+      }).toList();
+
+      final code = await _sessionService.createSession(
+        hostId: _currentUser.uid,
+        topic: widget.title,
+        cards: cardMaps,
+      );
+
+      await _sessionService.joinSession(
+        sessionId: code,
+        userId: _currentUser.uid,
+        userName: _currentUser.displayName ?? _currentUser.email ?? 'Host',
+      );
+
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => WaitingLobbyScreen(sessionId: code, isHost: true),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isCreatingSession = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -70,6 +119,24 @@ class _MovieResultsScreenState extends State<MovieResultsScreen> {
           ),
         ],
       ),
+      floatingActionButton: _movies.isNotEmpty
+          ? FloatingActionButton.extended(
+              onPressed: _isCreatingSession ? null : _startSession,
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+              label: Text(_isCreatingSession ? 'Creating...' : 'Start Session'),
+              icon: _isCreatingSession
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.play_arrow),
+            )
+          : null,
       body: _isLoading
           ? _buildLoading()
           : _error != null

@@ -24,76 +24,126 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
   final _bg = const Color(0xFFE7ECEF);
   final _currentUser = FirebaseAuth.instance.currentUser;
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _bg,
-      appBar: AppBar(
-        backgroundColor: _bg,
-        elevation: 0,
-        title: const Text(
-          'Waiting Lobby',
-          style: TextStyle(fontWeight: FontWeight.w600),
+  bool _isConfirmingLeave = false;
+
+  Future<void> _onPopInvoked(bool didPop, dynamic result) async {
+    if (didPop || _isConfirmingLeave) return;
+
+    _isConfirmingLeave = true;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Leave Lobby?'),
+        content: Text(
+          widget.isHost
+              ? 'This will cancel the session for all players.'
+              : 'Are you sure you want to leave?',
         ),
         actions: [
-          if (widget.isHost)
-            IconButton(
-              icon: const Icon(Icons.cancel, color: Colors.redAccent),
-              onPressed: _cancelSession,
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Stay'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(
+              widget.isHost ? 'Cancel Session' : 'Leave',
+              style: const TextStyle(color: Colors.redAccent),
             ),
+          ),
         ],
       ),
-      body: StreamBuilder<SessionEntity?>(
-        stream: _service.getSessionStream(widget.sessionId),
-        builder: (context, sessionSnapshot) {
-          if (sessionSnapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+    );
 
-          final session = sessionSnapshot.data;
+    if (confirmed == true && mounted) {
+      try {
+        if (widget.isHost) {
+          await _service.deleteSession(widget.sessionId, _currentUser!.uid);
+        } else {
+          await _service.removeParticipant(widget.sessionId, _currentUser!.uid);
+        }
+      } catch (_) {}
 
-          if (session == null) {
-            return const Center(child: Text('Session not found'));
-          }
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    }
 
-          if (session.status == SessionStatus.cancelled) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _showCancelledDialog();
-            });
-            return const Center(
-              child: Text('Session was cancelled by the host'),
-            );
-          }
+    _isConfirmingLeave = false;
+  }
 
-          if (session.status == SessionStatus.completed) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ResultsScreen(sessionId: session.sessionId),
-                ),
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: _onPopInvoked,
+      child: Scaffold(
+        backgroundColor: _bg,
+        appBar: AppBar(
+          backgroundColor: _bg,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => _onPopInvoked(false, null),
+          ),
+          title: const Text(
+            'Waiting Lobby',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+        body: StreamBuilder<SessionEntity?>(
+          stream: _service.getSessionStream(widget.sessionId),
+          builder: (context, sessionSnapshot) {
+            if (sessionSnapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final session = sessionSnapshot.data;
+
+            if (session == null) {
+              return const Center(child: Text('Session not found'));
+            }
+
+            if (session.status == SessionStatus.cancelled) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _showCancelledDialog();
+              });
+              return const Center(
+                child: Text('Session was cancelled by the host'),
               );
-            });
-            return const Center(child: CircularProgressIndicator());
-          }
+            }
 
-          if (session.status == SessionStatus.active) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => SwipingScreen(
-                    sessionId: session.sessionId,
-                    cards: session.cards,
+            if (session.status == SessionStatus.completed) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ResultsScreen(sessionId: session.sessionId),
                   ),
-                ),
-              );
-            });
-            return const Center(child: CircularProgressIndicator());
-          }
+                );
+              });
+              return const Center(child: CircularProgressIndicator());
+            }
 
-          return _buildLobby(session);
-        },
+            if (session.status == SessionStatus.active) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => SwipingScreen(
+                      sessionId: session.sessionId,
+                      cards: session.cards,
+                    ),
+                  ),
+                );
+              });
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            return _buildLobby(session);
+          },
+        ),
       ),
     );
   }
@@ -284,38 +334,6 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e')),
       );
-    }
-  }
-
-  Future<void> _cancelSession() async {
-    if (_currentUser == null) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cancel Session?'),
-        content: const Text('All players will be returned to the main menu.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Keep Waiting'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Cancel', style: TextStyle(color: Colors.redAccent)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      try {
-        await _service.cancelSession(widget.sessionId, _currentUser.uid);
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
     }
   }
 
