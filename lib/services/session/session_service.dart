@@ -179,6 +179,36 @@ class SessionService {
     }
   }
 
+  /// Removes a participant from the session's participants subcollection.
+  Future<void> removeParticipant(String sessionId, String userId) async {
+    try {
+      await _participants(sessionId).doc(userId).delete();
+    } on FirebaseException catch (e) {
+      throw SessionException('Failed to leave session: ${e.message}');
+    }
+  }
+
+  /// Host deletes the session document and its participants subcollection.
+  Future<void> deleteSession(String sessionId, String hostId) async {
+    try {
+      final doc = await _sessions.doc(sessionId).get();
+      if (!doc.exists) throw SessionException('Session not found.');
+      final data = doc.data() as Map<String, dynamic>;
+      if (data['hostId'] != hostId) {
+        throw SessionException('Only the host can delete the session.');
+      }
+
+      final participantsSnap = await _participants(sessionId).get();
+      for (final p in participantsSnap.docs) {
+        await p.reference.delete();
+      }
+
+      await _sessions.doc(sessionId).delete();
+    } on FirebaseException catch (e) {
+      throw SessionException('Failed to delete session: ${e.message}');
+    }
+  }
+
   /// Host cancels the session: status → "cancelled".
   Future<void> cancelSession(String sessionId, String hostId) async {
     try {
