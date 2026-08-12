@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import '../../services/location/overpass_service.dart';
 import '../../utils/location_data.dart';
 import 'city_picker_screen.dart';
 
 class ProvincePickerScreen extends StatefulWidget {
-  final bool foodMode;
+  final PlaceCategory category;
 
-  const ProvincePickerScreen({super.key, this.foodMode = false});
+  const ProvincePickerScreen({super.key, required this.category});
 
   @override
   State<ProvincePickerScreen> createState() => _ProvincePickerScreenState();
@@ -13,7 +14,7 @@ class ProvincePickerScreen extends StatefulWidget {
 
 class _ProvincePickerScreenState extends State<ProvincePickerScreen> {
   final _searchCtrl = TextEditingController();
-  final _bg = const Color(0xFFE7ECEF);
+  final _bg = const Color(0xFF190831);
 
   List<String> _provinces = [];
   List<String> _filtered = [];
@@ -69,11 +70,11 @@ class _ProvincePickerScreenState extends State<ProvincePickerScreen> {
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
-        backgroundColor: _bg,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         title: const Text(
           'Choose province',
-          style: TextStyle(fontWeight: FontWeight.w600),
+          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
         ),
       ),
       body: _isLoading
@@ -101,14 +102,25 @@ class _ProvincePickerScreenState extends State<ProvincePickerScreen> {
                       child: TextField(
                         controller: _searchCtrl,
                         onChanged: _filterProvinces,
+                        style: const TextStyle(color: Colors.white),
                         decoration: InputDecoration(
                           hintText: 'Search province...',
-                          prefixIcon: const Icon(Icons.search),
+                          hintStyle: const TextStyle(color: Colors.white54),
+                          prefixIcon: const Icon(Icons.search, color: Colors.white70),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.20)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.20)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.40)),
                           ),
                           filled: true,
-                          fillColor: Colors.white,
+                          fillColor: Colors.black.withValues(alpha: 0.35),
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 12,
@@ -121,7 +133,7 @@ class _ProvincePickerScreenState extends State<ProvincePickerScreen> {
                           ? const Center(
                               child: Text(
                                 'No provinces found',
-                                style: TextStyle(color: Colors.grey),
+                                style: TextStyle(color: Colors.white70),
                               ),
                             )
                           : ListView.separated(
@@ -131,15 +143,15 @@ class _ProvincePickerScreenState extends State<ProvincePickerScreen> {
                               itemBuilder: (context, index) {
                                 final province = _filtered[index];
                                 return ListTile(
-                                  title: Text(province),
-                                  trailing: const Icon(Icons.chevron_right, color: Colors.black26),
+                                  title: Text(province, style: const TextStyle(color: Colors.white)),
+                                  trailing: const Icon(Icons.chevron_right, color: Colors.white38),
                                   onTap: () {
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
                                         builder: (_) => CityPickerScreen(
                                           provinceName: province,
-                                          foodMode: widget.foodMode,
+                                          category: widget.category,
                                         ),
                                       ),
                                     );

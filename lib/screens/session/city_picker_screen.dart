@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 import '../../models/admin_division.dart';
+import '../../services/location/overpass_service.dart';
 import '../../utils/location_data.dart';
 import 'city_places_screen.dart';
 
 class CityPickerScreen extends StatefulWidget {
   final String provinceName;
-  final bool foodMode;
+  final PlaceCategory category;
 
   const CityPickerScreen({
     super.key,
     required this.provinceName,
-    this.foodMode = false,
+    required this.category,
   });
 
   @override
@@ -19,7 +20,7 @@ class CityPickerScreen extends StatefulWidget {
 
 class _CityPickerScreenState extends State<CityPickerScreen> {
   final _searchCtrl = TextEditingController();
-  final _bg = const Color(0xFFE7ECEF);
+  final _bg = const Color(0xFF190831);
 
   List<AdminDivision> _cities = [];
   List<AdminDivision> _filtered = [];
@@ -78,7 +79,7 @@ class _CityPickerScreenState extends State<CityPickerScreen> {
       MaterialPageRoute(
         builder: (_) => CityPlacesScreen(
           city: _selectedCity!,
-          foodMode: widget.foodMode,
+          category: widget.category,
         ),
       ),
     );
@@ -89,11 +90,11 @@ class _CityPickerScreenState extends State<CityPickerScreen> {
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
-        backgroundColor: _bg,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         title: const Text(
           'Choose city',
-          style: TextStyle(fontWeight: FontWeight.w600),
+          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(20),
@@ -101,7 +102,7 @@ class _CityPickerScreenState extends State<CityPickerScreen> {
             padding: const EdgeInsets.only(bottom: 8),
             child: Text(
               widget.provinceName,
-              style: const TextStyle(color: Colors.black45, fontSize: 14),
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
             ),
           ),
         ),
@@ -131,14 +132,25 @@ class _CityPickerScreenState extends State<CityPickerScreen> {
                       child: TextField(
                         controller: _searchCtrl,
                         onChanged: _filterCities,
+                        style: const TextStyle(color: Colors.white),
                         decoration: InputDecoration(
                           hintText: 'Search city...',
-                          prefixIcon: const Icon(Icons.search),
+                          hintStyle: const TextStyle(color: Colors.white54),
+                          prefixIcon: const Icon(Icons.search, color: Colors.white70),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.20)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.20)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.40)),
                           ),
                           filled: true,
-                          fillColor: Colors.white,
+                          fillColor: Colors.black.withValues(alpha: 0.35),
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 12,
@@ -151,7 +163,7 @@ class _CityPickerScreenState extends State<CityPickerScreen> {
                           ? const Center(
                               child: Text(
                                 'No cities found',
-                                style: TextStyle(color: Colors.grey),
+                                style: TextStyle(color: Colors.white70),
                               ),
                             )
                           : ListView.separated(
@@ -162,11 +174,11 @@ class _CityPickerScreenState extends State<CityPickerScreen> {
                                 final city = _filtered[index];
                                 final isSelected = city == _selectedCity;
                                 return ListTile(
-                                  title: Text(city.name),
+                                  title: Text(city.name, style: const TextStyle(color: Colors.white)),
                                   trailing: isSelected
-                                      ? const Icon(Icons.check_circle, color: Colors.blue)
-                                      : const Icon(Icons.radio_button_unchecked, color: Colors.black26),
-                                  tileColor: isSelected ? Colors.blue.shade50 : null,
+                                      ? const Icon(Icons.check_circle, color: Color(0xFFFE4EF0))
+                                      : const Icon(Icons.radio_button_unchecked, color: Colors.white38),
+                                  tileColor: isSelected ? Colors.white.withValues(alpha: 0.10) : null,
                                   onTap: () {
                                     setState(() => _selectedCity = city);
                                   },
@@ -179,9 +191,28 @@ class _CityPickerScreenState extends State<CityPickerScreen> {
                         padding: const EdgeInsets.all(16),
                         child: SizedBox(
                           width: double.infinity,
-                          child: FilledButton(
-                            onPressed: _confirm,
-                            child: const Text('Confirm'),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFFFE4EF0), Color(0xFF800DD8)],
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFFFE4EF0).withValues(alpha: 0.4),
+                                  offset: const Offset(0, 4),
+                                  blurRadius: 12,
+                                ),
+                              ],
+                            ),
+                            child: FilledButton(
+                              onPressed: _confirm,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: Colors.transparent,
+                                shadowColor: Colors.transparent,
+                              ),
+                              child: const Text('Confirm'),
+                            ),
                           ),
                         ),
                       ),

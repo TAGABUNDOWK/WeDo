@@ -10,12 +10,12 @@ import 'waiting_lobby_screen.dart';
 
 class CityPlacesScreen extends StatefulWidget {
   final AdminDivision city;
-  final bool foodMode;
+  final PlaceCategory category;
 
   const CityPlacesScreen({
     super.key,
     required this.city,
-    this.foodMode = false,
+    required this.category,
   });
 
   @override
@@ -27,10 +27,11 @@ class _CityPlacesScreenState extends State<CityPlacesScreen> {
   final _overpassService = OverpassService();
   final _sessionService = SessionService();
   final _currentUser = FirebaseAuth.instance.currentUser;
-  final _bg = const Color(0xFFE7ECEF);
+  final _bg = const Color(0xFF190831);
 
   List<PlaceEntity> _places = [];
   bool _isLoading = true;
+  bool _noPlacesFound = false;
   bool _isCreatingSession = false;
 
   @override
@@ -43,24 +44,19 @@ class _CityPlacesScreenState extends State<CityPlacesScreen> {
     if (!mounted) return;
     setState(() {
       _isLoading = true;
+      _noPlacesFound = false;
     });
 
     try {
       final position = await _locationService.getQuickPosition();
 
-      final allPlaces = widget.foodMode
-          ? await _overpassService.getCityFoodPlaces(
-              widget.city.latitude,
-              widget.city.longitude,
-              userLat: position?.latitude,
-              userLng: position?.longitude,
-            )
-          : await _overpassService.getCityPlaces(
-              widget.city.latitude,
-              widget.city.longitude,
-              userLat: position?.latitude,
-              userLng: position?.longitude,
-            );
+      final allPlaces = await _overpassService.getCityPlacesByCategory(
+        widget.city.latitude,
+        widget.city.longitude,
+        category: widget.category,
+        userLat: position?.latitude,
+        userLng: position?.longitude,
+      );
 
       final withDistance = allPlaces.map((p) {
         if (position == null) return p;
@@ -78,9 +74,11 @@ class _CityPlacesScreenState extends State<CityPlacesScreen> {
 
       if (!mounted) return;
 
-      if (picked.isEmpty) {
-        await Future.delayed(const Duration(seconds: 3));
-        if (mounted) _load();
+      if (picked.length < 2) {
+        setState(() {
+          _noPlacesFound = true;
+          _isLoading = false;
+        });
         return;
       }
 
@@ -90,8 +88,10 @@ class _CityPlacesScreenState extends State<CityPlacesScreen> {
       });
     } catch (_) {
       if (!mounted) return;
-      await Future.delayed(const Duration(seconds: 3));
-      if (mounted) _load();
+      setState(() {
+        _noPlacesFound = true;
+        _isLoading = false;
+      });
     }
   }
 
@@ -111,7 +111,7 @@ class _CityPlacesScreenState extends State<CityPlacesScreen> {
 
       final code = await _sessionService.createSession(
         hostId: _currentUser.uid,
-        topic: widget.foodMode ? 'Where should we eat?' : 'Places to go',
+        topic: widget.city.name,
         cards: cardMaps,
       );
 
@@ -142,34 +142,52 @@ class _CityPlacesScreenState extends State<CityPlacesScreen> {
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
-        backgroundColor: _bg,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         title: Text(
           widget.city.name,
-          style: const TextStyle(fontWeight: FontWeight.w600),
+          style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
         ),
       ),
-      floatingActionButton: _places.isNotEmpty
-          ? FloatingActionButton.extended(
-              onPressed: _isCreatingSession ? null : _startSession,
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-              label: Text(_isCreatingSession ? 'Creating...' : 'Start Session'),
-              icon: _isCreatingSession
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.play_arrow),
+      floatingActionButton: _places.length >= 2
+          ? Container(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFE4EF0), Color(0xFF800DD8)],
+                ),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFFE4EF0).withValues(alpha: 0.4),
+                    offset: const Offset(0, 4),
+                    blurRadius: 12,
+                  ),
+                ],
+              ),
+              child: FloatingActionButton.extended(
+                onPressed: _isCreatingSession ? null : _startSession,
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                foregroundColor: Colors.white,
+                label: Text(_isCreatingSession ? 'Creating...' : 'Start Session'),
+                icon: _isCreatingSession
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.play_arrow),
+              ),
             )
           : null,
       body: _isLoading
           ? _buildSearching()
-          : _buildList(),
+          : _noPlacesFound
+              ? _buildNoPlacesFound()
+              : _buildList(),
     );
   }
 
@@ -188,17 +206,57 @@ class _CityPlacesScreenState extends State<CityPlacesScreen> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
-                color: Colors.black54,
+                color: Colors.white70,
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Finding ${widget.foodMode ? 'places to eat' : 'hangout spots'} in ${widget.city.name}',
+              'Finding places in ${widget.city.name}',
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 13,
-                color: Colors.black38,
+                color: Colors.white54,
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoPlacesFound() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.search_off, size: 48, color: Colors.white38),
+            const SizedBox(height: 16),
+            const Text(
+              'No places found',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'No places found in ${widget.city.name}. Try a different category or city.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Go back'),
+                ),
+                const SizedBox(width: 12),
+                FilledButton(
+                  onPressed: _load,
+                  child: const Text('Retry'),
+                ),
+              ],
             ),
           ],
         ),
@@ -216,20 +274,9 @@ class _CityPlacesScreenState extends State<CityPlacesScreen> {
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: _bg,
+            color: Colors.black.withValues(alpha: 0.35),
             borderRadius: BorderRadius.circular(16),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0xFFFFFFFF),
-                offset: Offset(-6, -6),
-                blurRadius: 12,
-              ),
-              BoxShadow(
-                color: Color(0xFFB8C6CC),
-                offset: Offset(6, 6),
-                blurRadius: 12,
-              ),
-            ],
+            border: Border.all(color: Colors.white.withValues(alpha: 0.10), width: 1),
           ),
           child: Row(
             children: [
@@ -237,7 +284,7 @@ class _CityPlacesScreenState extends State<CityPlacesScreen> {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
+                  color: Colors.white.withValues(alpha: 0.10),
                   shape: BoxShape.circle,
                 ),
                 child: Center(
@@ -245,7 +292,7 @@ class _CityPlacesScreenState extends State<CityPlacesScreen> {
                     '${index + 1}',
                     style: const TextStyle(
                       fontWeight: FontWeight.w600,
-                      color: Colors.blue,
+                      color: Color(0xFFFE4EF0),
                     ),
                   ),
                 ),
@@ -260,6 +307,7 @@ class _CityPlacesScreenState extends State<CityPlacesScreen> {
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w500,
+                        color: Colors.white,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -269,7 +317,7 @@ class _CityPlacesScreenState extends State<CityPlacesScreen> {
                       PlaceEntity.friendlyAmenity(place.amenity),
                       style: const TextStyle(
                         fontSize: 12,
-                        color: Colors.black45,
+                        color: Colors.white70,
                       ),
                     ),
                   ],
@@ -282,14 +330,14 @@ class _CityPlacesScreenState extends State<CityPlacesScreen> {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
+                    color: Colors.white.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     place.formattedDistance,
                     style: const TextStyle(
                       fontSize: 12,
-                      color: Colors.blue,
+                      color: Color(0xFFFE4EF0),
                       fontWeight: FontWeight.w500,
                     ),
                   ),

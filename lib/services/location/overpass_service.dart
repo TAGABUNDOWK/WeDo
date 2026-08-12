@@ -2,6 +2,15 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../models/place_entity.dart';
 
+enum PlaceCategory {
+  shopping,
+  natureOutdoors,
+  entertainment,
+  sportsFitness,
+  outing,
+  food,
+}
+
 class OverpassService {
   static const String _endpoint = 'https://overpass-api.de/api/interpreter';
   static const String _userAgent = 'WeDoApp/1.0 (contact: dev@wedo.app)';
@@ -13,6 +22,10 @@ class OverpassService {
       'park|garden|bowling_alley|amusement_arcade|fitness_centre|sports_centre|swimming_pool|skatepark|nature_reserve';
   static const String _tourismTags = 'art_gallery|museum|viewpoint|camp_site';
   static const String _shopTags = 'books|marketplace|clothes|electronics|mall';
+
+  static const String _outingTourismTags = 'resort|beach_resort|camp_site';
+  static const String _outingNaturalTags = 'beach';
+  static const String _outingLeisureTags = 'swimming_pool';
 
   static final Map<String, _CacheEntry<String?>> _labelCache = {};
   static final Map<String, _CacheEntry<List<String>>> _poiCache = {};
@@ -163,6 +176,72 @@ out center tags;
 ''';
     final result = await _fetch(query);
     return _parsePlaces(result, userLat, userLng);
+  }
+
+  Future<List<PlaceEntity>> getPlacesByCategory(
+    double lat,
+    double lng, {
+    required PlaceCategory category,
+    int radiusM = 5000,
+  }) async {
+    final query = _buildCategoryQuery(category, radiusM, lat, lng);
+    final result = await _fetch(query);
+    return _parsePlaces(result, lat, lng);
+  }
+
+  Future<List<PlaceEntity>> getCityPlacesByCategory(
+    double cityLat,
+    double cityLng, {
+    required PlaceCategory category,
+    double? userLat,
+    double? userLng,
+    int radiusM = 20000,
+  }) async {
+    final query = _buildCategoryQuery(category, radiusM, cityLat, cityLng);
+    final result = await _fetch(query);
+    return _parsePlaces(result, userLat, userLng);
+  }
+
+  String _buildCategoryQuery(
+    PlaceCategory category,
+    int radiusM,
+    double lat,
+    double lng,
+  ) {
+    final buffers = <String>[];
+
+    void addNodeWay(String key, String tags) {
+      buffers.add('node["$key"~"^($tags)\$"](around:$radiusM,$lat,$lng);');
+      buffers.add('way["$key"~"^($tags)\$"](around:$radiusM,$lat,$lng);');
+    }
+
+    switch (category) {
+      case PlaceCategory.shopping:
+        addNodeWay('shop', _shopTags);
+        break;
+      case PlaceCategory.natureOutdoors:
+        addNodeWay('leisure', 'park|garden|nature_reserve');
+        addNodeWay('tourism', 'viewpoint');
+        break;
+      case PlaceCategory.entertainment:
+        addNodeWay('amenity', _amenityTags);
+        addNodeWay('leisure', 'bowling_alley|amusement_arcade');
+        break;
+      case PlaceCategory.sportsFitness:
+        addNodeWay('leisure', 'fitness_centre|sports_centre|skatepark');
+        break;
+      case PlaceCategory.outing:
+        addNodeWay('tourism', _outingTourismTags);
+        addNodeWay('leisure', _outingLeisureTags);
+        buffers.add('node["natural"~"^($_outingNaturalTags)\$"](around:$radiusM,$lat,$lng);');
+        buffers.add('way["natural"~"^($_outingNaturalTags)\$"](around:$radiusM,$lat,$lng);');
+        break;
+      case PlaceCategory.food:
+        addNodeWay('amenity', _foodAmenityTags);
+        break;
+    }
+
+    return '[out:json][timeout:30];\n(\n${buffers.join('\n')}\n);\nout center tags;\n';
   }
 
   List<PlaceEntity> _parsePlaces(

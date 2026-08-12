@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../utils/time_format.dart';
 
-const bg = Color(0xFFE7ECEF);
+const bg = Color(0xFF190831);
 
 class ChatTile extends StatelessWidget {
   final String name;
@@ -40,12 +40,9 @@ class ChatTile extends StatelessWidget {
         child: Ink(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: bg,
+            color: Colors.black.withValues(alpha: 0.35),
             borderRadius: BorderRadius.circular(16),
-            boxShadow: const [
-              BoxShadow(color: Colors.white, offset: Offset(-6, -6), blurRadius: 12),
-              BoxShadow(color: Color(0xFFB8C6CC), offset: Offset(6, 6), blurRadius: 12),
-            ],
+            border: Border.all(color: Colors.white.withValues(alpha: 0.10), width: 1),
           ),
           child: Row(
             children: [
@@ -55,12 +52,12 @@ class ChatTile extends StatelessWidget {
                     width: 48,
                     height: 48,
                     decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
+                      color: Colors.white.withValues(alpha: 0.10),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
                       isGroup ? Icons.group : Icons.person,
-                      color: Colors.blue,
+                      color: Color(0xFFFE4EF0),
                     ),
                   ),
                   if (showUnread)
@@ -91,6 +88,7 @@ class ChatTile extends StatelessWidget {
                       style: TextStyle(
                         fontWeight: showUnread ? FontWeight.w700 : FontWeight.w600,
                         fontSize: 15,
+                        color: Colors.white,
                       ),
                     ),
                     const SizedBox(height: 3),
@@ -105,8 +103,8 @@ class ChatTile extends StatelessWidget {
                               fontSize: 13,
                               fontWeight: showUnread ? FontWeight.w600 : FontWeight.w400,
                               color: lastMessage?.isNotEmpty == true
-                                  ? (showUnread ? Colors.black87 : Colors.black54)
-                                  : Colors.black26,
+                                  ? (showUnread ? Colors.white : Colors.white70)
+                                  : Colors.white54,
                             ),
                           ),
                         ),
@@ -115,7 +113,7 @@ class ChatTile extends StatelessWidget {
                           formatListTime(lastMessageAt),
                           style: TextStyle(
                             fontSize: 11,
-                            color: showUnread ? Colors.blue : Colors.black38,
+                            color: showUnread ? Colors.blue : Colors.white54,
                             fontWeight: showUnread ? FontWeight.w600 : FontWeight.w400,
                           ),
                         ),

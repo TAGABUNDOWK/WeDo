@@ -109,6 +109,12 @@ class PlaceEntity {
         return 'Electronics';
       case 'mall':
         return 'Mall';
+      case 'resort':
+        return 'Resort';
+      case 'beach_resort':
+        return 'Beach Resort';
+      case 'beach':
+        return 'Beach';
       default:
         return tag;
     }

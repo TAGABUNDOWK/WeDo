@@ -28,7 +28,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    const bg = Color(0xFFE7ECEF);
+    const bg = Color(0xFF190831);
     final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     return Scaffold(
@@ -506,7 +506,6 @@ class _HomeTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const bg = Color(0xFFE7ECEF);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -517,33 +516,29 @@ class _HomeTab extends StatelessWidget {
             children: [
               const Text(
                 'WeDo',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 8),
           const Text(
             'Welcome back!',
-            style: TextStyle(color: Colors.black54, fontSize: 15),
+            style: TextStyle(color: Colors.white70, fontSize: 15),
           ),
           const SizedBox(height: 24),
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: bg,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0xFFFFFFFF),
-                  offset: Offset(-8, -8),
-                  blurRadius: 16,
-                ),
-                BoxShadow(
-                  color: Color(0xFFB8C6CC),
-                  offset: Offset(8, 8),
-                  blurRadius: 16,
-                ),
-              ],
+              color: Colors.black.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.10),
+                width: 1,
+              ),
             ),
             child: Column(
               children: [
@@ -551,11 +546,11 @@ class _HomeTab extends StatelessWidget {
                   width: 64,
                   height: 64,
                   decoration: BoxDecoration(
-                    color: Colors.blue,
+                    color: const Color(0xFFFE4EF0),
                     shape: BoxShape.circle,
                     boxShadow: const [
                       BoxShadow(
-                        color: Color(0xFF2A6FD6),
+                        color: Color(0xFFFE4EF0),
                         offset: Offset(0, 6),
                         blurRadius: 10,
                       ),
@@ -570,12 +565,16 @@ class _HomeTab extends StatelessWidget {
                 const SizedBox(height: 14),
                 const Text(
                   'Flip the dice to decide',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(height: 6),
                 const Text(
                   'Create a topic and let fate decide',
-                  style: TextStyle(color: Colors.black54),
+                  style: TextStyle(color: Colors.white70),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 18),
@@ -583,8 +582,17 @@ class _HomeTab extends StatelessWidget {
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   decoration: BoxDecoration(
-                    color: Colors.blue,
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFE4EF0), Color(0xFF800DD8)],
+                    ),
                     borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFFE4EF0).withValues(alpha: 0.4),
+                        offset: const Offset(0, 4),
+                        blurRadius: 12,
+                      ),
+                    ],
                   ),
                   child: const Center(
                     child: Text(
@@ -602,7 +610,11 @@ class _HomeTab extends StatelessWidget {
           const SizedBox(height: 24),
           const Text(
             'Recent activity',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
           ),
           const SizedBox(height: 12),
           for (int i = 0; i < 3; i++)
@@ -610,20 +622,12 @@ class _HomeTab extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: bg,
+                color: Colors.black.withValues(alpha: 0.35),
                 borderRadius: BorderRadius.circular(16),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0xFFFFFFFF),
-                    offset: Offset(-6, -6),
-                    blurRadius: 12,
-                  ),
-                  BoxShadow(
-                    color: Color(0xFFB8C6CC),
-                    offset: Offset(6, 6),
-                    blurRadius: 12,
-                  ),
-                ],
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.10),
+                  width: 1,
+                ),
               ),
               child: Row(
                 children: [
@@ -631,12 +635,12 @@ class _HomeTab extends StatelessWidget {
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
+                      color: Colors.white.withValues(alpha: 0.10),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(
                       Icons.casino_outlined,
-                      color: Colors.blue,
+                      color: Color(0xFFFE4EF0),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -646,17 +650,20 @@ class _HomeTab extends StatelessWidget {
                       children: [
                         Text(
                           'Decision #$i',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
                         ),
                         const SizedBox(height: 2),
                         const Text(
                           'Placeholder topic',
-                          style: TextStyle(color: Colors.black54, fontSize: 13),
+                          style: TextStyle(color: Colors.white70, fontSize: 13),
                         ),
                       ],
                     ),
                   ),
-                  const Icon(Icons.chevron_right, color: Colors.black26),
+                  const Icon(Icons.chevron_right, color: Colors.white38),
                 ],
               ),
             ),

@@ -13,7 +13,7 @@ class JoinSessionScreen extends StatefulWidget {
 
 class _JoinSessionScreenState extends State<JoinSessionScreen> {
   final _service = SessionService();
-  final _bg = const Color(0xFFE7ECEF);
+  final _bg = const Color(0xFF190831);
   final _currentUser = FirebaseAuth.instance.currentUser;
   final _codeController = TextEditingController();
   final _codeFocusNode = FocusNode();
@@ -73,9 +73,10 @@ class _JoinSessionScreenState extends State<JoinSessionScreen> {
       appBar: AppBar(
         backgroundColor: _bg,
         elevation: 0,
+        foregroundColor: Colors.white,
         title: const Text(
           'Join Session',
-          style: TextStyle(fontWeight: FontWeight.w600),
+          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
         ),
       ),
       body: Padding(
@@ -84,12 +85,12 @@ class _JoinSessionScreenState extends State<JoinSessionScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: 40),
-            const Icon(Icons.meeting_room, size: 64, color: Colors.blue),
+            const Icon(Icons.meeting_room, size: 64, color: Color(0xFFFE4EF0)),
             const SizedBox(height: 24),
             const Text(
               'Enter the 6-character session code',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, color: Colors.black54),
+              style: TextStyle(fontSize: 16, color: Colors.white70),
             ),
             const SizedBox(height: 32),
             _buildCodeInput(),
@@ -112,12 +113,12 @@ class _JoinSessionScreenState extends State<JoinSessionScreen> {
   Widget _buildCodeInput() {
     return Container(
       decoration: BoxDecoration(
-        color: _bg,
+        color: Colors.black.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(16),
-        boxShadow: const [
-          BoxShadow(color: Color(0xFFFFFFFF), offset: Offset(-4, -4), blurRadius: 10),
-          BoxShadow(color: Color(0xFFB8C6CC), offset: Offset(4, 4), blurRadius: 10),
-        ],
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.10),
+          width: 1,
+        ),
       ),
       child: TextField(
         controller: _codeController,
@@ -129,6 +130,7 @@ class _JoinSessionScreenState extends State<JoinSessionScreen> {
           fontSize: 28,
           fontWeight: FontWeight.w700,
           letterSpacing: 8,
+          color: Colors.white,
         ),
         decoration: const InputDecoration(
           counterText: '',
@@ -137,7 +139,7 @@ class _JoinSessionScreenState extends State<JoinSessionScreen> {
             fontSize: 28,
             fontWeight: FontWeight.w700,
             letterSpacing: 8,
-            color: Colors.black26,
+            color: Colors.white38,
           ),
           border: InputBorder.none,
           contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 20),
@@ -160,8 +162,20 @@ class _JoinSessionScreenState extends State<JoinSessionScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
-          color: _isJoining ? Colors.blue.shade200 : Colors.blue,
+          gradient: _isJoining
+              ? const LinearGradient(colors: [Color(0xFFFE4EF0), Color(0xFF800DD8)])
+                  .withOpacity(0.5) as Gradient?
+              : const LinearGradient(
+                  colors: [Color(0xFFFE4EF0), Color(0xFF800DD8)],
+                ),
           borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFFE4EF0).withValues(alpha: 0.4),
+              offset: const Offset(0, 4),
+              blurRadius: 12,
+            ),
+          ],
         ),
         child: Center(
           child: _isJoining

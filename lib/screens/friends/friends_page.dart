@@ -20,7 +20,7 @@ class _FriendsPageState extends State<FriendsPage> {
   final _auth = FirebaseAuth.instance;
   final _friendService = FriendService();
   final _userService = UserService();
-  final _bg = const Color(0xFFE7ECEF);
+  final _bg = const Color(0xFF190831);
 
   String get _uid => _auth.currentUser!.uid;
 
@@ -29,11 +29,11 @@ class _FriendsPageState extends State<FriendsPage> {
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
-        backgroundColor: _bg,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         title: const Text(
           'Friends',
-          style: TextStyle(fontWeight: FontWeight.w600),
+          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
         ),
         actions: [
           IconButton(
@@ -41,7 +41,7 @@ class _FriendsPageState extends State<FriendsPage> {
               context,
               MaterialPageRoute(builder: (_) => const AddFriendPage()),
             ),
-            icon: const Icon(Icons.person_add_alt_1),
+            icon: const Icon(Icons.person_add_alt_1, color: Colors.white),
           ),
         ],
       ),
@@ -187,7 +187,7 @@ class _SectionTitle extends StatelessWidget {
         style: const TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w700,
-          color: Colors.black87,
+          color: Colors.white,
         ),
       ),
     );
@@ -202,7 +202,7 @@ class _EmptyText extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Text(message, style: const TextStyle(color: Colors.black45)),
+      child: Text(message, style: const TextStyle(color: Colors.white54)),
     );
   }
 }
@@ -242,19 +242,19 @@ class _UserName extends StatelessWidget {
             children: [
               Text(
                 name.isEmpty ? 'User' : name,
-                style: const TextStyle(fontWeight: FontWeight.w600),
+                style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
                 overflow: TextOverflow.ellipsis,
               ),
               if (user.username.isNotEmpty && user.username != user.displayName)
                 Text(
                   '@${user.username}',
-                  style: const TextStyle(fontSize: 12, color: Colors.black45),
+                  style: const TextStyle(fontSize: 12, color: Colors.white70),
                   overflow: TextOverflow.ellipsis,
                 ),
             ],
           );
         }
-        return const Text('Loading...', style: TextStyle(color: Colors.black45));
+        return const Text('Loading...', style: TextStyle(color: Colors.white54));
       },
     );
   }
@@ -276,20 +276,9 @@ class _NeumorphicTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFE7ECEF),
+        color: Colors.black.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(16),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0xFFFFFFFF),
-            offset: Offset(-6, -6),
-            blurRadius: 12,
-          ),
-          BoxShadow(
-            color: Color(0xFFB8C6CC),
-            offset: Offset(6, 6),
-            blurRadius: 12,
-          ),
-        ],
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10), width: 1),
       ),
       child: Row(
         children: [
@@ -310,8 +299,8 @@ class _Avatar extends StatelessWidget {
   Widget build(BuildContext context) {
     return CircleAvatar(
       radius: 20,
-      backgroundColor: Colors.blue.shade100,
-      child: const Icon(Icons.person, color: Colors.blue),
+      backgroundColor: Colors.white.withValues(alpha: 0.10),
+      child: const Icon(Icons.person, color: Color(0xFFFE4EF0)),
     );
   }
 }
@@ -395,7 +384,7 @@ class _FriendTile extends StatelessWidget {
       actions: [
         IconButton(
           onPressed: onRemove,
-          icon: const Icon(Icons.person_remove_outlined, color: Colors.black45),
+          icon: const Icon(Icons.person_remove_outlined, color: Colors.white54),
           tooltip: 'Remove friend',
         ),
       ],
@@ -416,7 +405,6 @@ class _PeopleNearYouSectionState extends State<_PeopleNearYouSection> {
   final _userService = UserService();
   final _friendService = FriendService();
   final _overpassService = OverpassService();
-  final _bg = const Color(0xFFE7ECEF);
 
   bool _isLoading = true;
   bool _permissionDenied = false;
@@ -535,18 +523,18 @@ class _PeopleNearYouSectionState extends State<_PeopleNearYouSection> {
     }
     if (_permissionDenied) {
       return _NeumorphicTile(
-        leading: const Icon(Icons.location_off, color: Colors.black45, size: 32),
+        leading: const Icon(Icons.location_off, color: Colors.white54, size: 32),
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Location needed',
-              style: TextStyle(fontWeight: FontWeight.w600),
+              style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
             ),
             SizedBox(height: 2),
             Text(
               'Allow location access to see people near you.',
-              style: TextStyle(fontSize: 12, color: Colors.black45),
+              style: TextStyle(fontSize: 12, color: Colors.white54),
             ),
           ],
         ),
@@ -564,24 +552,13 @@ class _PeopleNearYouSectionState extends State<_PeopleNearYouSection> {
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: _bg,
+            color: Colors.black.withValues(alpha: 0.35),
             borderRadius: BorderRadius.circular(16),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0xFFFFFFFF),
-                offset: Offset(-6, -6),
-                blurRadius: 12,
-              ),
-              BoxShadow(
-                color: Color(0xFFB8C6CC),
-                offset: Offset(6, 6),
-                blurRadius: 12,
-              ),
-            ],
+            border: Border.all(color: Colors.white.withValues(alpha: 0.10), width: 1),
           ),
           child: Row(
             children: [
-              const Icon(Icons.near_me, color: Colors.blue, size: 24),
+              const Icon(Icons.near_me, color: Color(0xFFFE4EF0), size: 24),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -589,13 +566,14 @@ class _PeopleNearYouSectionState extends State<_PeopleNearYouSection> {
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
+                    color: Colors.white,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               IconButton(
                 onPressed: _load,
-                icon: const Icon(Icons.refresh, color: Colors.black45, size: 20),
+                icon: const Icon(Icons.refresh, color: Colors.white54, size: 20),
                 tooltip: 'Refresh',
               ),
             ],
@@ -610,10 +588,10 @@ class _PeopleNearYouSectionState extends State<_PeopleNearYouSection> {
             children: _studyPlaces.map((name) {
               return Chip(
                 avatar: const Icon(Icons.local_library,
-                    size: 18, color: Colors.blue),
-                label: Text(name),
-                backgroundColor: Colors.white,
-                side: BorderSide.none,
+                    size: 18, color: Color(0xFFFE4EF0)),
+                label: Text(name, style: const TextStyle(color: Colors.white)),
+                backgroundColor: Colors.black.withValues(alpha: 0.25),
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.10)),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -638,7 +616,7 @@ class _PeopleNearYouSectionState extends State<_PeopleNearYouSection> {
                 if (status == 'friends')
                   const Text('Friends', style: TextStyle(color: Colors.green))
                 else if (status == 'pending')
-                  const Text('Sent', style: TextStyle(color: Colors.black45))
+                  const Text('Sent', style: TextStyle(color: Colors.white54))
                 else
                   TextButton(
                     onPressed: () => _onSend(user),
@@ -665,13 +643,13 @@ class _NearbyUserInfo extends StatelessWidget {
       children: [
         Text(
           name.isEmpty ? 'User' : name,
-          style: const TextStyle(fontWeight: FontWeight.w600),
+          style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
           overflow: TextOverflow.ellipsis,
         ),
         if (user.username.isNotEmpty && user.username != user.displayName)
           Text(
             '@${user.username}',
-            style: const TextStyle(fontSize: 12, color: Colors.black45),
+            style: const TextStyle(fontSize: 12, color: Colors.white70),
             overflow: TextOverflow.ellipsis,
           ),
         const SizedBox(height: 2),

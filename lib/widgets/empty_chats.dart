@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-const _bg = Color(0xFFE7ECEF);
-
 class EmptyChats extends StatelessWidget {
   final VoidCallback onCreate;
 
@@ -17,14 +15,10 @@ class EmptyChats extends StatelessWidget {
             width: 88,
             height: 88,
             decoration: const BoxDecoration(
-              color: _bg,
+              color: Colors.black38,
               shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(color: Colors.white, offset: Offset(-5, -5), blurRadius: 10),
-                BoxShadow(color: Color(0xFFB8C6CC), offset: Offset(5, 5), blurRadius: 10),
-              ],
             ),
-            child: const Icon(Icons.forum_outlined, size: 40, color: Colors.blue),
+            child: const Icon(Icons.forum_outlined, size: 40, color: Color(0xFFFE4EF0)),
           ),
           const SizedBox(height: 20),
           const Text(
@@ -34,7 +28,7 @@ class EmptyChats extends StatelessWidget {
           const SizedBox(height: 6),
           const Text(
             'Start a group chat with your friends',
-            style: TextStyle(color: Colors.black54),
+            style: TextStyle(color: Colors.white70),
           ),
           const SizedBox(height: 24),
           FilledButton.icon(
