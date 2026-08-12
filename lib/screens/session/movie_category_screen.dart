@@ -4,7 +4,7 @@ import 'movie_results_screen.dart';
 class MovieCategoryScreen extends StatelessWidget {
   const MovieCategoryScreen({super.key});
 
-  static const _bg = Color(0xFFE7ECEF);
+  static const _bg = Color(0xFF190831);
 
   static const _categories = [
     _Category(
@@ -50,11 +50,11 @@ class MovieCategoryScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
-        backgroundColor: _bg,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         title: const Text(
           'Movies to watch',
-          style: TextStyle(fontWeight: FontWeight.w600),
+          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
         ),
       ),
       body: ListView.separated(
@@ -112,8 +112,6 @@ class _CategoryCard extends StatelessWidget {
     required this.onTap,
   });
 
-  static const _bg = Color(0xFFE7ECEF);
-
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -121,20 +119,9 @@ class _CategoryCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: _bg,
+          color: Colors.black.withValues(alpha: 0.35),
           borderRadius: BorderRadius.circular(16),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0xFFFFFFFF),
-              offset: Offset(-6, -6),
-              blurRadius: 12,
-            ),
-            BoxShadow(
-              color: Color(0xFFB8C6CC),
-              offset: Offset(6, 6),
-              blurRadius: 12,
-            ),
-          ],
+          border: Border.all(color: Colors.white.withValues(alpha: 0.10), width: 1),
         ),
         child: Row(
           children: [
@@ -142,10 +129,10 @@ class _CategoryCard extends StatelessWidget {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                color: Colors.blue.shade50,
+                color: Colors.white.withValues(alpha: 0.10),
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, size: 28, color: Colors.blue),
+              child: Icon(icon, size: 28, color: const Color(0xFFFE4EF0)),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -157,6 +144,7 @@ class _CategoryCard extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
+                      color: Colors.white,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -164,13 +152,13 @@ class _CategoryCard extends StatelessWidget {
                     subtitle,
                     style: const TextStyle(
                       fontSize: 13,
-                      color: Colors.black45,
+                      color: Colors.white70,
                     ),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right, color: Colors.black26),
+            Icon(Icons.chevron_right, color: Colors.white.withValues(alpha: 0.54)),
           ],
         ),
       ),

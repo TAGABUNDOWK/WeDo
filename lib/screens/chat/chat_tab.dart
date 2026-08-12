@@ -11,7 +11,7 @@ import '../group/create_group_screen.dart';
 import '../direct/direct_chat_screen.dart';
 import '../direct/new_direct_chat.dart';
 
-const _bg = Color(0xFFE7ECEF);
+const _bg = Color(0xFF190831);
 
 class ChatTab extends StatefulWidget {
   const ChatTab({super.key});
@@ -32,12 +32,9 @@ class _ChatTabState extends State<ChatTab> {
         margin: const EdgeInsets.all(16),
         padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-          color: _bg,
+          color: Colors.black.withValues(alpha: 0.35),
           borderRadius: BorderRadius.circular(20),
-          boxShadow: const [
-            BoxShadow(color: Colors.white, offset: Offset(-4, -4), blurRadius: 8),
-            BoxShadow(color: Color(0xFFB8C6CC), offset: Offset(4, 4), blurRadius: 8),
-          ],
+          border: Border.all(color: Colors.white.withValues(alpha: 0.10), width: 1),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -47,13 +44,13 @@ class _ChatTabState extends State<ChatTab> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
+                  color: Colors.white.withValues(alpha: 0.10),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.group_add, color: Colors.blue),
+                child: const Icon(Icons.group_add, color: Color(0xFFFE4EF0)),
               ),
-              title: const Text('Create group chat'),
-              subtitle: const Text('Chat with multiple people'),
+              title: const Text('Create group chat', style: TextStyle(color: Colors.white)),
+              subtitle: const Text('Chat with multiple people', style: TextStyle(color: Colors.white70)),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(
@@ -67,13 +64,13 @@ class _ChatTabState extends State<ChatTab> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
+                  color: Colors.white.withValues(alpha: 0.10),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.chat_bubble_outline, color: Colors.blue),
+                child: const Icon(Icons.chat_bubble_outline, color: Color(0xFFFE4EF0)),
               ),
-              title: const Text('New message'),
-              subtitle: const Text('Start a direct conversation'),
+              title: const Text('New message', style: TextStyle(color: Colors.white)),
+              subtitle: const Text('Start a direct conversation', style: TextStyle(color: Colors.white70)),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(
@@ -118,19 +115,19 @@ class _ChatTabState extends State<ChatTab> {
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
-        backgroundColor: _bg,
+        backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text('Chats', style: TextStyle(fontWeight: FontWeight.w600)),
+        title: const Text('Chats', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
         actions: [
           IconButton(
             tooltip: 'New chat',
             onPressed: _showNewChatMenu,
-            icon: const Icon(Icons.edit_square),
+            icon: const Icon(Icons.edit_square, color: Colors.white),
           ),
         ],
       ),
       body: currentUser == null
-          ? const Center(child: Text('Sign in to view your chats'))
+          ? const Center(child: Text('Sign in to view your chats', style: TextStyle(color: Colors.white70)))
           : StreamBuilder<List<GroupChat>>(
               stream: _groupService.getUserGroupsStream(currentUser.uid),
               builder: (context, groupSnap) {
@@ -252,25 +249,22 @@ class _EmptyChats extends StatelessWidget {
           Container(
             width: 88,
             height: 88,
-            decoration: const BoxDecoration(
-              color: _bg,
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.35),
               shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(color: Colors.white, offset: Offset(-5, -5), blurRadius: 10),
-                BoxShadow(color: Color(0xFFB8C6CC), offset: Offset(5, 5), blurRadius: 10),
-              ],
+              border: Border.all(color: Colors.white.withValues(alpha: 0.10), width: 1),
             ),
-            child: const Icon(Icons.forum_outlined, size: 40, color: Colors.blue),
+            child: const Icon(Icons.forum_outlined, size: 40, color: Color(0xFFFE4EF0)),
           ),
           const SizedBox(height: 20),
           const Text(
             'No chats yet',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
           ),
           const SizedBox(height: 6),
           const Text(
             'Start a conversation with friends',
-            style: TextStyle(color: Colors.black54),
+            style: TextStyle(color: Colors.white70),
           ),
           const SizedBox(height: 24),
           FilledButton.icon(

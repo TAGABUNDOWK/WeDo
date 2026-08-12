@@ -6,7 +6,7 @@ import '../../widgets/empty_chats.dart';
 import 'group_chat_screen.dart';
 import 'create_group_screen.dart';
 
-const _bg = Color(0xFFE7ECEF);
+const _bg = Color(0xFF190831);
 
 class GroupChatsPage extends StatefulWidget {
   const GroupChatsPage({super.key});

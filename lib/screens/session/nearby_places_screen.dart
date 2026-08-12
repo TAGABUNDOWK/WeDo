@@ -9,12 +9,12 @@ import 'waiting_lobby_screen.dart';
 
 class NearbyPlacesScreen extends StatefulWidget {
   final String title;
-  final bool foodMode;
+  final PlaceCategory category;
 
   const NearbyPlacesScreen({
     super.key,
-    this.title = 'Nearby places',
-    this.foodMode = false,
+    required this.title,
+    required this.category,
   });
 
   @override
@@ -26,12 +26,14 @@ class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
   final _overpassService = OverpassService();
   final _sessionService = SessionService();
   final _currentUser = FirebaseAuth.instance.currentUser;
-  final _bg = const Color(0xFFE7ECEF);
+  final _bg = const Color(0xFF190831);
 
   List<PlaceEntity> _places = [];
   bool _isLoading = true;
   bool _permissionDenied = false;
+  bool _noPlacesFound = false;
   bool _isCreatingSession = false;
+  String _searchStatus = 'Searching within 5km...';
 
   @override
   void initState() {
@@ -39,11 +41,30 @@ class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
     _load();
   }
 
+  String get _categorySearchLabel {
+    switch (widget.category) {
+      case PlaceCategory.food:
+        return 'Searching for restaurants';
+      case PlaceCategory.shopping:
+        return 'Searching for shops';
+      case PlaceCategory.natureOutdoors:
+        return 'Searching for outdoor spots';
+      case PlaceCategory.entertainment:
+        return 'Searching for entertainment';
+      case PlaceCategory.sportsFitness:
+        return 'Searching for sports venues';
+      case PlaceCategory.outing:
+        return 'Searching for outing spots';
+    }
+  }
+
   Future<void> _load() async {
     if (!mounted) return;
     setState(() {
       _isLoading = true;
       _permissionDenied = false;
+      _noPlacesFound = false;
+      _searchStatus = '$_categorySearchLabel within 5km...';
     });
 
     final position = await _locationService.getQuickPosition();
@@ -57,17 +78,24 @@ class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
     }
 
     try {
-      final allPlaces = widget.foodMode
-          ? await _overpassService.getNearbyFoodPlaces(
-              position.latitude,
-              position.longitude,
-              radiusM: 5000,
-            )
-          : await _overpassService.getHangoutPlaces(
-              position.latitude,
-              position.longitude,
-              radiusM: 5000,
-            );
+      List<PlaceEntity> allPlaces = [];
+
+      const radii = [5000, 25000, 50000];
+      const labels = ['5km', '25km', '50km'];
+
+      for (var i = 0; i < radii.length; i++) {
+        if (!mounted) return;
+        setState(() => _searchStatus = '$_categorySearchLabel within ${labels[i]}...');
+
+        allPlaces = await _overpassService.getPlacesByCategory(
+          position.latitude,
+          position.longitude,
+          category: widget.category,
+          radiusM: radii[i],
+        );
+
+        if (allPlaces.length >= 5 || i == radii.length - 1) break;
+      }
 
       final withDistance = allPlaces.map((p) {
         final dist = PlaceEntity.distanceBetween(
@@ -84,9 +112,11 @@ class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
 
       if (!mounted) return;
 
-      if (picked.isEmpty) {
-        await Future.delayed(const Duration(seconds: 3));
-        if (mounted) _load();
+      if (picked.length < 2) {
+        setState(() {
+          _noPlacesFound = true;
+          _isLoading = false;
+        });
         return;
       }
 
@@ -96,8 +126,10 @@ class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
       });
     } catch (_) {
       if (!mounted) return;
-      await Future.delayed(const Duration(seconds: 3));
-      if (mounted) _load();
+      setState(() {
+        _noPlacesFound = true;
+        _isLoading = false;
+      });
     }
   }
 
@@ -148,36 +180,54 @@ class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
-        backgroundColor: _bg,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         title: Text(
           widget.title,
-          style: const TextStyle(fontWeight: FontWeight.w600),
+          style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
         ),
       ),
-      floatingActionButton: _places.isNotEmpty
-          ? FloatingActionButton.extended(
-              onPressed: _isCreatingSession ? null : _startSession,
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-              label: Text(_isCreatingSession ? 'Creating...' : 'Start Session'),
-              icon: _isCreatingSession
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.play_arrow),
+      floatingActionButton: _places.length >= 2
+          ? Container(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFE4EF0), Color(0xFF800DD8)],
+                ),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFFE4EF0).withValues(alpha: 0.4),
+                    offset: const Offset(0, 4),
+                    blurRadius: 12,
+                  ),
+                ],
+              ),
+              child: FloatingActionButton.extended(
+                onPressed: _isCreatingSession ? null : _startSession,
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                foregroundColor: Colors.white,
+                label: Text(_isCreatingSession ? 'Creating...' : 'Start Session'),
+                icon: _isCreatingSession
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.play_arrow),
+              ),
             )
           : null,
       body: _isLoading
           ? _buildSearching()
           : _permissionDenied
               ? _buildPermissionDenied()
-              : _buildList(),
+              : _noPlacesFound
+                  ? _buildNoPlacesFound()
+                  : _buildList(),
     );
   }
 
@@ -190,22 +240,22 @@ class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
           children: [
             const CircularProgressIndicator(),
             const SizedBox(height: 20),
-            const Text(
-              'Please wait, searching for places...',
+            Text(
+              _searchStatus,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
-                color: Colors.black54,
+                color: Colors.white70,
               ),
             ),
             const SizedBox(height: 8),
-            Text(
+            const Text(
               'This may take a moment',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
-                color: Colors.black38,
+                color: Colors.white54,
               ),
             ),
           ],
@@ -221,17 +271,17 @@ class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.location_off, size: 48, color: Colors.black26),
+            const Icon(Icons.location_off, size: 48, color: Colors.white38),
             const SizedBox(height: 16),
             const Text(
               'Location access needed',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
             ),
             const SizedBox(height: 8),
-            Text(
-              'Allow location access to find ${widget.foodMode ? 'places to eat' : 'hangout spots'} near you.',
+            const Text(
+              'Allow location access to find places near you.',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.black45),
+              style: TextStyle(color: Colors.white70),
             ),
             const SizedBox(height: 24),
             Row(
@@ -257,6 +307,46 @@ class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
     );
   }
 
+  Widget _buildNoPlacesFound() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.search_off, size: 48, color: Colors.white38),
+            const SizedBox(height: 16),
+            const Text(
+              'No places found',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'No ${widget.title.toLowerCase()} places found nearby. Try a different category or check back later.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Go back'),
+                ),
+                const SizedBox(width: 12),
+                FilledButton(
+                  onPressed: _load,
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildList() {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -267,20 +357,9 @@ class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: _bg,
+            color: Colors.black.withValues(alpha: 0.35),
             borderRadius: BorderRadius.circular(16),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0xFFFFFFFF),
-                offset: Offset(-6, -6),
-                blurRadius: 12,
-              ),
-              BoxShadow(
-                color: Color(0xFFB8C6CC),
-                offset: Offset(6, 6),
-                blurRadius: 12,
-              ),
-            ],
+            border: Border.all(color: Colors.white.withValues(alpha: 0.10), width: 1),
           ),
           child: Row(
             children: [
@@ -288,7 +367,7 @@ class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
+                  color: Colors.white.withValues(alpha: 0.10),
                   shape: BoxShape.circle,
                 ),
                 child: Center(
@@ -296,7 +375,7 @@ class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
                     '${index + 1}',
                     style: const TextStyle(
                       fontWeight: FontWeight.w600,
-                      color: Colors.blue,
+                      color: Color(0xFFFE4EF0),
                     ),
                   ),
                 ),
@@ -311,6 +390,7 @@ class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w500,
+                        color: Colors.white,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -320,7 +400,7 @@ class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
                       PlaceEntity.friendlyAmenity(place.amenity),
                       style: const TextStyle(
                         fontSize: 12,
-                        color: Colors.black45,
+                        color: Colors.white70,
                       ),
                     ),
                   ],
@@ -333,14 +413,14 @@ class _NearbyPlacesScreenState extends State<NearbyPlacesScreen> {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
+                    color: Colors.white.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     place.formattedDistance,
                     style: const TextStyle(
                       fontSize: 12,
-                      color: Colors.blue,
+                      color: Color(0xFFFE4EF0),
                       fontWeight: FontWeight.w500,
                     ),
                   ),

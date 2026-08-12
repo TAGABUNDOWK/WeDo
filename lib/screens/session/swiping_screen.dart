@@ -20,7 +20,7 @@ class SwipingScreen extends StatefulWidget {
 
 class _SwipingScreenState extends State<SwipingScreen> {
   final _service = SessionService();
-  final _bg = const Color(0xFFE7ECEF);
+  final _bg = const Color(0xFF190831);
   final _currentUser = FirebaseAuth.instance.currentUser;
 
   late List<Map<String, dynamic>> _remainingCards;
@@ -201,11 +201,11 @@ class _SwipingScreenState extends State<SwipingScreen> {
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
-        backgroundColor: _bg,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         title: Text(
           'Round $_round / $totalRounds',
-          style: const TextStyle(fontWeight: FontWeight.w600),
+          style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
         ),
         actions: [
           Center(
@@ -224,7 +224,7 @@ class _SwipingScreenState extends State<SwipingScreen> {
             const SizedBox(height: 12),
             Text(
               '$cardsLeft elimination${cardsLeft == 1 ? '' : 's'} left',
-              style: const TextStyle(color: Colors.black38, fontSize: 13),
+              style: const TextStyle(color: Colors.white54, fontSize: 13),
             ),
             const SizedBox(height: 16),
             Expanded(
@@ -265,7 +265,7 @@ class _SwipingScreenState extends State<SwipingScreen> {
             Text(
               'Timeouts: $_timeoutCount',
               style: TextStyle(
-                color: _timeoutCount > 0 ? Colors.redAccent : Colors.black38,
+                color: _timeoutCount > 0 ? Colors.redAccent : Colors.white54,
                 fontSize: 12,
               ),
             ),
@@ -342,7 +342,7 @@ class _SwipingScreenState extends State<SwipingScreen> {
     required String label,
     required bool isChampion,
   }) {
-    final color = isChampion ? Colors.blue.shade50 : Colors.orange.shade50;
+    final color = isChampion ? const Color(0x204080FF) : const Color(0x20FF8040);
     final isPlaceCard = card.containsKey('tag');
     final isMovieCard = card.containsKey('posterUrl') &&
         (card['posterUrl'] as String? ?? '').isNotEmpty;
@@ -356,10 +356,7 @@ class _SwipingScreenState extends State<SwipingScreen> {
         decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.circular(20),
-          boxShadow: const [
-            BoxShadow(color: Color(0xFFFFFFFF), offset: Offset(-4, -4), blurRadius: 10),
-            BoxShadow(color: Color(0xFFB8C6CC), offset: Offset(4, 4), blurRadius: 10),
-          ],
+          border: Border.all(color: Colors.white.withValues(alpha: 0.10), width: 1),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -393,8 +390,9 @@ class _SwipingScreenState extends State<SwipingScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: Colors.black.withValues(alpha: 0.35),
                 borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.10), width: 1),
               ),
               child: Text(
                 label,
@@ -436,8 +434,8 @@ class _SwipingScreenState extends State<SwipingScreen> {
                 errorBuilder: (context, error, stackTrace) => Container(
                   width: 80,
                   height: 120,
-                  color: Colors.grey.shade200,
-                  child: const Icon(Icons.movie, color: Colors.black26),
+                  color: Colors.white.withValues(alpha: 0.10),
+                  child: const Icon(Icons.movie, color: Colors.white24),
                 ),
               ),
             ),
@@ -453,6 +451,7 @@ class _SwipingScreenState extends State<SwipingScreen> {
                     style: const TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w700,
+                      color: Colors.white,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -466,6 +465,7 @@ class _SwipingScreenState extends State<SwipingScreen> {
                           style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
+                            color: Colors.white,
                           ),
                         ),
                       ],
@@ -475,7 +475,7 @@ class _SwipingScreenState extends State<SwipingScreen> {
                           year,
                           style: const TextStyle(
                             fontSize: 13,
-                            color: Colors.black45,
+                            color: Colors.white70,
                           ),
                         ),
                       ],
@@ -495,7 +495,7 @@ class _SwipingScreenState extends State<SwipingScreen> {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontSize: 12,
-              color: Colors.black54,
+              color: Colors.white70,
               height: 1.4,
             ),
           ),
@@ -508,7 +508,6 @@ class _SwipingScreenState extends State<SwipingScreen> {
     required Map<String, dynamic> card,
     required bool isChampion,
   }) {
-    final tag = card['tag'] as String? ?? '';
     final distance = card['distance'] as String? ?? '';
     final description = card['description'] as String? ?? '';
 
@@ -519,14 +518,9 @@ class _SwipingScreenState extends State<SwipingScreen> {
           width: 56,
           height: 56,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Colors.black.withValues(alpha: 0.35),
             shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
-                blurRadius: 8,
-              ),
-            ],
+            border: Border.all(color: Colors.white.withValues(alpha: 0.10), width: 1),
           ),
           child: Icon(
             isChampion ? Icons.emoji_events : Icons.location_on,
@@ -543,6 +537,7 @@ class _SwipingScreenState extends State<SwipingScreen> {
           style: const TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.w700,
+            color: Colors.white,
           ),
         ),
         const SizedBox(height: 8),
@@ -553,15 +548,16 @@ class _SwipingScreenState extends State<SwipingScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Colors.black.withValues(alpha: 0.35),
                   borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.10), width: 1),
                 ),
                 child: Text(
                   description,
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: Colors.blue,
+                    color: Colors.white,
                   ),
                 ),
               ),
@@ -572,15 +568,16 @@ class _SwipingScreenState extends State<SwipingScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Colors.black.withValues(alpha: 0.35),
                   borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.10), width: 1),
                 ),
                 child: Text(
                   distance,
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: Colors.blue,
+                    color: Colors.white,
                   ),
                 ),
               ),
@@ -601,14 +598,9 @@ class _SwipingScreenState extends State<SwipingScreen> {
           width: 56,
           height: 56,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Colors.black.withValues(alpha: 0.35),
             shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
-                blurRadius: 8,
-              ),
-            ],
+            border: Border.all(color: Colors.white.withValues(alpha: 0.10), width: 1),
           ),
           child: Icon(
             isChampion ? Icons.emoji_events : Icons.casino_outlined,
@@ -625,6 +617,7 @@ class _SwipingScreenState extends State<SwipingScreen> {
           style: const TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.w700,
+            color: Colors.white,
           ),
         ),
         if (card['description'] != null &&
@@ -637,7 +630,7 @@ class _SwipingScreenState extends State<SwipingScreen> {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontSize: 12,
-              color: Colors.black54,
+              color: Colors.white70,
             ),
           ),
         ],

@@ -21,7 +21,7 @@ class WaitingLobbyScreen extends StatefulWidget {
 
 class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
   final _service = SessionService();
-  final _bg = const Color(0xFFE7ECEF);
+  final _bg = const Color(0xFF190831);
   final _currentUser = FirebaseAuth.instance.currentUser;
 
   bool _isConfirmingLeave = false;
@@ -83,13 +83,14 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
         appBar: AppBar(
           backgroundColor: _bg,
           elevation: 0,
+          foregroundColor: Colors.white,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () => _onPopInvoked(false, null),
           ),
           title: const Text(
             'Waiting Lobby',
-            style: TextStyle(fontWeight: FontWeight.w600),
+            style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
           ),
         ),
         body: StreamBuilder<SessionEntity?>(
@@ -156,21 +157,21 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
           const SizedBox(height: 20),
           const Text(
             'Share this code with friends',
-            style: TextStyle(color: Colors.black54, fontSize: 14),
+            style: TextStyle(color: Colors.white70, fontSize: 14),
           ),
           const SizedBox(height: 12),
           _buildCodeDisplay(session.sessionId),
           const SizedBox(height: 8),
           Text(
             'Topic: ${session.topic}',
-            style: const TextStyle(color: Colors.black54, fontSize: 13),
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
           ),
           const SizedBox(height: 32),
           const Align(
             alignment: Alignment.centerLeft,
             child: Text(
               'Players',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
             ),
           ),
           const SizedBox(height: 12),
@@ -188,7 +189,7 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
                   return const Center(
                     child: Text(
                       'Waiting for players...',
-                      style: TextStyle(color: Colors.black38),
+                      style: TextStyle(color: Colors.white54),
                     ),
                   );
                 }
@@ -217,7 +218,7 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
             const SizedBox(height: 16),
             const Text(
               'Waiting for host to start...',
-              style: TextStyle(color: Colors.black38, fontSize: 13),
+              style: TextStyle(color: Colors.white54, fontSize: 13),
             ),
           ],
           const SizedBox(height: 20),
@@ -236,12 +237,12 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         decoration: BoxDecoration(
-          color: _bg,
+          color: Colors.black.withValues(alpha: 0.35),
           borderRadius: BorderRadius.circular(16),
-          boxShadow: const [
-            BoxShadow(color: Color(0xFFFFFFFF), offset: Offset(-6, -6), blurRadius: 12),
-            BoxShadow(color: Color(0xFFB8C6CC), offset: Offset(6, 6), blurRadius: 12),
-          ],
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.10),
+            width: 1,
+          ),
         ),
         child: Text(
           code,
@@ -249,7 +250,7 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
             fontSize: 36,
             fontWeight: FontWeight.w800,
             letterSpacing: 8,
-            color: Colors.blue,
+            color: Color(0xFFFE4EF0),
           ),
         ),
       ),
@@ -265,7 +266,7 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
           width: 52,
           height: 52,
           decoration: BoxDecoration(
-            color: isMe ? Colors.blue : Colors.blue.shade100,
+            color: isMe ? const Color(0xFFFE4EF0) : Colors.white.withValues(alpha: 0.10),
             shape: BoxShape.circle,
           ),
           child: Center(
@@ -274,7 +275,7 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
-                color: isMe ? Colors.white : Colors.blue,
+                color: isMe ? Colors.white : const Color(0xFFFE4EF0),
               ),
             ),
           ),
@@ -286,7 +287,7 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
           maxLines: 1,
           style: TextStyle(
             fontSize: 11,
-            color: isMe ? Colors.blue : Colors.black54,
+            color: isMe ? const Color(0xFFFE4EF0) : Colors.white70,
             fontWeight: isMe ? FontWeight.w600 : FontWeight.w400,
           ),
         ),
@@ -306,8 +307,20 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 16),
             decoration: BoxDecoration(
-              color: count < 1 ? Colors.blue.shade200 : Colors.blue,
+              gradient: count < 1
+                  ? const LinearGradient(colors: [Color(0xFFFE4EF0), Color(0xFF800DD8)])
+                      .withOpacity(0.5) as Gradient?
+                  : const LinearGradient(
+                      colors: [Color(0xFFFE4EF0), Color(0xFF800DD8)],
+                    ),
               borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFE4EF0).withValues(alpha: 0.4),
+                  offset: const Offset(0, 4),
+                  blurRadius: 12,
+                ),
+              ],
             ),
             child: Center(
               child: Text(

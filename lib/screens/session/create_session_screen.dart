@@ -16,7 +16,7 @@ class CreateSessionScreen extends StatefulWidget {
 
 class _CreateSessionScreenState extends State<CreateSessionScreen> {
   final _service = SessionService();
-  final _bg = const Color(0xFFE7ECEF);
+  final _bg = const Color(0xFF190831);
   final _currentUser = FirebaseAuth.instance.currentUser;
 
   List<TopicEntity> _topics = [];
@@ -105,9 +105,10 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
       appBar: AppBar(
         backgroundColor: _bg,
         elevation: 0,
+        foregroundColor: Colors.white,
         title: const Text(
           'Choose a Topic',
-          style: TextStyle(fontWeight: FontWeight.w600),
+          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
         ),
       ),
       body: _isLoading
@@ -136,12 +137,12 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: _bg,
+                  color: Colors.black.withValues(alpha: 0.35),
                   borderRadius: BorderRadius.circular(16),
-                  boxShadow: const [
-                    BoxShadow(color: Color(0xFFFFFFFF), offset: Offset(-6, -6), blurRadius: 12),
-                    BoxShadow(color: Color(0xFFB8C6CC), offset: Offset(6, 6), blurRadius: 12),
-                  ],
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.10),
+                    width: 1,
+                  ),
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -150,16 +151,16 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
                       width: 56,
                       height: 56,
                       decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
+                        color: Colors.white.withValues(alpha: 0.10),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.casino_outlined, size: 28, color: Colors.blue),
+                      child: const Icon(Icons.casino_outlined, size: 28, color: Color(0xFFFE4EF0)),
                     ),
                     const SizedBox(height: 14),
                     Text(
                       topic.title,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
                     ),
                   ],
                 ),
@@ -180,12 +181,12 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: _bg,
+                  color: Colors.black.withValues(alpha: 0.35),
                   borderRadius: BorderRadius.circular(16),
-                  boxShadow: const [
-                    BoxShadow(color: Color(0xFFFFFFFF), offset: Offset(-6, -6), blurRadius: 12),
-                    BoxShadow(color: Color(0xFFB8C6CC), offset: Offset(6, 6), blurRadius: 12),
-                  ],
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.10),
+                    width: 1,
+                  ),
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -194,16 +195,16 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
                       width: 56,
                       height: 56,
                       decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
+                        color: Colors.white.withValues(alpha: 0.10),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(topic.icon, size: 28, color: Colors.blue),
+                      child: Icon(topic.icon, size: 28, color: const Color(0xFFFE4EF0)),
                     ),
                     const SizedBox(height: 14),
                     Text(
                       topic.title,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
                     ),
                   ],
                 ),
@@ -224,12 +225,12 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
           const SizedBox(height: 20),
           Text(
             'Creating session...',
-            style: TextStyle(color: Colors.black54, fontSize: 16),
+            style: TextStyle(color: Colors.white70, fontSize: 16),
           ),
           const SizedBox(height: 8),
           Text(
             'Fetching cards and generating code',
-            style: TextStyle(color: Colors.black38, fontSize: 13),
+            style: TextStyle(color: Colors.white54, fontSize: 13),
           ),
         ],
       ),

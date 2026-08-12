@@ -7,7 +7,7 @@ import '../../widgets/chat_tile.dart';
 import 'direct_chat_screen.dart';
 import 'new_direct_chat.dart';
 
-const _bg = Color(0xFFE7ECEF);
+const _bg = Color(0xFF190831);
 
 class DirectChatsPage extends StatefulWidget {
   const DirectChatsPage({super.key});
@@ -109,14 +109,10 @@ class _EmptyDirectChats extends StatelessWidget {
             width: 88,
             height: 88,
             decoration: const BoxDecoration(
-              color: _bg,
+              color: Colors.black38,
               shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(color: Colors.white, offset: Offset(-5, -5), blurRadius: 10),
-                BoxShadow(color: Color(0xFFB8C6CC), offset: Offset(5, 5), blurRadius: 10),
-              ],
             ),
-            child: const Icon(Icons.chat_bubble_outline, size: 40, color: Colors.blue),
+            child: const Icon(Icons.chat_bubble_outline, size: 40, color: Color(0xFFFE4EF0)),
           ),
           const SizedBox(height: 20),
           const Text(
@@ -126,7 +122,7 @@ class _EmptyDirectChats extends StatelessWidget {
           const SizedBox(height: 6),
           const Text(
             'Start a conversation with a friend',
-            style: TextStyle(color: Colors.black54),
+            style: TextStyle(color: Colors.white70),
           ),
           const SizedBox(height: 24),
           FilledButton.icon(

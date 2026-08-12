@@ -13,18 +13,18 @@ class ResultsScreen extends StatefulWidget {
 
 class _ResultsScreenState extends State<ResultsScreen> {
   final _service = SessionService();
-  final _bg = const Color(0xFFE7ECEF);
+  final _bg = const Color(0xFF190831);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
-        backgroundColor: _bg,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         title: const Text(
           'Results',
-          style: TextStyle(fontWeight: FontWeight.w600),
+          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
         ),
         automaticallyImplyLeading: false,
       ),
@@ -47,7 +47,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 16),
-                  Text('Waiting for results...'),
+                  Text('Waiting for results...', style: TextStyle(color: Colors.white70)),
                 ],
               ),
             );
@@ -62,7 +62,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
   Widget _buildResults(SessionEntity session) {
     final results = session.aggregatedResults ?? {};
     if (results.isEmpty) {
-      return const Center(child: Text('No results available'));
+      return Center(child: Text('No results available', style: TextStyle(color: Colors.white)));
     }
 
     final cardTally = results['cardTally'] as Map<String, dynamic>? ?? {};
@@ -82,7 +82,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
           const SizedBox(height: 4),
           Text(
             'X marks = how many players eliminated this card',
-            style: TextStyle(color: Colors.black38, fontSize: 12),
+            style: TextStyle(color: Colors.white54, fontSize: 12),
           ),
           const SizedBox(height: 12),
           _buildCardTally(cardTally, winnerCardId),
@@ -92,7 +92,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
             const SizedBox(height: 4),
             Text(
               'Ranked by decision time (fastest first)',
-              style: TextStyle(color: Colors.black38, fontSize: 12),
+              style: TextStyle(color: Colors.white54, fontSize: 12),
             ),
             const SizedBox(height: 12),
             _buildStandings(standings),
@@ -159,7 +159,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
-      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white),
     );
   }
 
@@ -209,15 +209,11 @@ class _ResultsScreenState extends State<ResultsScreen> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isWinner ? const Color(0xFFFFF8E1) : _bg,
+        color: isWinner ? const Color(0x33FFD700) : Colors.black.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(14),
         border: isWinner
             ? Border.all(color: const Color(0xFFFFD700), width: 2)
-            : null,
-        boxShadow: const [
-          BoxShadow(color: Color(0xFFFFFFFF), offset: Offset(-3, -3), blurRadius: 6),
-          BoxShadow(color: Color(0xFFB8C6CC), offset: Offset(3, 3), blurRadius: 6),
-        ],
+            : Border.all(color: Colors.white.withValues(alpha: 0.10), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -237,7 +233,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: isWinner ? FontWeight.w700 : FontWeight.w600,
-                    color: isWinner ? Colors.amber.shade800 : Colors.black87,
+                    color: isWinner ? Colors.amber.shade800 : Colors.white,
                   ),
                 ),
               ),
@@ -301,12 +297,9 @@ class _ResultsScreenState extends State<ResultsScreen> {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: _bg,
+        color: Colors.black.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(14),
-        boxShadow: const [
-          BoxShadow(color: Color(0xFFFFFFFF), offset: Offset(-3, -3), blurRadius: 6),
-          BoxShadow(color: Color(0xFFB8C6CC), offset: Offset(3, 3), blurRadius: 6),
-        ],
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10), width: 1),
       ),
       child: Row(
         children: [
@@ -346,12 +339,13 @@ class _ResultsScreenState extends State<ResultsScreen> {
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
+                    color: Colors.white,
                   ),
                 ),
                 const SizedBox(height: 3),
                 Text(
                   '$timeSeconds s${timeoutCount > 0 ? ' \u00b7 $timeoutCount timeout${timeoutCount == 1 ? '' : 's'}' : ''}',
-                  style: const TextStyle(color: Colors.black54, fontSize: 11),
+                  style: const TextStyle(color: Colors.white70, fontSize: 11),
                 ),
               ],
             ),
@@ -359,14 +353,15 @@ class _ResultsScreenState extends State<ResultsScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: rank == 1 ? Colors.amber.shade50 : Colors.blue.shade50,
+              color: Colors.black.withValues(alpha: 0.35),
               borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.10), width: 1),
             ),
             child: Text(
               '$timeSeconds s',
               style: TextStyle(
                 fontWeight: FontWeight.w700,
-                color: rank == 1 ? Colors.amber.shade800 : Colors.blue,
+                color: rank == 1 ? Colors.amber.shade800 : const Color(0xFFFE4EF0),
                 fontSize: 13,
               ),
             ),
@@ -385,8 +380,15 @@ class _ResultsScreenState extends State<ResultsScreen> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
-          color: Colors.blue,
+          gradient: const LinearGradient(colors: [Color(0xFFFE4EF0), Color(0xFF800DD8)]),
           borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFFE4EF0).withValues(alpha: 0.4),
+              offset: const Offset(0, 4),
+              blurRadius: 12,
+            ),
+          ],
         ),
         child: const Center(
           child: Text(
