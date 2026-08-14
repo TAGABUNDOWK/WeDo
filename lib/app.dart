@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'screens/splash/splash_page.dart';
-import 'screens/welcome/welcome_page.dart';
-import 'screens/group/group_info_screen.dart';
+import 'screens/auth/splash/splash_page.dart';
+import 'screens/auth/welcome/welcome_page.dart';
+import 'screens/chat/group/group_info_screen.dart';
 
 class MyApp extends StatefulWidget {
   const MyApp({super.key});

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../models/message.dart';
-import '../../services/group/group_service.dart';
-import '../../utils/time_format.dart';
-import '../../widgets/message_bubble.dart';
-import '../../widgets/composer_option.dart';
+import '../../../models/message.dart';
+import '../../../services/group/group_service.dart';
+import '../../../utils/time_format.dart';
+import '../../../widgets/message_bubble.dart';
+import '../../../widgets/composer_option.dart';
 import '../search/chat_search_screen.dart';
 
 class GroupChatScreen extends StatefulWidget {

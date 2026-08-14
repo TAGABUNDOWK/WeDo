@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../services/location/overpass_service.dart';
+import '../../../services/location/overpass_service.dart';
 import 'nearby_places_screen.dart';
 import 'province_picker_screen.dart';
 

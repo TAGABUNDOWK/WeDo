@@ -3,9 +3,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/topic_entity.dart';
 import '../../services/session/session_service.dart';
 import 'waiting_lobby_screen.dart';
-import 'places_to_go_screen.dart';
-import 'where_to_eat_screen.dart';
-import 'movie_category_screen.dart';
+import 'places/places_to_go_screen.dart';
+import 'places/where_to_eat_screen.dart';
+import 'movie/movie_category_screen.dart';
 
 class CreateSessionScreen extends StatefulWidget {
   const CreateSessionScreen({super.key});

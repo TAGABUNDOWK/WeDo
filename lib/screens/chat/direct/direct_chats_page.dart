@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../models/direct_chat.dart';
-import '../../models/user_entity.dart';
-import '../../services/direct/direct_service.dart';
-import '../../widgets/chat_tile.dart';
+import '../../../models/direct_chat.dart';
+import '../../../models/user_entity.dart';
+import '../../../services/direct/direct_service.dart';
+import '../../../widgets/chat_tile.dart';
 import 'direct_chat_screen.dart';
 import 'new_direct_chat.dart';
 

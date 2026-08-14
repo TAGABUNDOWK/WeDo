@@ -6,10 +6,10 @@ import '../../models/user_entity.dart';
 import '../../services/group/group_service.dart';
 import '../../services/direct/direct_service.dart';
 import '../../widgets/chat_tile.dart';
-import '../group/group_chat_screen.dart';
-import '../group/create_group_screen.dart';
-import '../direct/direct_chat_screen.dart';
-import '../direct/new_direct_chat.dart';
+import 'group/group_chat_screen.dart';
+import 'group/create_group_screen.dart';
+import 'direct/direct_chat_screen.dart';
+import 'direct/new_direct_chat.dart';
 
 const _bg = Color(0xFF190831);
 

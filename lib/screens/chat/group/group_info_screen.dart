@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../models/group_chat.dart';
-import '../../models/message.dart';
-import '../../models/user_entity.dart';
-import '../../services/group/group_service.dart';
-import '../../services/friends/friend_service.dart';
-import '../../services/direct/direct_service.dart';
+import '../../../models/group_chat.dart';
+import '../../../models/message.dart';
+import '../../../models/user_entity.dart';
+import '../../../services/group/group_service.dart';
+import '../../../services/friends/friend_service.dart';
+import '../../../services/direct/direct_service.dart';
 
 class GroupInfoScreen extends StatefulWidget {
   final String groupId;

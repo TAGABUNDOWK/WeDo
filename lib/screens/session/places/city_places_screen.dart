@@ -1,12 +1,12 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../models/admin_division.dart';
-import '../../models/place_entity.dart';
-import '../../services/location/location_service.dart';
-import '../../services/location/overpass_service.dart';
-import '../../services/session/session_service.dart';
-import 'waiting_lobby_screen.dart';
+import '../../../models/admin_division.dart';
+import '../../../models/place_entity.dart';
+import '../../../services/location/location_service.dart';
+import '../../../services/location/overpass_service.dart';
+import '../../../services/session/session_service.dart';
+import '../waiting_lobby_screen.dart';
 
 class CityPlacesScreen extends StatefulWidget {
   final AdminDivision city;
