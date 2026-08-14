@@ -9,6 +9,15 @@ class UserService {
     await _db.collection('users').doc(user.userId).set(user.toJson());
   }
 
+  Future<void> createPendingUserDocument(String userId, String email) async {
+    await _db.collection('users').doc(userId).set({
+      'user_id': userId,
+      'email': email,
+      'is_email_verified': false,
+      'created_at': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
   Future<UserEntity?> getUserDocument(String userId) async {
     final doc = await _db.collection('users').doc(userId).get();
     if (!doc.exists) return null;

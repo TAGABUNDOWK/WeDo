@@ -49,13 +49,13 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: "This code has expired. Please request a new code." });
     }
 
-    if (otpData.code !== code) {
+    if (String(otpData.code) !== String(code)) {
       return res.status(400).json({ error: "Invalid code. Please try again." });
     }
 
     await db.collection("email_otps").doc(userId).update({ used: true });
 
-    await db.collection("users").doc(userId).update({ is_email_verified: true });
+    await db.collection("users").doc(userId).set({ is_email_verified: true }, { merge: true });
 
     return res.status(200).json({ success: true, message: "Email verified successfully" });
   } catch (error) {

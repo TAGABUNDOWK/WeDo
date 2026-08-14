@@ -128,7 +128,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
     if (!_canResend) return;
 
     try {
-      await _otpService.generateOTP(widget.userId, widget.email);
+      await _otpService.generateOTP(widget.userId, widget.email, resend: true);
 
       if (!mounted) return;
       ScaffoldMessenger.of(
