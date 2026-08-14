@@ -1,8 +1,8 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import '../../widgets/animated_background.dart';
-import '../auth/login_page.dart';
-import '../auth/create_account_page.dart';
+import '../../../widgets/animated_background.dart';
+import '../login_page.dart';
+import '../create_account_page.dart';
 
 class WelcomePage extends StatefulWidget {
   const WelcomePage({super.key});

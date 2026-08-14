@@ -1,23 +1,30 @@
 import 'package:flutter/material.dart';
-import '../../services/location/overpass_service.dart';
-import '../../utils/location_data.dart';
-import 'city_picker_screen.dart';
+import '../../../models/admin_division.dart';
+import '../../../services/location/overpass_service.dart';
+import '../../../utils/location_data.dart';
+import 'city_places_screen.dart';
 
-class ProvincePickerScreen extends StatefulWidget {
+class CityPickerScreen extends StatefulWidget {
+  final String provinceName;
   final PlaceCategory category;
 
-  const ProvincePickerScreen({super.key, required this.category});
+  const CityPickerScreen({
+    super.key,
+    required this.provinceName,
+    required this.category,
+  });
 
   @override
-  State<ProvincePickerScreen> createState() => _ProvincePickerScreenState();
+  State<CityPickerScreen> createState() => _CityPickerScreenState();
 }
 
-class _ProvincePickerScreenState extends State<ProvincePickerScreen> {
+class _CityPickerScreenState extends State<CityPickerScreen> {
   final _searchCtrl = TextEditingController();
   final _bg = const Color(0xFF190831);
 
-  List<String> _provinces = [];
-  List<String> _filtered = [];
+  List<AdminDivision> _cities = [];
+  List<AdminDivision> _filtered = [];
+  AdminDivision? _selectedCity;
   bool _isLoading = true;
   String? _error;
 
@@ -40,11 +47,11 @@ class _ProvincePickerScreenState extends State<ProvincePickerScreen> {
     });
 
     try {
-      final provinces = await LocationData.getProvinces();
+      final cities = await LocationData.getCities(widget.provinceName);
       if (!mounted) return;
       setState(() {
-        _provinces = provinces;
-        _filtered = provinces;
+        _cities = cities;
+        _filtered = cities;
         _isLoading = false;
       });
     } catch (e) {
@@ -56,13 +63,26 @@ class _ProvincePickerScreenState extends State<ProvincePickerScreen> {
     }
   }
 
-  void _filterProvinces(String query) {
+  void _filterCities(String query) {
     final q = query.toLowerCase();
     setState(() {
-      _filtered = _provinces
-          .where((p) => p.toLowerCase().contains(q))
+      _filtered = _cities
+          .where((c) => c.name.toLowerCase().contains(q))
           .toList();
     });
+  }
+
+  void _confirm() {
+    if (_selectedCity == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CityPlacesScreen(
+          city: _selectedCity!,
+          category: widget.category,
+        ),
+      ),
+    );
   }
 
   @override
@@ -73,8 +93,18 @@ class _ProvincePickerScreenState extends State<ProvincePickerScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: const Text(
-          'Choose province',
+          'Choose city',
           style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(20),
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              widget.provinceName,
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
+            ),
+          ),
         ),
       ),
       body: _isLoading
@@ -101,10 +131,10 @@ class _ProvincePickerScreenState extends State<ProvincePickerScreen> {
                       padding: const EdgeInsets.all(16),
                       child: TextField(
                         controller: _searchCtrl,
-                        onChanged: _filterProvinces,
+                        onChanged: _filterCities,
                         style: const TextStyle(color: Colors.white),
                         decoration: InputDecoration(
-                          hintText: 'Search province...',
+                          hintText: 'Search city...',
                           hintStyle: const TextStyle(color: Colors.white54),
                           prefixIcon: const Icon(Icons.search, color: Colors.white70),
                           border: OutlineInputBorder(
@@ -132,7 +162,7 @@ class _ProvincePickerScreenState extends State<ProvincePickerScreen> {
                       child: _filtered.isEmpty
                           ? const Center(
                               child: Text(
-                                'No provinces found',
+                                'No cities found',
                                 style: TextStyle(color: Colors.white70),
                               ),
                             )
@@ -141,25 +171,51 @@ class _ProvincePickerScreenState extends State<ProvincePickerScreen> {
                               itemCount: _filtered.length,
                               separatorBuilder: (_, _) => const Divider(height: 1),
                               itemBuilder: (context, index) {
-                                final province = _filtered[index];
+                                final city = _filtered[index];
+                                final isSelected = city == _selectedCity;
                                 return ListTile(
-                                  title: Text(province, style: const TextStyle(color: Colors.white)),
-                                  trailing: const Icon(Icons.chevron_right, color: Colors.white38),
+                                  title: Text(city.name, style: const TextStyle(color: Colors.white)),
+                                  trailing: isSelected
+                                      ? const Icon(Icons.check_circle, color: Color(0xFFFE4EF0))
+                                      : const Icon(Icons.radio_button_unchecked, color: Colors.white38),
+                                  tileColor: isSelected ? Colors.white.withValues(alpha: 0.10) : null,
                                   onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => CityPickerScreen(
-                                          provinceName: province,
-                                          category: widget.category,
-                                        ),
-                                      ),
-                                    );
+                                    setState(() => _selectedCity = city);
                                   },
                                 );
                               },
                             ),
                     ),
+                    if (_selectedCity != null)
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFFFE4EF0), Color(0xFF800DD8)],
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFFFE4EF0).withValues(alpha: 0.4),
+                                  offset: const Offset(0, 4),
+                                  blurRadius: 12,
+                                ),
+                              ],
+                            ),
+                            child: FilledButton(
+                              onPressed: _confirm,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: Colors.transparent,
+                                shadowColor: Colors.transparent,
+                              ),
+                              child: const Text('Confirm'),
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
     );

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../services/group/group_service.dart';
-import '../../widgets/chat_tile.dart';
-import '../../widgets/empty_chats.dart';
+import '../../../services/group/group_service.dart';
+import '../../../widgets/chat_tile.dart';
+import '../../../widgets/empty_chats.dart';
 import 'group_chat_screen.dart';
 import 'create_group_screen.dart';
 

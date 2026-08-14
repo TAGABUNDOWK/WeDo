@@ -1,6 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import '../../widgets/animated_background.dart';
+import '../../../widgets/animated_background.dart';
 
 class SplashPage extends StatefulWidget {
   final VoidCallback? onSplashComplete;

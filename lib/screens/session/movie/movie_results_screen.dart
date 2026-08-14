@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../models/movie.dart';
-import '../../services/movie/tmdb_service.dart';
-import '../../services/session/session_service.dart';
-import 'waiting_lobby_screen.dart';
+import '../../../models/movie.dart';
+import '../../../services/movie/tmdb_service.dart';
+import '../../../services/session/session_service.dart';
+import '../waiting_lobby_screen.dart';
 
 class MovieResultsScreen extends StatefulWidget {
   final String category;

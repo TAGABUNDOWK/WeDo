@@ -5,7 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/auth/user_service.dart';
 import '../../services/friends/friend_service.dart';
 import '../../models/user_entity.dart';
-import '../welcome/welcome_page.dart';
+import '../auth/welcome/welcome_page.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});

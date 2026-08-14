@@ -1,29 +1,44 @@
 import 'package:flutter/material.dart';
-import '../../models/message.dart';
-import '../../services/chat/chat_search_service.dart';
-import '../../utils/time_format.dart';
+import '../../../models/message.dart';
+import '../../../services/chat/chat_search_service.dart';
+import '../../../services/group/group_service.dart';
+import '../../../utils/time_format.dart';
 
-class DirectChatSearchScreen extends StatefulWidget {
-  final String chatId;
-  const DirectChatSearchScreen({super.key, required this.chatId});
+class ChatSearchScreen extends StatefulWidget {
+  final String groupId;
+  const ChatSearchScreen({super.key, required this.groupId});
 
   @override
-  State<DirectChatSearchScreen> createState() => _DirectChatSearchScreenState();
+  State<ChatSearchScreen> createState() => _ChatSearchScreenState();
 }
 
-class _DirectChatSearchScreenState extends State<DirectChatSearchScreen> {
+class _ChatSearchScreenState extends State<ChatSearchScreen> {
   final _searchCtrl = TextEditingController();
+  final _groupService = GroupService();
   final _searchService = ChatSearchService();
+  String? _selectedSenderId;
   DateTime? _startDate;
   DateTime? _endDate;
   List<ChatMessage> _results = [];
   bool _isLoading = false;
   bool _hasSearched = false;
+  List<Map<String, dynamic>> _members = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMembers();
+  }
 
   @override
   void dispose() {
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadMembers() async {
+    final memberData = await _groupService.getGroupMembersWithNames(widget.groupId);
+    if (mounted) setState(() => _members = memberData);
   }
 
   Future<void> _search() async {
@@ -33,8 +48,9 @@ class _DirectChatSearchScreenState extends State<DirectChatSearchScreen> {
     });
 
     try {
-      final results = await _searchService.searchDirectChatMessages(
-        chatId: widget.chatId,
+      final results = await _searchService.searchGroupMessages(
+        groupId: widget.groupId,
+        senderId: _selectedSenderId,
         startDate: _startDate,
         endDate: _endDate,
         textQuery: _searchCtrl.text.trim(),
@@ -71,6 +87,7 @@ class _DirectChatSearchScreenState extends State<DirectChatSearchScreen> {
 
   void _clearFilters() {
     setState(() {
+      _selectedSenderId = null;
       _startDate = null;
       _endDate = null;
       _searchCtrl.clear();
@@ -122,6 +139,36 @@ class _DirectChatSearchScreenState extends State<DirectChatSearchScreen> {
                 Row(
                   children: [
                     Expanded(
+                      child: DropdownButtonFormField<String?>(
+                        initialValue: _selectedSenderId,
+                        hint: const Text('Any user'),
+                        decoration: InputDecoration(
+                          labelText: 'From',
+                          border: const OutlineInputBorder(),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          isDense: true,
+                        ),
+                        items: [
+                          const DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text('Any user'),
+                          ),
+                          ..._members.map((m) => DropdownMenuItem<String?>(
+                                value: m['uid'] as String,
+                                child: Text(m['displayName'] as String),
+                              )),
+                        ],
+                        onChanged: (val) {
+                          setState(() => _selectedSenderId = val);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
                       child: OutlinedButton.icon(
                         onPressed: () => _pickDate(isStart: true),
                         icon: const Icon(Icons.calendar_today, size: 16),
@@ -164,12 +211,24 @@ class _DirectChatSearchScreenState extends State<DirectChatSearchScreen> {
                     ),
                   ],
                 ),
-                if (_startDate != null || _endDate != null) ...[
+                if (_selectedSenderId != null || _startDate != null || _endDate != null) ...[
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 6,
                     runSpacing: 4,
                     children: [
+                      if (_selectedSenderId != null)
+                        Chip(
+                          label: Text(
+                            _members.firstWhere(
+                              (m) => m['uid'] == _selectedSenderId,
+                              orElse: () => {'displayName': _selectedSenderId},
+                            )['displayName'] as String,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          onDeleted: () => setState(() => _selectedSenderId = null),
+                          visualDensity: VisualDensity.compact,
+                        ),
                       if (_startDate != null)
                         Chip(
                           label: Text(formatMonthDay(_startDate!), style: const TextStyle(fontSize: 12)),
@@ -262,7 +321,7 @@ class _DirectChatSearchScreenState extends State<DirectChatSearchScreen> {
                       children: [
                         Icon(Icons.manage_search, size: 64, color: Colors.grey),
                         SizedBox(height: 12),
-                        Text('Search by content or date', style: TextStyle(color: Colors.grey, fontSize: 16)),
+                        Text('Search by content, user, or date', style: TextStyle(color: Colors.grey, fontSize: 16)),
                       ],
                     ),
                   ),

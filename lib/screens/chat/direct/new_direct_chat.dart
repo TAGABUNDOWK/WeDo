@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../models/user_entity.dart';
-import '../../services/friends/friend_service.dart';
-import '../../services/direct/direct_service.dart';
+import '../../../models/user_entity.dart';
+import '../../../services/friends/friend_service.dart';
+import '../../../services/direct/direct_service.dart';
 import 'direct_chat_screen.dart';
 
 class NewDirectChatScreen extends StatefulWidget {

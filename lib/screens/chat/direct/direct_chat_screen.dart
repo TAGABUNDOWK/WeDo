@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../models/message.dart';
-import '../../models/user_entity.dart';
-import '../../services/direct/direct_service.dart';
-import '../../utils/time_format.dart';
-import '../../widgets/message_bubble.dart';
-import '../../widgets/composer_option.dart';
+import '../../../models/message.dart';
+import '../../../models/user_entity.dart';
+import '../../../services/direct/direct_service.dart';
+import '../../../utils/time_format.dart';
+import '../../../widgets/message_bubble.dart';
+import '../../../widgets/composer_option.dart';
 import '../search/direct_chat_search_screen.dart';
 
 class DirectChatScreen extends StatefulWidget {
