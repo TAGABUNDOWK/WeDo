@@ -1,9 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/friend_entity.dart';
+import '../../models/notification_entity.dart';
 import '../../models/user_entity.dart';
+import '../notification/notification_service.dart';
 
 class FriendService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final NotificationService _notificationService = NotificationService();
 
   static String friendshipId(String a, String b) {
     final ids = [a, b]..sort();
@@ -19,6 +22,25 @@ class FriendService {
       'requestedBy': currentUid,
       'updatedAt': FieldValue.serverTimestamp(),
     });
+
+    final senderDoc = await _db.collection('users').doc(currentUid).get();
+    final senderData = senderDoc.data();
+    final senderName = senderData?['display_name'] as String? ??
+        senderData?['username'] as String? ??
+        'Someone';
+
+    await _notificationService.createNotification(
+      targetUid,
+      NotificationEntity(
+        notificationId: '',
+        type: NotificationType.friendRequest,
+        title: 'Friend Request',
+        message: '$senderName sent you a friend request',
+        senderId: currentUid,
+        relatedId: id,
+        createdAt: DateTime.now(),
+      ),
+    );
   }
 
   Future<void> acceptRequest(String friendshipId) async {
@@ -26,6 +48,36 @@ class FriendService {
       'status': 'friends',
       'updatedAt': FieldValue.serverTimestamp(),
     });
+
+    final friendshipDoc =
+        await _db.collection('friends').doc(friendshipId).get();
+    final friendshipData = friendshipDoc.data();
+    if (friendshipData == null) return;
+
+    final userIds = (friendshipData['userIds'] as List?)?.cast<String>() ?? [];
+    final requestedBy = friendshipData['requestedBy'] as String?;
+    if (requestedBy == null || userIds.length != 2) return;
+
+    final acceptorId = userIds.firstWhere((id) => id != requestedBy);
+
+    final acceptorDoc = await _db.collection('users').doc(acceptorId).get();
+    final acceptorData = acceptorDoc.data();
+    final acceptorName = acceptorData?['display_name'] as String? ??
+        acceptorData?['username'] as String? ??
+        'Someone';
+
+    await _notificationService.createNotification(
+      requestedBy,
+      NotificationEntity(
+        notificationId: '',
+        type: NotificationType.friendRequestAccepted,
+        title: 'Friend Request Accepted',
+        message: '$acceptorName accepted your friend request',
+        senderId: acceptorId,
+        relatedId: friendshipId,
+        createdAt: DateTime.now(),
+      ),
+    );
   }
 
   Future<void> declineRequest(String friendshipId) async {

@@ -2,8 +2,10 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../models/notification_entity.dart';
 import '../../services/auth/user_service.dart';
 import '../../services/friends/friend_service.dart';
+import '../../services/notification/notification_service.dart';
 import '../../models/user_entity.dart';
 import '../auth/welcome/welcome_page.dart';
 
@@ -18,12 +20,14 @@ class _AccountScreenState extends State<AccountScreen> {
   final _auth = FirebaseAuth.instance;
   final _userService = UserService();
   final _friendService = FriendService();
+  final _notificationService = NotificationService();
   final _db = FirebaseFirestore.instance;
   UserEntity? _user;
   int _friendsCount = 0;
-  List<Map<String, dynamic>> _friendRequests = [];
   bool _showNotifications = false;
   bool _loading = true;
+
+  String get _uid => _auth.currentUser?.uid ?? '';
 
   @override
   void initState() {
@@ -43,47 +47,28 @@ class _AccountScreenState extends State<AccountScreen> {
         .where('userIds', arrayContains: uid)
         .where('status', isEqualTo: 'friends')
         .get();
-    final requestsSnap = await _db
-        .collection('friends')
-        .where('userIds', arrayContains: uid)
-        .where('status', isEqualTo: 'pending')
-        .get();
-
-    final incomingRequests = <Map<String, dynamic>>[];
-    for (final doc in requestsSnap.docs) {
-      final data = doc.data();
-      final requestedBy = data['requestedBy'] as String?;
-      if (requestedBy != null && requestedBy != uid) {
-        final senderDoc = await _db.collection('users').doc(requestedBy).get();
-        final senderData = senderDoc.data();
-        incomingRequests.add({
-          'friendshipId': doc.id,
-          'userId': requestedBy,
-          'displayName': senderData?['display_name'] ?? 'Unknown',
-          'username': senderData?['username'] ?? '',
-          'photoUrl': senderData?['photo_url'],
-        });
-      }
-    }
 
     if (mounted) {
       setState(() {
         _user = user;
         _friendsCount = friendsSnap.docs.length;
-        _friendRequests = incomingRequests;
         _loading = false;
       });
     }
   }
 
-  Future<void> _acceptRequest(String friendshipId) async {
+  Future<void> _acceptRequest(String friendshipId, String notificationId) async {
     await _friendService.acceptRequest(friendshipId);
-    _loadUser();
+    if (notificationId.isNotEmpty) {
+      await _notificationService.markAsRead(_uid, notificationId);
+    }
   }
 
-  Future<void> _declineRequest(String friendshipId) async {
+  Future<void> _declineRequest(String friendshipId, String notificationId) async {
     await _friendService.declineRequest(friendshipId);
-    _loadUser();
+    if (notificationId.isNotEmpty) {
+      await _notificationService.markAsRead(_uid, notificationId);
+    }
   }
 
   Future<void> _signOut() async {
@@ -176,56 +161,7 @@ class _AccountScreenState extends State<AccountScreen> {
                                     fontFamily: 'Poppins',
                                   ),
                                 ),
-                                GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      _showNotifications = !_showNotifications;
-                                    });
-                                  },
-                                  child: SizedBox(
-                                    width: 40,
-                                    height: 40,
-                                    child: Stack(
-                                      clipBehavior: Clip.none,
-                                      children: [
-                                        Container(
-                                          width: 40,
-                                          height: 40,
-                                          decoration: BoxDecoration(
-                                            color: Colors.white.withValues(alpha: 0.08),
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          child: Icon(
-                                            Icons.notifications_outlined,
-                                            color: Colors.white.withValues(alpha: 0.7),
-                                            size: 22,
-                                          ),
-                                        ),
-                                        if (_friendRequests.isNotEmpty)
-                                          Positioned(
-                                            right: -2,
-                                            top: -2,
-                                            child: Container(
-                                              padding: const EdgeInsets.all(5),
-                                              decoration: const BoxDecoration(
-                                                color: Color(0xFFFE4EF0),
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: Text(
-                                                '${_friendRequests.length}',
-                                                style: const TextStyle(
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: Colors.white,
-                                                  fontFamily: 'Poppins',
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
+                                _buildNotificationBell(),
                               ],
                             ),
                             const SizedBox(height: 24),
@@ -243,6 +179,65 @@ class _AccountScreenState extends State<AccountScreen> {
                     if (_showNotifications) _buildNotificationsPanel(),
                   ],
                 ),
+    );
+  }
+
+  Widget _buildNotificationBell() {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _showNotifications = !_showNotifications;
+        });
+      },
+      child: SizedBox(
+        width: 40,
+        height: 40,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                Icons.notifications_outlined,
+                color: Colors.white.withValues(alpha: 0.7),
+                size: 22,
+              ),
+            ),
+            StreamBuilder<int>(
+              stream: _notificationService.getUnreadCount(_uid),
+              builder: (context, snapshot) {
+                final count = snapshot.data ?? 0;
+                if (count == 0) return const SizedBox.shrink();
+                return Positioned(
+                  right: -2,
+                  top: -2,
+                  child: Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFE4EF0),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      count > 9 ? '9+' : '$count',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                        fontFamily: 'Poppins',
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -616,7 +611,7 @@ class _AccountScreenState extends State<AccountScreen> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
-            constraints: const BoxConstraints(maxHeight: 350),
+            constraints: const BoxConstraints(maxHeight: 400),
             decoration: BoxDecoration(
               color: const Color(0xFF2A1450).withValues(alpha: 0.95),
               borderRadius: BorderRadius.circular(16),
@@ -649,154 +644,97 @@ class _AccountScreenState extends State<AccountScreen> {
                           fontFamily: 'Poppins',
                         ),
                       ),
-                      GestureDetector(
-                        onTap: () => setState(() => _showNotifications = false),
-                        child: Icon(
-                          Icons.close,
-                          size: 20,
-                          color: Colors.white.withValues(alpha: 0.5),
-                        ),
+                      Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () async {
+                              await _notificationService.markAllAsRead(_uid);
+                            },
+                            child: Text(
+                              'Mark all read',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.white.withValues(alpha: 0.5),
+                                fontFamily: 'Poppins',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          GestureDetector(
+                            onTap: () => setState(() => _showNotifications = false),
+                            child: Icon(
+                              Icons.close,
+                              size: 20,
+                              color: Colors.white.withValues(alpha: 0.5),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
                 Divider(height: 1, color: Colors.white.withValues(alpha: 0.08)),
-                if (_friendRequests.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 40),
-                    child: Text(
-                      'No notifications yet',
-                      style: TextStyle(
-                        color: Colors.white38,
-                        fontFamily: 'Poppins',
-                        fontSize: 14,
+                StreamBuilder<List<NotificationEntity>>(
+                  stream: _notificationService.getNotificationsStream(_uid),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 40),
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
+
+                    final notifications = snapshot.data ?? [];
+
+                    if (notifications.isEmpty) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 40),
+                        child: Text(
+                          'No notifications yet',
+                          style: TextStyle(
+                            color: Colors.white38,
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                          ),
+                        ),
+                      );
+                    }
+
+                    return Flexible(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        itemCount: notifications.length,
+                        itemBuilder: (context, index) {
+                          final notif = notifications[index];
+                          return _NotificationItem(
+                            notification: notif,
+                            userService: _userService,
+                            onAccept: notif.type == NotificationType.friendRequest
+                                ? () => _acceptRequest(
+                                    notif.relatedId ?? '', notif.notificationId)
+                                : null,
+                            onDecline: notif.type == NotificationType.friendRequest
+                                ? () => _declineRequest(
+                                    notif.relatedId ?? '', notif.notificationId)
+                                : null,
+                            onTap: () async {
+                              if (!notif.isRead) {
+                                await _notificationService.markAsRead(
+                                    _uid, notif.notificationId);
+                              }
+                            },
+                          );
+                        },
                       ),
-                    ),
-                  )
-                else
-                  Flexible(
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      itemCount: _friendRequests.length,
-                      itemBuilder: (context, index) {
-                        final request = _friendRequests[index];
-                        return _buildFriendRequestItem(request);
-                      },
-                    ),
-                  ),
+                    );
+                  },
+                ),
               ],
             ),
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildFriendRequestItem(Map<String, dynamic> request) {
-    final hasPhoto = request['photoUrl'] != null &&
-        (request['photoUrl'] as String).isNotEmpty;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      child: Row(
-        children: [
-          ClipOval(
-            child: hasPhoto
-                ? Image.network(
-                    request['photoUrl'],
-                    width: 36,
-                    height: 36,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) =>
-                        _buildSmallAvatar(),
-                  )
-                : _buildSmallAvatar(),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  request['displayName'],
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white,
-                    fontFamily: 'Poppins',
-                  ),
-                ),
-                Text(
-                  'sent you a friend request',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.white.withValues(alpha: 0.5),
-                    fontFamily: 'Poppins',
-                  ),
-                ),
-              ],
-            ),
-          ),
-          GestureDetector(
-            onTap: () => _acceptRequest(request['friendshipId']),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFFE4EF0), Color(0xFF800DD8)],
-                ),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Text(
-                'Accept',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                  fontFamily: 'Poppins',
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 6),
-          GestureDetector(
-            onTap: () => _declineRequest(request['friendshipId']),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                'Decline',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white.withValues(alpha: 0.6),
-                  fontFamily: 'Poppins',
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSmallAvatar() {
-    return Container(
-      width: 36,
-      height: 36,
-      decoration: const BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: LinearGradient(
-          colors: [Color(0xFFFE4EF0), Color(0xFF800DD8)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: const Icon(Icons.person, color: Colors.white, size: 18),
     );
   }
 
@@ -806,6 +744,186 @@ class _AccountScreenState extends State<AccountScreen> {
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ];
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+}
+
+class _NotificationItem extends StatelessWidget {
+  final NotificationEntity notification;
+  final UserService userService;
+  final VoidCallback? onAccept;
+  final VoidCallback? onDecline;
+  final VoidCallback? onTap;
+
+  const _NotificationItem({
+    required this.notification,
+    required this.userService,
+    this.onAccept,
+    this.onDecline,
+    this.onTap,
+  });
+
+  IconData _typeIcon() {
+    switch (notification.type) {
+      case NotificationType.friendRequest:
+        return Icons.person_add;
+      case NotificationType.friendRequestAccepted:
+        return Icons.check_circle;
+    }
+  }
+
+  Color _typeColor() {
+    switch (notification.type) {
+      case NotificationType.friendRequest:
+        return const Color(0xFFFE4EF0);
+      case NotificationType.friendRequestAccepted:
+        return const Color(0xFF4CAF50);
+    }
+  }
+
+  String _timeAgo() {
+    final diff = DateTime.now().difference(notification.createdAt);
+    if (diff.inSeconds < 60) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${(diff.inDays / 7).floor()}w ago';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: notification.isRead
+              ? Colors.transparent
+              : Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: _typeColor().withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(_typeIcon(), size: 18, color: _typeColor()),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    notification.title,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: notification.isRead
+                          ? FontWeight.w500
+                          : FontWeight.w700,
+                      color: Colors.white,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    notification.message,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.6),
+                      fontFamily: 'Poppins',
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _timeAgo(),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.white.withValues(alpha: 0.4),
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                  if (notification.type == NotificationType.friendRequest &&
+                      (onAccept != null || onDecline != null)) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        if (onAccept != null)
+                          GestureDetector(
+                            onTap: onAccept,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 5),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFFFE4EF0),
+                                    Color(0xFF800DD8)
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text(
+                                'Accept',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                  fontFamily: 'Poppins',
+                                ),
+                              ),
+                            ),
+                          ),
+                        if (onAccept != null && onDecline != null)
+                          const SizedBox(width: 6),
+                        if (onDecline != null)
+                          GestureDetector(
+                            onTap: onDecline,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                'Decline',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white.withValues(alpha: 0.6),
+                                  fontFamily: 'Poppins',
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (!notification.isRead)
+              Container(
+                width: 8,
+                height: 8,
+                margin: const EdgeInsets.only(top: 4),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFE4EF0),
+                  shape: BoxShape.circle,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

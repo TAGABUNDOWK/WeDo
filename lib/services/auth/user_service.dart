@@ -105,4 +105,10 @@ class UserService {
 
     return nearby;
   }
+
+  Future<void> updateFcmToken(String userId, String? token) async {
+    await _db.collection('users').doc(userId).update({
+      'fcm_token': token,
+    });
+  }
 }

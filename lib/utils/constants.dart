@@ -10,6 +10,7 @@ class AppConstants {
   static const String cardsSubcollection = 'cards';
   static const String sessionsCollection = 'sessions';
   static const String participantsSubcollection = 'participants';
+  static const String notificationsCollection = 'notifications';
 
   // TMDB API (proxied through Vercel)
   static const String tmdbProxyUrl = 'https://wedo-api.vercel.app/tmdb';
