@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/auth/user_service.dart';
 import '../../widgets/animated_background.dart';
@@ -40,6 +41,11 @@ class _LoginPageState extends State<LoginPage> {
 
       final credential = await _authService.signIn(email, pass);
       final userId = credential.user!.uid;
+
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token != null) {
+        await _userService.updateFcmToken(userId, token);
+      }
 
       final isVerified = await _userService.isEmailVerified(userId);
 

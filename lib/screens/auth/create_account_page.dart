@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/auth/user_service.dart';
 import '../../services/location/location_service.dart';
@@ -67,6 +68,11 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
       );
 
       await _userService.createUserDocument(user);
+
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token != null) {
+        await _userService.updateFcmToken(userId, token);
+      }
 
       if (position != null) {
         try {
