@@ -1,9 +1,12 @@
 import 'dart:ui';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../account/account_screen.dart';
 import '../friends/friends_page.dart';
 import '../session/session_entry_screen.dart';
+import '../session/create_session_screen.dart';
+import '../session/join_session_screen.dart';
 import '../chat/chat_tab.dart';
 import '../../widgets/animated_background.dart';
 import '../../services/auth/user_service.dart';
@@ -285,74 +288,269 @@ class _CenterLogoButton extends StatefulWidget {
   State<_CenterLogoButton> createState() => _CenterLogoButtonState();
 }
 
-class _CenterLogoButtonState extends State<_CenterLogoButton> {
+class _CenterLogoButtonState extends State<_CenterLogoButton>
+    with SingleTickerProviderStateMixin {
   bool _isPressed = false;
+  bool _isMenuOpen = false;
+  late final AnimationController _menuCtrl;
+  late final Animation<double> _menuScale;
+  late final Animation<double> _menuFade;
+
+  @override
+  void initState() {
+    super.initState();
+    _menuCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _menuScale = CurvedAnimation(
+      parent: _menuCtrl,
+      curve: Curves.easeOutBack,
+    );
+    _menuFade = CurvedAnimation(
+      parent: _menuCtrl,
+      curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _menuCtrl.dispose();
+    super.dispose();
+  }
+
+  void _toggleMenu() {
+    setState(() => _isMenuOpen = !_isMenuOpen);
+    if (_isMenuOpen) {
+      _menuCtrl.forward();
+    } else {
+      _menuCtrl.reverse();
+    }
+  }
+
+  void _closeMenu() {
+    if (_isMenuOpen) {
+      setState(() => _isMenuOpen = false);
+      _menuCtrl.reverse();
+    }
+  }
+
+  void _onChoiceTap(VoidCallback? navigation) {
+    _closeMenu();
+    if (navigation != null) {
+      Future.delayed(const Duration(milliseconds: 200), navigation);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // ── Radial popup menu ──────────────────────────────────
+        Positioned(
+          bottom: 54,
+          left: -90,
+          right: -90,
+          child: AnimatedBuilder(
+            animation: _menuCtrl,
+            builder: (context, _) {
+              return Opacity(
+                opacity: _menuFade.value,
+                child: SizedBox(
+                  height: 110,
+                  width: 180,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      // Left — Create Session (upper-left of arc)
+                      Positioned(
+                        left: 44,
+                        bottom: 20 * _menuScale.value,
+                        child: Transform.translate(
+                          offset: Offset(0, 30 * (1 - _menuScale.value)),
+                          child: _PopupCircle(
+                            icon: 'assets/icons/create.png',
+                            onTap: () => _onChoiceTap(() {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const CreateSessionScreen(),
+                                ),
+                              );
+                            }),
+                          ),
+                        ),
+                      ),
+                      // Middle — Placeholder (top of arc)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 40 * _menuScale.value,
+                        child: Transform.translate(
+                          offset: Offset(0, 20 * (1 - _menuScale.value)),
+                          child: _PopupCircle(
+                            icon: 'assets/icons/controller.png',
+                            onTap: () => _onChoiceTap(null),
+                          ),
+                        ),
+                      ),
+                      // Right — Join Session (upper-right of arc)
+                      Positioned(
+                        right: 44,
+                        bottom: 20 * _menuScale.value,
+                        child: Transform.translate(
+                          offset: Offset(0, 30 * (1 - _menuScale.value)),
+                          child: _PopupCircle(
+                            icon: 'assets/icons/connect.png',
+                            onTap: () => _onChoiceTap(() {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const JoinSessionScreen(),
+                                ),
+                              );
+                            }),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+
+        // ── Center capsule button ───────────────────────────────
+        Positioned.fill(
+          child: GestureDetector(
+            onTap: () {
+              if (!_isMenuOpen) {
+                widget.onTap();
+              }
+            },
+            onLongPress: _toggleMenu,
+            onTapDown: (_) => setState(() => _isPressed = true),
+            onTapUp: (_) => setState(() => _isPressed = false),
+            onTapCancel: () => setState(() => _isPressed = false),
+            child: AnimatedScale(
+              scale: _isPressed ? 0.92 : 1.0,
+              duration: const Duration(milliseconds: 120),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      _isMenuOpen
+                          ? const Color(0xFFFF6BB5)
+                          : widget.isActive
+                              ? const Color(0xFFFF6BB5)
+                              : const Color(0xFF9A5AB0),
+                      _isMenuOpen
+                          ? const Color(0xFF800DD8)
+                          : widget.isActive
+                              ? const Color(0xFF800DD8)
+                              : const Color(0xFF6A3A80),
+                    ],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (_isMenuOpen
+                              ? const Color(0xFFFE4EF0)
+                              : widget.isActive
+                                  ? const Color(0xFFFE4EF0)
+                                  : const Color(0xFF7A4A8A))
+                          .withValues(alpha: _isMenuOpen ? 0.6 : widget.isActive ? 0.5 : 0.25),
+                      blurRadius: 20,
+                      spreadRadius: 2,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: ClipOval(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withValues(alpha: 0.08),
+                      ),
+                      padding: const EdgeInsets.all(12),
+                      child: AnimatedRotation(
+                        turns: _isMenuOpen ? 0.125 : 0,
+                        duration: const Duration(milliseconds: 300),
+                        child: Opacity(
+                          opacity: _isMenuOpen || widget.isActive ? 1.0 : 0.65,
+                          child: Image.asset(
+                            'assets/images/WeDo-Logo.png',
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Icon(
+                                Icons.casino,
+                                color: widget.isActive
+                                    ? widget.activeColor
+                                    : widget.inactiveColor,
+                                size: 28,
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Popup circle button ────────────────────────────────────────────────────
+
+class _PopupCircle extends StatelessWidget {
+  final String icon;
+  final VoidCallback onTap;
+
+  const _PopupCircle({
+    required this.icon,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTapDown: (_) => setState(() => _isPressed = true),
-      onTapUp: (_) {
-        setState(() => _isPressed = false);
-        widget.onTap();
-      },
-      onTapCancel: () => setState(() => _isPressed = false),
-      child: AnimatedScale(
-        scale: _isPressed ? 0.92 : 1.0,
-        duration: const Duration(milliseconds: 120),
+      onTap: onTap,
+      child: SizedBox(
+        width: 52,
+        height: 52,
         child: Container(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                widget.isActive
-                    ? const Color(0xFFFF6BB5)
-                    : const Color(0xFF9A5AB0),
-                widget.isActive
-                    ? const Color(0xFF800DD8)
-                    : const Color(0xFF6A3A80),
-              ],
+            color: Colors.white.withValues(alpha: 0.10),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.15),
+              width: 1,
             ),
-            boxShadow: [
-              BoxShadow(
-                color:
-                    (widget.isActive
-                            ? const Color(0xFFFE4EF0)
-                            : const Color(0xFF7A4A8A))
-                        .withValues(alpha: widget.isActive ? 0.5 : 0.25),
-                blurRadius: 20,
-                spreadRadius: 2,
-                offset: const Offset(0, 4),
-              ),
-            ],
           ),
-          child: ClipOval(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-              child: Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.08),
-                ),
-                padding: const EdgeInsets.all(12),
-                child: Opacity(
-                  opacity: widget.isActive ? 1.0 : 0.65,
-                  child: Image.asset(
-                    'assets/images/WeDo-Logo.png',
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Icon(
-                        Icons.casino,
-                        color: widget.isActive
-                            ? widget.activeColor
-                            : widget.inactiveColor,
-                        size: 28,
-                      );
-                    },
-                  ),
-                ),
+          child: Center(
+            child: SizedBox(
+              width: 26,
+              height: 26,
+              child: Image.asset(
+                icon,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) {
+                  return Icon(
+                    Icons.circle,
+                    color: Colors.white.withValues(alpha: 0.6),
+                    size: 12,
+                  );
+                },
               ),
             ),
           ),
@@ -566,74 +764,78 @@ class _HomeTabState extends State<_HomeTab> {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Image.asset(
-                  'assets/images/WeDo-Logo.png',
-                  width: 60,
-                  height: 60,
-                  errorBuilder: (context, error, stackTrace) {
-                    return const Icon(
-                      Icons.casino,
-                      color: Color(0xFFFE4EF0),
-                      size: 40,
-                    );
-                  },
-                ),
-                const SizedBox(width: 10),
-                ShaderMask(
-                  shaderCallback: (bounds) => const LinearGradient(
-                    colors: [Color(0xFFFE4EF0), Color(0xFF800DD8)],
-                  ).createShader(bounds),
-                  child: const Text(
-                    'WeDo',
-                    style: TextStyle(
-                      fontFamily: 'PressStart2P',
-                      fontSize: 26,
-                      color: Colors.white,
-                    ),
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Image.asset(
+                    'assets/images/WeDo-Logo.png',
+                    width: 60,
+                    height: 60,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Icon(
+                        Icons.casino,
+                        color: Color(0xFFFE4EF0),
+                        size: 40,
+                      );
+                    },
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 5),
-            Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: RichText(
-                text: TextSpan(
-                  children: [
-                    TextSpan(
-                      text: '${_greeting()}, ',
-                      style: const TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
+                  const SizedBox(width: 10),
+                  ShaderMask(
+                    shaderCallback: (bounds) => const LinearGradient(
+                      colors: [Color(0xFFFE4EF0), Color(0xFF800DD8)],
+                    ).createShader(bounds),
+                    child: const Text(
+                      'WeDo',
+                      style: TextStyle(
+                        fontFamily: 'PressStart2P',
+                        fontSize: 26,
                         color: Colors.white,
                       ),
                     ),
-                    TextSpan(
-                      text: '$_displayName!',
-                      style: const TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFFFE4EF0),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 5),
+              Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: RichText(
+                  text: TextSpan(
+                    children: [
+                      TextSpan(
+                        text: '${_greeting()}, ',
+                        style: const TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
                       ),
-                    ),
-                  ],
+                      TextSpan(
+                        text: '$_displayName!',
+                        style: const TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFFFE4EF0),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 20),
-            const _FeatureCarousel(),
-            const SizedBox(height: 24),
-            const _NowPlayingSection(),
-          ],
+              const SizedBox(height: 20),
+              const _FeatureCarousel(),
+              const SizedBox(height: 24),
+              const _NowPlayingSection(),
+              const SizedBox(height: 28),
+              const _StackedCards(),
+            ],
+          ),
         ),
       ),
     );
@@ -660,16 +862,17 @@ class _FeatureCarouselState extends State<_FeatureCarousel>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: _autoScrollInterval),
-    )..addStatusListener((status) {
-        if (status == AnimationStatus.completed) {
-          _advance();
-          _controller.reset();
-          _controller.forward();
-        }
-      });
+    _controller =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(seconds: _autoScrollInterval),
+        )..addStatusListener((status) {
+          if (status == AnimationStatus.completed) {
+            _advance();
+            _controller.reset();
+            _controller.forward();
+          }
+        });
     _controller.forward();
   }
 
@@ -697,10 +900,7 @@ class _FeatureCarouselState extends State<_FeatureCarousel>
         switchInCurve: Curves.easeInOut,
         switchOutCurve: Curves.easeInOut,
         transitionBuilder: (child, animation) {
-          return FadeTransition(
-            opacity: animation,
-            child: child,
-          );
+          return FadeTransition(opacity: animation, child: child);
         },
         child: _FeatureCarouselCard(
           key: ValueKey(_currentIndex),
@@ -984,10 +1184,7 @@ class _NowPlayingCardWidget extends StatelessWidget {
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Colors.black87,
-                    ],
+                    colors: [Colors.transparent, Colors.black87],
                   ),
                 ),
               ),
@@ -1040,4 +1237,414 @@ class _NowPlayingCardWidget extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── Stacked slanted cards ──────────────────────────────────────────────────
+
+Path _slantedCardPath(Size size, double slant, double radius) {
+  final w = size.width;
+  final h = size.height;
+  final path = Path();
+
+  path.moveTo(radius, slant * radius / w);
+  path.lineTo(w - radius, slant * (w - radius) / w);
+  path.quadraticBezierTo(w, slant, w, slant + radius);
+  path.lineTo(w, h + slant - radius);
+  path.quadraticBezierTo(w, h + slant, w - radius, h + slant);
+  path.lineTo(radius, h + slant * radius / w);
+  path.quadraticBezierTo(0, h, 0, h - radius);
+  path.lineTo(0, radius);
+  path.quadraticBezierTo(0, 0, radius, slant * radius / w);
+  path.close();
+  return path;
+}
+
+class _StackedCards extends StatefulWidget {
+  const _StackedCards();
+
+  @override
+  State<_StackedCards> createState() => _StackedCardsState();
+}
+
+class _StackedCardsState extends State<_StackedCards>
+    with SingleTickerProviderStateMixin {
+  int _userCount = 0;
+  late final AnimationController _swapCtrl;
+  late Animation<double> _leftOffsetX;
+  late Animation<double> _leftAngle;
+  late Animation<double> _rightOffsetX;
+  late Animation<double> _rightAngle;
+  bool _isLeftFront = true;
+  bool _animating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchUserCount();
+
+    _swapCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+
+    _initAnimations();
+
+    _swapCtrl.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        setState(() {
+          _isLeftFront = !_isLeftFront;
+          _animating = false;
+        });
+      }
+    });
+  }
+
+  void _initAnimations() {
+    _leftOffsetX = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: -60.0), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: -60.0, end: 0.0), weight: 1),
+    ]).animate(CurvedAnimation(
+      parent: _swapCtrl,
+      curve: Curves.easeInOutCubic,
+    ));
+
+    _leftAngle = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: -0.03, end: -0.78), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: -0.78, end: -0.03), weight: 1),
+    ]).animate(CurvedAnimation(
+      parent: _swapCtrl,
+      curve: Curves.easeInOutCubic,
+    ));
+
+    _rightOffsetX = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 30.0, end: 90.0), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: 90.0, end: 30.0), weight: 1),
+    ]).animate(CurvedAnimation(
+      parent: _swapCtrl,
+      curve: Curves.easeInOutCubic,
+    ));
+
+    _rightAngle = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: -0.04, end: -0.78), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: -0.78, end: -0.04), weight: 1),
+    ]).animate(CurvedAnimation(
+      parent: _swapCtrl,
+      curve: Curves.easeInOutCubic,
+    ));
+  }
+
+  @override
+  void dispose() {
+    _swapCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onSwapTap() {
+    if (_animating) return;
+    _animating = true;
+    _swapCtrl.forward(from: 0.0);
+  }
+
+  Future<void> _fetchUserCount() async {
+    final snapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .count()
+        .get();
+    if (mounted) {
+      setState(() => _userCount = snapshot.count ?? 0);
+    }
+  }
+
+  // ── Card builders ───────────────────────────────────────────────
+
+  Widget _buildLeftCard(double slant, double cornerR, Size cardSize) {
+    return ClipPath(
+      clipper: _SlantedCardClipper(slant: slant, cornerRadius: cornerR),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Stack(
+          children: [
+            CustomPaint(
+              size: cardSize,
+              painter: _GlassCardPainter(slant: slant),
+            ),
+            Positioned(
+              left: 21,
+              top: 32,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFE4EF0),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  "LET'S WEDO",
+                  style: TextStyle(
+                    fontFamily: 'ArialNBI',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: 21,
+              top: 66,
+              child: const Text(
+                'Make Every Choice\nMore Fun!',
+                style: TextStyle(
+                  fontFamily: 'ArialNBI',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  height: 1.2,
+                ),
+              ),
+            ),
+            Positioned(
+              left: 21,
+              top: 116,
+              child: Row(
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: const BoxDecoration(
+                      color: Colors.green,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '$_userCount active players',
+                    style: const TextStyle(
+                      fontFamily: 'ArialNBI',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white70,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              left: 21,
+              top: 138,
+              right: 130,
+              child: Text(
+                "WeDo makes everyday decisions easier and more exciting. Whether you're choosing what to eat, what movie to watch, where to go, or what to do next, WeDo helps you decide with a little more fun and a lot less overthinking.",
+                style: TextStyle(
+                  fontFamily: 'ArialNBI',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.white.withValues(alpha: 0.6),
+                  height: 1.4,
+                ),
+                maxLines: 7,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Positioned(
+              right: 15,
+              top: 120,
+              child: Image.asset(
+                'assets/images/WeDo-Logo.png',
+                width: 100,
+                height: 100,
+                errorBuilder: (context, error, stackTrace) {
+                  return const Icon(
+                    Icons.casino,
+                    color: Color(0xFFFE4EF0),
+                    size: 60,
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRightCard(double slant, double cornerR, Size cardSize) {
+    return ClipPath(
+      clipper: _SlantedCardClipper(slant: slant, cornerRadius: cornerR),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: CustomPaint(
+          size: cardSize,
+          painter: _BackGlassCardPainter(slant: slant),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const cardW = 300.0;
+    const cardH = 300.0;
+    const slant = 30.0;
+    const cornerR = 28.0;
+
+    const cardSize = Size(cardW, cardH);
+
+    return AnimatedBuilder(
+      animation: _swapCtrl,
+      builder: (context, _) {
+        final leftOffset = _leftOffsetX.value;
+        final leftAng = _leftAngle.value;
+        final rightOffset = _rightOffsetX.value;
+        final rightAng = _rightAngle.value;
+
+        final leftCard = Transform.translate(
+          offset: Offset(leftOffset, 0),
+          child: Transform.rotate(
+            angle: leftAng,
+            alignment: Alignment.bottomCenter,
+            child: _buildLeftCard(slant, cornerR, cardSize),
+          ),
+        );
+
+        final rightCard = Transform.translate(
+          offset: Offset(rightOffset, 0),
+          child: Transform(
+            alignment: Alignment.bottomCenter,
+            transform: Matrix4.identity()
+              ..scale(-1.0, 1.0)
+              ..rotateZ(rightAng),
+            child: _buildRightCard(slant, cornerR, cardSize),
+          ),
+        );
+
+        final frontCard = GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _onSwapTap,
+          child: _isLeftFront ? leftCard : rightCard,
+        );
+
+        final backCard = _isLeftFront ? rightCard : leftCard;
+
+        return SizedBox(
+          width: cardW + 40,
+          height: cardH + 50,
+          child: Stack(
+            alignment: Alignment.center,
+            clipBehavior: Clip.none,
+            children: [
+              backCard,
+              frontCard,
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ── Clipper for the slanted card shape ─────────────────────────────────────
+
+class _SlantedCardClipper extends CustomClipper<Path> {
+  final double slant;
+  final double cornerRadius;
+
+  const _SlantedCardClipper({required this.slant, required this.cornerRadius});
+
+  @override
+  Path getClip(Size size) => _slantedCardPath(size, slant, cornerRadius);
+
+  @override
+  bool shouldReclip(covariant _SlantedCardClipper old) =>
+      old.slant != slant || old.cornerRadius != cornerRadius;
+}
+
+// ── Glassmorphism fill painter (front card) ────────────────────────────────
+
+class _GlassCardPainter extends CustomPainter {
+  final double slant;
+
+  const _GlassCardPainter({required this.slant});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = _slantedCardPath(size, slant, 28);
+
+    // Frosted fill: semi-transparent white
+    final fillPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.10)
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(path, fillPaint);
+
+    // Subtle light border
+    final strokePaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.18)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+    canvas.drawPath(path, strokePaint);
+
+    // Inner highlight along top edge
+    final highlightPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Colors.white.withValues(alpha: 0.22),
+          Colors.white.withValues(alpha: 0.0),
+        ],
+        stops: const [0.0, 0.35],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height * 0.4));
+    canvas.drawPath(path, highlightPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _GlassCardPainter old) => old.slant != slant;
+}
+
+// ── Gradient glassmorphism painter (back card) ─────────────────────────────
+
+class _BackGlassCardPainter extends CustomPainter {
+  final double slant;
+
+  const _BackGlassCardPainter({required this.slant});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = _slantedCardPath(size, slant, 28);
+
+    // Gradient fill: #FE4EF0 → #800DD8 at 30% opacity
+    final fillPaint = Paint()
+      ..shader = const LinearGradient(
+        colors: [Color(0x4DFE4EF0), Color(0x4D800DD8)],
+        begin: Alignment.topRight,
+        end: Alignment.bottomLeft,
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(path, fillPaint);
+
+    // Subtle light border
+    final strokePaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.18)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+    canvas.drawPath(path, strokePaint);
+
+    // Inner highlight along top edge
+    final highlightPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Colors.white.withValues(alpha: 0.22),
+          Colors.white.withValues(alpha: 0.0),
+        ],
+        stops: const [0.0, 0.35],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height * 0.4));
+    canvas.drawPath(path, highlightPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _BackGlassCardPainter old) => old.slant != slant;
 }

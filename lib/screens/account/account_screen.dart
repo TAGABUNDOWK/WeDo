@@ -8,6 +8,7 @@ import '../../services/notification/notification_service.dart';
 import '../../models/user_entity.dart';
 import '../../widgets/animated_background.dart';
 import '../auth/welcome/welcome_page.dart';
+import '../../widgets/animated_background.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
