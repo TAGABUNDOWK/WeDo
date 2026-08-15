@@ -7,6 +7,7 @@ import '../../services/auth/user_service.dart';
 import '../../services/friends/friend_service.dart';
 import '../../services/location/location_service.dart';
 import '../../services/location/overpass_service.dart';
+import '../../widgets/animated_background.dart';
 import 'add_friend_page.dart';
 
 class FriendsPage extends StatefulWidget {
@@ -27,7 +28,7 @@ class _FriendsPageState extends State<FriendsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _bg,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -45,73 +46,76 @@ class _FriendsPageState extends State<FriendsPage> {
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const _SectionTitle('People near you'),
-          const _PeopleNearYouSection(),
-          const SizedBox(height: 16),
-          const _SectionTitle('Incoming Requests'),
-          StreamBuilder<List<FriendEntity>>(
-            stream: _friendService.getIncomingRequestsStream(_uid),
-            builder: (context, snapshot) {
-              if (snapshot.hasError) return _ErrorText(snapshot.error);
-              final list = snapshot.data ?? const <FriendEntity>[];
-              if (list.isEmpty) return const _EmptyText('No pending requests');
-              return Column(
-                children: list
-                    .map((f) => _IncomingTile(
-                          friendship: f,
-                          otherUid: f.otherUserId(_uid),
-                          userService: _userService,
-                          onAccept: () => _accept(f),
-                          onDecline: () => _decline(f),
-                        ))
-                    .toList(),
-              );
-            },
-          ),
-          const SizedBox(height: 16),
-          const _SectionTitle('Sent Requests'),
-          StreamBuilder<List<FriendEntity>>(
-            stream: _friendService.getOutgoingRequestsStream(_uid),
-            builder: (context, snapshot) {
-              if (snapshot.hasError) return _ErrorText(snapshot.error);
-              final list = snapshot.data ?? const <FriendEntity>[];
-              if (list.isEmpty) return const _EmptyText('No sent requests');
-              return Column(
-                children: list
-                    .map((f) => _SentTile(
-                          friendship: f,
-                          otherUid: f.otherUserId(_uid),
-                          userService: _userService,
-                          onCancel: () => _cancel(f),
-                        ))
-                    .toList(),
-              );
-            },
-          ),
-          const SizedBox(height: 16),
-          const _SectionTitle('Your Friends'),
-          StreamBuilder<List<FriendEntity>>(
-            stream: _friendService.getFriendsStream(_uid),
-            builder: (context, snapshot) {
-              if (snapshot.hasError) return _ErrorText(snapshot.error);
-              final list = snapshot.data ?? const <FriendEntity>[];
-              if (list.isEmpty) return const _EmptyText('No friends yet');
-              return Column(
-                children: list
-                    .map((f) => _FriendTile(
-                          friendship: f,
-                          otherUid: f.otherUserId(_uid),
-                          userService: _userService,
-                          onRemove: () => _remove(f),
-                        ))
-                    .toList(),
-              );
-            },
-          ),
-        ],
+      body: AnimatedBackground(
+        showStars: false,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            const _SectionTitle('People near you'),
+            const _PeopleNearYouSection(),
+            const SizedBox(height: 16),
+            const _SectionTitle('Incoming Requests'),
+            StreamBuilder<List<FriendEntity>>(
+              stream: _friendService.getIncomingRequestsStream(_uid),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) return _ErrorText(snapshot.error);
+                final list = snapshot.data ?? const <FriendEntity>[];
+                if (list.isEmpty) return const _EmptyText('No pending requests');
+                return Column(
+                  children: list
+                      .map((f) => _IncomingTile(
+                            friendship: f,
+                            otherUid: f.otherUserId(_uid),
+                            userService: _userService,
+                            onAccept: () => _accept(f),
+                            onDecline: () => _decline(f),
+                          ))
+                      .toList(),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+            const _SectionTitle('Sent Requests'),
+            StreamBuilder<List<FriendEntity>>(
+              stream: _friendService.getOutgoingRequestsStream(_uid),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) return _ErrorText(snapshot.error);
+                final list = snapshot.data ?? const <FriendEntity>[];
+                if (list.isEmpty) return const _EmptyText('No sent requests');
+                return Column(
+                  children: list
+                      .map((f) => _SentTile(
+                            friendship: f,
+                            otherUid: f.otherUserId(_uid),
+                            userService: _userService,
+                            onCancel: () => _cancel(f),
+                          ))
+                      .toList(),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+            const _SectionTitle('Your Friends'),
+            StreamBuilder<List<FriendEntity>>(
+              stream: _friendService.getFriendsStream(_uid),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) return _ErrorText(snapshot.error);
+                final list = snapshot.data ?? const <FriendEntity>[];
+                if (list.isEmpty) return const _EmptyText('No friends yet');
+                return Column(
+                  children: list
+                      .map((f) => _FriendTile(
+                            friendship: f,
+                            otherUid: f.otherUserId(_uid),
+                            userService: _userService,
+                            onRemove: () => _remove(f),
+                          ))
+                      .toList(),
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

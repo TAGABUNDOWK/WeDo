@@ -1,18 +1,17 @@
 import 'package:flutter/material.dart';
+import '../../widgets/animated_background.dart';
 import 'create_session_screen.dart';
 import 'join_session_screen.dart';
 
 class SessionEntryScreen extends StatelessWidget {
   const SessionEntryScreen({super.key});
 
-  static const _bg = Color(0xFF190831);
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _bg,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
-        backgroundColor: _bg,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         foregroundColor: Colors.white,
         title: const Text(
@@ -20,15 +19,18 @@ class SessionEntryScreen extends StatelessWidget {
           style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildCreateButton(context),
-            const SizedBox(height: 12),
-            _buildJoinButton(context),
-          ],
+      body: AnimatedBackground(
+        showStars: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildCreateButton(context),
+              const SizedBox(height: 12),
+              _buildJoinButton(context),
+            ],
+          ),
         ),
       ),
     );

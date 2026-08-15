@@ -6,6 +6,7 @@ import '../../models/user_entity.dart';
 import '../../services/group/group_service.dart';
 import '../../services/direct/direct_service.dart';
 import '../../widgets/chat_tile.dart';
+import '../../widgets/animated_background.dart';
 import 'group/group_chat_screen.dart';
 import 'group/create_group_screen.dart';
 import 'direct/direct_chat_screen.dart';
@@ -113,7 +114,7 @@ class _ChatTabState extends State<ChatTab> {
   Widget build(BuildContext context) {
     final currentUser = FirebaseAuth.instance.currentUser;
     return Scaffold(
-      backgroundColor: _bg,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -126,100 +127,103 @@ class _ChatTabState extends State<ChatTab> {
           ),
         ],
       ),
-      body: currentUser == null
-          ? const Center(child: Text('Sign in to view your chats', style: TextStyle(color: Colors.white70)))
-          : StreamBuilder<List<GroupChat>>(
-              stream: _groupService.getUserGroupsStream(currentUser.uid),
-              builder: (context, groupSnap) {
-                if (groupSnap.hasError) {
-                  return Center(child: Text('Error: ${groupSnap.error}'));
-                }
-                if (groupSnap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final groups = groupSnap.data ?? [];
-                return StreamBuilder<List<DirectChat>>(
-                  stream: _directService.getUserChatsStream(currentUser.uid),
-                  builder: (context, dmSnap) {
-                    if (dmSnap.hasError) {
-                      return Center(child: Text('Error: ${dmSnap.error}'));
-                    }
-                    if (dmSnap.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    final directChats = dmSnap.data ?? [];
+      body: AnimatedBackground(
+        showStars: false,
+        child: currentUser == null
+            ? const Center(child: Text('Sign in to view your chats', style: TextStyle(color: Colors.white70)))
+            : StreamBuilder<List<GroupChat>>(
+                stream: _groupService.getUserGroupsStream(currentUser.uid),
+                builder: (context, groupSnap) {
+                  if (groupSnap.hasError) {
+                    return Center(child: Text('Error: ${groupSnap.error}'));
+                  }
+                  if (groupSnap.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final groups = groupSnap.data ?? [];
+                  return StreamBuilder<List<DirectChat>>(
+                    stream: _directService.getUserChatsStream(currentUser.uid),
+                    builder: (context, dmSnap) {
+                      if (dmSnap.hasError) {
+                        return Center(child: Text('Error: ${dmSnap.error}'));
+                      }
+                      if (dmSnap.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      final directChats = dmSnap.data ?? [];
 
-                    if (groups.isEmpty && directChats.isEmpty) {
-                      return _EmptyChats(onCreate: _showNewChatMenu);
-                    }
+                      if (groups.isEmpty && directChats.isEmpty) {
+                        return _EmptyChats(onCreate: _showNewChatMenu);
+                      }
 
-                    final allChats = <_ChatItem>[];
-                    for (final g in groups) {
-                      allChats.add(_ChatItem.group(g));
-                    }
-                    for (final d in directChats) {
-                      allChats.add(_ChatItem.direct(d));
-                    }
-                    allChats.sort((a, b) {
-                      final aTime = a.lastMessageAt ?? DateTime(0);
-                      final bTime = b.lastMessageAt ?? DateTime(0);
-                      return bTime.compareTo(aTime);
-                    });
+                      final allChats = <_ChatItem>[];
+                      for (final g in groups) {
+                        allChats.add(_ChatItem.group(g));
+                      }
+                      for (final d in directChats) {
+                        allChats.add(_ChatItem.direct(d));
+                      }
+                      allChats.sort((a, b) {
+                        final aTime = a.lastMessageAt ?? DateTime(0);
+                        final bTime = b.lastMessageAt ?? DateTime(0);
+                        return bTime.compareTo(aTime);
+                      });
 
-                    return ListView.separated(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: allChats.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 12),
-                      itemBuilder: (context, index) {
-                        final item = allChats[index];
-                        if (item.isGroup) {
-                          final group = item.group!;
-                          final hasUnread = group.lastMessage != null &&
-                              group.lastMessageSenderId != null &&
-                              group.lastMessageSenderId != currentUser.uid &&
-                              !group.lastMessageReadBy.contains(currentUser.uid);
-                          return ChatTile(
-                            name: group.name,
-                            lastMessage: group.lastMessage,
-                            lastMessageAt: group.lastMessageAt,
-                            memberCount: group.memberCount,
-                            isGroup: true,
-                            hasUnread: hasUnread,
-                            lastSenderId: group.lastMessageSenderId,
-                            currentUserId: currentUser.uid,
-                            onTap: () => _openGroupChat(group.id),
-                          );
-                        } else {
-                          final chat = item.direct!;
-                          final otherUid = chat.otherUserId(currentUser.uid);
-                          final hasUnread = chat.lastMessage != null &&
-                              chat.lastMessageSenderId != null &&
-                              chat.lastMessageSenderId != currentUser.uid &&
-                              !chat.lastMessageReadBy.contains(currentUser.uid);
-                          return FutureBuilder<UserEntity?>(
-                            future: _directService.getUser(otherUid),
-                            builder: (context, userSnap) {
-                              final user = userSnap.data;
-                              return ChatTile(
-                                name: user?.displayName ?? otherUid,
-                                lastMessage: chat.lastMessage,
-                                lastMessageAt: chat.lastMessageAt,
-                                memberCount: 2,
-                                isGroup: false,
-                                hasUnread: hasUnread,
-                                lastSenderId: chat.lastMessageSenderId,
-                                currentUserId: currentUser.uid,
-                                onTap: () => _openDirectChat(chat.id, otherUid),
-                              );
-                            },
-                          );
-                        }
-                      },
-                    );
-                  },
-                );
-              },
-            ),
+                      return ListView.separated(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: allChats.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          final item = allChats[index];
+                          if (item.isGroup) {
+                            final group = item.group!;
+                            final hasUnread = group.lastMessage != null &&
+                                group.lastMessageSenderId != null &&
+                                group.lastMessageSenderId != currentUser.uid &&
+                                !group.lastMessageReadBy.contains(currentUser.uid);
+                            return ChatTile(
+                              name: group.name,
+                              lastMessage: group.lastMessage,
+                              lastMessageAt: group.lastMessageAt,
+                              memberCount: group.memberCount,
+                              isGroup: true,
+                              hasUnread: hasUnread,
+                              lastSenderId: group.lastMessageSenderId,
+                              currentUserId: currentUser.uid,
+                              onTap: () => _openGroupChat(group.id),
+                            );
+                          } else {
+                            final chat = item.direct!;
+                            final otherUid = chat.otherUserId(currentUser.uid);
+                            final hasUnread = chat.lastMessage != null &&
+                                chat.lastMessageSenderId != null &&
+                                chat.lastMessageSenderId != currentUser.uid &&
+                                !chat.lastMessageReadBy.contains(currentUser.uid);
+                            return FutureBuilder<UserEntity?>(
+                              future: _directService.getUser(otherUid),
+                              builder: (context, userSnap) {
+                                final user = userSnap.data;
+                                return ChatTile(
+                                  name: user?.displayName ?? otherUid,
+                                  lastMessage: chat.lastMessage,
+                                  lastMessageAt: chat.lastMessageAt,
+                                  memberCount: 2,
+                                  isGroup: false,
+                                  hasUnread: hasUnread,
+                                  lastSenderId: chat.lastMessageSenderId,
+                                  currentUserId: currentUser.uid,
+                                  onTap: () => _openDirectChat(chat.id, otherUid),
+                                );
+                              },
+                            );
+                          }
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
+      ),
     );
   }
 }

@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 
 class AnimatedBackground extends StatefulWidget {
   final Widget? child;
+  final bool showStars;
 
-  const AnimatedBackground({super.key, this.child});
+  const AnimatedBackground({super.key, this.child, this.showStars = true});
 
   @override
   State<AnimatedBackground> createState() => _AnimatedBackgroundState();
@@ -47,7 +48,7 @@ class _AnimatedBackgroundState extends State<AnimatedBackground>
         const _DottedGrid(),
 
         // Layer 4: Twinkling stars
-        ..._stars.map((s) => s.build(context)),
+        if (widget.showStars) ..._stars.map((s) => s.build(context)),
 
         // Child content (login form, etc.)
         if (widget.child != null) widget.child!,

@@ -6,6 +6,7 @@ import '../../services/auth/user_service.dart';
 import '../../services/friends/friend_service.dart';
 import '../../services/notification/notification_service.dart';
 import '../../models/user_entity.dart';
+import '../../widgets/animated_background.dart';
 import '../auth/welcome/welcome_page.dart';
 
 class AccountScreen extends StatefulWidget {
@@ -111,41 +112,44 @@ class _AccountScreenState extends State<AccountScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF190831),
-      body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFFFE4EF0)),
-            )
-          : _user == null
-              ? const Center(
-                  child: Text(
-                    'No user data found',
-                    style: TextStyle(color: Colors.white54, fontFamily: 'Poppins'),
-                  ),
-                )
-              : Stack(
-                  children: [
-                    GestureDetector(
-                      onTap: () {
-                        if (_showNotifications) {
-                          setState(() => _showNotifications = false);
-                        }
-                      },
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text(
-                                  'Account',
-                                  style: TextStyle(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white,
-                                    fontFamily: 'Poppins',
+      backgroundColor: Colors.transparent,
+      body: AnimatedBackground(
+        showStars: false,
+        child: _loading
+            ? const Center(
+                child: CircularProgressIndicator(color: Color(0xFFFE4EF0)),
+              )
+            : _user == null
+                ? const Center(
+                    child: Text(
+                      'No user data found',
+                      style: TextStyle(color: Colors.white54, fontFamily: 'Poppins'),
+                    ),
+                  )
+                : Stack(
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          if (_showNotifications) {
+                            setState(() => _showNotifications = false);
+                          }
+                        },
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text(
+                                    'Account',
+                                    style: TextStyle(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                      fontFamily: 'Poppins',
+                                    ),
                                   ),
                                 ),
                                 _buildNotificationBell(),
@@ -162,10 +166,10 @@ class _AccountScreenState extends State<AccountScreen> {
                           ],
                         ),
                       ),
-                    ),
-                    if (_showNotifications) _buildNotificationsPanel(),
-                  ],
-                ),
+                      if (_showNotifications) _buildNotificationsPanel(),
+                    ],
+                  ),
+      ),
     );
   }
 
