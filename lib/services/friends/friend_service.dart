@@ -78,10 +78,34 @@ class FriendService {
         createdAt: DateTime.now(),
       ),
     );
+
+    await _notificationService.updateNotificationByRelatedId(
+      requestedBy,
+      friendshipId,
+      NotificationStatus.accepted,
+    );
   }
 
   Future<void> declineRequest(String friendshipId) async {
+    final friendshipDoc =
+        await _db.collection('friends').doc(friendshipId).get();
+    final friendshipData = friendshipDoc.data();
+
     await _db.collection('friends').doc(friendshipId).delete();
+
+    if (friendshipData != null) {
+      final userIds =
+          (friendshipData['userIds'] as List?)?.cast<String>() ?? [];
+      final requestedBy = friendshipData['requestedBy'] as String?;
+
+      if (requestedBy != null && userIds.length == 2) {
+        await _notificationService.updateNotificationByRelatedId(
+          requestedBy,
+          friendshipId,
+          NotificationStatus.declined,
+        );
+      }
+    }
   }
 
   Future<void> cancelRequest(String friendshipId) async {

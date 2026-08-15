@@ -14,6 +14,21 @@ enum NotificationType {
   String get value => name;
 }
 
+enum NotificationStatus {
+  pending,
+  accepted,
+  declined;
+
+  factory NotificationStatus.fromString(String? value) {
+    return NotificationStatus.values.firstWhere(
+      (e) => e.name == value,
+      orElse: () => NotificationStatus.pending,
+    );
+  }
+
+  String get value => name;
+}
+
 class NotificationEntity {
   final String notificationId;
   final NotificationType type;
@@ -22,6 +37,7 @@ class NotificationEntity {
   final String? senderId;
   final String? relatedId;
   final bool isRead;
+  final NotificationStatus status;
   final DateTime createdAt;
 
   const NotificationEntity({
@@ -32,6 +48,7 @@ class NotificationEntity {
     this.senderId,
     this.relatedId,
     this.isRead = false,
+    this.status = NotificationStatus.pending,
     required this.createdAt,
   });
 
@@ -44,6 +61,7 @@ class NotificationEntity {
       senderId: map['sender_id'] as String?,
       relatedId: map['related_id'] as String?,
       isRead: map['is_read'] as bool? ?? false,
+      status: NotificationStatus.fromString(map['status'] as String?),
       createdAt: _parseTimestamp(map['created_at']),
     );
   }
@@ -56,6 +74,7 @@ class NotificationEntity {
       'sender_id': senderId,
       'related_id': relatedId,
       'is_read': isRead,
+      'status': status.value,
       'created_at': FieldValue.serverTimestamp(),
     };
   }
@@ -68,6 +87,7 @@ class NotificationEntity {
     String? senderId,
     String? relatedId,
     bool? isRead,
+    NotificationStatus? status,
     DateTime? createdAt,
     bool clearSenderId = false,
     bool clearRelatedId = false,
@@ -80,6 +100,7 @@ class NotificationEntity {
       senderId: clearSenderId ? null : (senderId ?? this.senderId),
       relatedId: clearRelatedId ? null : (relatedId ?? this.relatedId),
       isRead: isRead ?? this.isRead,
+      status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -95,7 +116,7 @@ class NotificationEntity {
   @override
   String toString() {
     return 'NotificationEntity(id: $notificationId, type: ${type.value}, '
-        'title: $title, senderId: $senderId, isRead: $isRead)';
+        'title: $title, senderId: $senderId, isRead: $isRead, status: ${status.value})';
   }
 
   @override
