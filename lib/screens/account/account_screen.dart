@@ -1,7 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/notification_entity.dart';
 import '../../services/auth/user_service.dart';
 import '../../services/friends/friend_service.dart';
@@ -21,9 +20,7 @@ class _AccountScreenState extends State<AccountScreen> {
   final _userService = UserService();
   final _friendService = FriendService();
   final _notificationService = NotificationService();
-  final _db = FirebaseFirestore.instance;
   UserEntity? _user;
-  int _friendsCount = 0;
   bool _showNotifications = false;
   bool _loading = true;
 
@@ -42,16 +39,10 @@ class _AccountScreenState extends State<AccountScreen> {
       return;
     }
     final user = await _userService.getUserDocument(uid);
-    final friendsSnap = await _db
-        .collection('friends')
-        .where('userIds', arrayContains: uid)
-        .where('status', isEqualTo: 'friends')
-        .get();
 
     if (mounted) {
       setState(() {
         _user = user;
-        _friendsCount = friendsSnap.docs.length;
         _loading = false;
       });
     }
@@ -59,16 +50,12 @@ class _AccountScreenState extends State<AccountScreen> {
 
   Future<void> _acceptRequest(String friendshipId, String notificationId) async {
     await _friendService.acceptRequest(friendshipId);
-    if (notificationId.isNotEmpty) {
-      await _notificationService.markAsRead(_uid, notificationId);
-    }
+    _loadUser();
   }
 
   Future<void> _declineRequest(String friendshipId, String notificationId) async {
     await _friendService.declineRequest(friendshipId);
-    if (notificationId.isNotEmpty) {
-      await _notificationService.markAsRead(_uid, notificationId);
-    }
+    _loadUser();
   }
 
   Future<void> _signOut() async {
@@ -338,21 +325,27 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Widget _buildStatsRow() {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          _buildStatItem(count: _friendsCount, label: 'Friends'),
-          _buildStatDivider(),
-          _buildStatItem(count: 0, label: 'Mutuals'),
-          _buildStatDivider(),
-          _buildStatItem(count: 0, label: 'Decisions'),
-        ],
-      ),
+    return StreamBuilder<List>(
+      stream: _friendService.getFriendsStream(_uid),
+      builder: (context, snapshot) {
+        final friendsCount = snapshot.data?.length ?? 0;
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              _buildStatItem(count: friendsCount, label: 'Friends'),
+              _buildStatDivider(),
+              _buildStatItem(count: 0, label: 'Mutuals'),
+              _buildStatDivider(),
+              _buildStatItem(count: 0, label: 'Decisions'),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -850,62 +843,120 @@ class _NotificationItem extends StatelessWidget {
                       fontFamily: 'Poppins',
                     ),
                   ),
-                  if (notification.type == NotificationType.friendRequest &&
-                      (onAccept != null || onDecline != null)) ...[
+                  if (notification.type == NotificationType.friendRequest) ...[
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        if (onAccept != null)
-                          GestureDetector(
-                            onTap: onAccept,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 5),
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [
-                                    Color(0xFFFE4EF0),
-                                    Color(0xFF800DD8)
-                                  ],
+                    if (notification.status == NotificationStatus.accepted)
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF4CAF50).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.check_circle, size: 12, color: Color(0xFF4CAF50)),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Accepted',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF4CAF50),
+                                    fontFamily: 'Poppins',
+                                  ),
                                 ),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Text(
-                                'Accept',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                  fontFamily: 'Poppins',
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    else if (notification.status == NotificationStatus.declined)
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.cancel_outlined, size: 12, color: Colors.white54),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Declined',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white54,
+                                    fontFamily: 'Poppins',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      Row(
+                        children: [
+                          if (onAccept != null)
+                            GestureDetector(
+                              onTap: onAccept,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 5),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFFFE4EF0),
+                                      Color(0xFF800DD8)
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Text(
+                                  'Accept',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                    fontFamily: 'Poppins',
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        if (onAccept != null && onDecline != null)
-                          const SizedBox(width: 6),
-                        if (onDecline != null)
-                          GestureDetector(
-                            onTap: onDecline,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                'Decline',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white.withValues(alpha: 0.6),
-                                  fontFamily: 'Poppins',
+                          if (onAccept != null && onDecline != null)
+                            const SizedBox(width: 6),
+                          if (onDecline != null)
+                            GestureDetector(
+                              onTap: onDecline,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Decline',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white.withValues(alpha: 0.6),
+                                    fontFamily: 'Poppins',
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                      ],
-                    ),
+                        ],
+                      ),
                   ],
                 ],
               ),

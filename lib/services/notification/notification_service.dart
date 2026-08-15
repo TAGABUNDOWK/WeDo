@@ -51,4 +51,29 @@ class NotificationService {
     }
     await batch.commit();
   }
+
+  Future<void> updateNotificationStatus(
+      String userId, String notificationId, NotificationStatus status) async {
+    await _userNotifications(userId).doc(notificationId).update({
+      'status': status.value,
+      'is_read': true,
+    });
+  }
+
+  Future<void> updateNotificationByRelatedId(
+      String userId, String relatedId, NotificationStatus status) async {
+    final snap = await _userNotifications(userId)
+        .where('related_id', isEqualTo: relatedId)
+        .where('type', isEqualTo: NotificationType.friendRequest.value)
+        .get();
+
+    final batch = _db.batch();
+    for (final doc in snap.docs) {
+      batch.update(doc.reference, {
+        'status': status.value,
+        'is_read': true,
+      });
+    }
+    await batch.commit();
+  }
 }
