@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'screens/auth/splash/splash_page.dart';
 import 'screens/auth/welcome/welcome_page.dart';
+import 'screens/home/home_page.dart';
 import 'screens/chat/group/group_info_screen.dart';
 
 class MyApp extends StatefulWidget {
@@ -12,6 +14,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   bool _showSplash = true;
+  final _isLoggedIn = FirebaseAuth.instance.currentUser != null;
 
   void _onSplashComplete() {
     setState(() => _showSplash = false);
@@ -38,9 +41,9 @@ class _MyAppState extends State<MyApp> {
                 key: const ValueKey('splash'),
                 onSplashComplete: _onSplashComplete,
               )
-            : const WelcomePage(
-                key: ValueKey('welcome'),
-              ),
+            : _isLoggedIn
+                ? const HomePage(key: ValueKey('home'))
+                : const WelcomePage(key: ValueKey('welcome')),
       ),
       routes: {
         '/group-info': (context) {
