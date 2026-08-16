@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'screens/auth/splash/splash_page.dart';
 import 'screens/auth/welcome/welcome_page.dart';
 import 'screens/home/home_page.dart';
 import 'screens/chat/group/group_info_screen.dart';
+import 'services/auth/user_service.dart';
 
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
@@ -14,7 +16,58 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   bool _showSplash = true;
-  final _isLoggedIn = FirebaseAuth.instance.currentUser != null;
+  User? _user;
+  late final StreamSubscription<User?> _authSub;
+  final _userService = UserService();
+
+  @override
+  void initState() {
+    super.initState();
+    _validateAuth();
+  }
+
+  Future<void> _validateAuth() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        await user.reload();
+        final doc = await _userService.getUserDocument(user.uid);
+        if (doc == null || !doc.isEmailVerified) {
+          await FirebaseAuth.instance.signOut();
+          if (mounted) setState(() => _user = null);
+        } else {
+          if (mounted) setState(() => _user = FirebaseAuth.instance.currentUser);
+        }
+      } catch (e) {
+        await FirebaseAuth.instance.signOut();
+        if (mounted) setState(() => _user = null);
+      }
+    }
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) async {
+      if (user != null) {
+        try {
+          final doc = await _userService.getUserDocument(user.uid);
+          if (doc == null) {
+            await FirebaseAuth.instance.signOut();
+            if (mounted) setState(() => _user = null);
+          } else {
+            if (mounted) setState(() => _user = user);
+          }
+        } catch (e) {
+          await FirebaseAuth.instance.signOut();
+          if (mounted) setState(() => _user = null);
+        }
+      } else {
+        if (mounted) setState(() => _user = null);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSub.cancel();
+    super.dispose();
+  }
 
   void _onSplashComplete() {
     setState(() => _showSplash = false);
@@ -41,7 +94,7 @@ class _MyAppState extends State<MyApp> {
                 key: const ValueKey('splash'),
                 onSplashComplete: _onSplashComplete,
               )
-            : _isLoggedIn
+            : _user != null
                 ? const HomePage(key: ValueKey('home'))
                 : const WelcomePage(key: ValueKey('welcome')),
       ),

@@ -16,17 +16,18 @@ class OtpService {
     }
   }
 
-  Future<void> generateOTP(String userId, String email) async {
+  Future<void> generateOTP(String userId, String email, {bool resend = false}) async {
     final response = await http
         .post(
           Uri.parse('$_baseUrl/generate-otp'),
           headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'userId': userId, 'email': email}),
+          body: jsonEncode({'userId': userId, 'email': email, 'resend': resend}),
         )
         .timeout(const Duration(seconds: 20));
 
+    final body = jsonDecode(response.body);
     if (response.statusCode != 200) {
-      throw Exception(_parseError(response));
+      throw Exception(body['error'] ?? 'Failed to send OTP (${response.statusCode})');
     }
   }
 
