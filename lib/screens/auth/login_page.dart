@@ -3,7 +3,6 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/auth/user_service.dart';
 import '../../widgets/animated_background.dart';
-import '../home/home_page.dart';
 import 'create_account_page.dart';
 import 'otp_verification_page.dart';
 
@@ -72,10 +71,7 @@ class _LoginPageState extends State<LoginPage> {
           ),
         );
       } else {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const HomePage()),
-        );
+        Navigator.of(context).popUntil((route) => route.isFirst);
       }
     } catch (e) {
       if (!mounted) return;

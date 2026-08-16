@@ -9,7 +9,6 @@ import '../../services/auth/user_service.dart';
 import '../../services/location/location_service.dart';
 import '../../models/user_entity.dart';
 import '../../widgets/animated_background.dart';
-import '../home/home_page.dart';
 
 // ─── Design Tokens ───────────────────────────────────────────────────────────
 
@@ -568,6 +567,8 @@ class _Step1EmailState extends State<_Step1Email> {
             );
             userId = credential.user!.uid;
             debugPrint('[OTP FLOW] signIn SUCCESS: userId=$userId');
+            await FirebaseAuth.instance.signOut();
+            debugPrint('[OTP FLOW] Signed out immediately after signIn');
           } catch (signInError) {
             debugPrint('[OTP FLOW] signIn FAILED: $signInError');
             throw Exception(
@@ -968,7 +969,6 @@ class _Step3Profile extends StatefulWidget {
 class _Step3ProfileState extends State<_Step3Profile> {
   final _fullNameCtrl = TextEditingController();
   final _usernameCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
   final _birthDateCtrl = TextEditingController();
   final _ageCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
@@ -987,7 +987,6 @@ class _Step3ProfileState extends State<_Step3Profile> {
   void dispose() {
     _fullNameCtrl.dispose();
     _usernameCtrl.dispose();
-    _phoneCtrl.dispose();
     _birthDateCtrl.dispose();
     _ageCtrl.dispose();
     _passCtrl.dispose();
@@ -1165,9 +1164,9 @@ class _Step3ProfileState extends State<_Step3Profile> {
       final pass = _passCtrl.text;
       final username = _usernameCtrl.text.trim().toLowerCase();
       final fullName = _fullNameCtrl.text.trim();
-      final phone = _phoneCtrl.text.trim();
 
       // Re-authenticate with temp password, then update to real password
+      await _authService.signIn(widget.email, 'temp_placeholder_otp');
       final currentUser = _authService.currentUser;
       if (currentUser != null) {
         final credential = EmailAuthProvider.credential(
@@ -1182,7 +1181,6 @@ class _Step3ProfileState extends State<_Step3Profile> {
         userId: widget.userId,
         displayName: fullName.isNotEmpty ? fullName : username,
         username: username,
-        usernameLower: username,
         email: widget.email,
         authProvider: 'email',
         isPremium: false,
@@ -1213,10 +1211,7 @@ class _Step3ProfileState extends State<_Step3Profile> {
       }
 
       if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const HomePage()),
-      );
+      Navigator.of(context).popUntil((route) => route.isFirst);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -1294,20 +1289,6 @@ class _Step3ProfileState extends State<_Step3Profile> {
                 }
                 return null;
               },
-            ),
-            _Tokens.fieldGap,
-
-            // Phone Number
-            Text('Phone Number', style: _Tokens.label),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _phoneCtrl,
-              keyboardType: TextInputType.phone,
-              style: _Tokens.fieldInput,
-              decoration: _pillDecoration(
-                label: 'Phone Number',
-                hint: '+63 9XX XXX XXXX',
-              ),
             ),
             _Tokens.fieldGap,
 

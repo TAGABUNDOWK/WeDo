@@ -2,7 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/auth/otp_service.dart';
-import '../home/home_page.dart';
+import '../../services/auth/user_service.dart';
+
 
 class OtpVerificationPage extends StatefulWidget {
   final String userId;
@@ -24,6 +25,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
     (_) => TextEditingController(),
   );
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
+  final _userService = UserService();
   bool _isLoading = false;
   bool _canResend = false;
   bool _sendingCode = true;
@@ -103,6 +105,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
 
     try {
       await _otpService.verifyOTP(widget.userId, code);
+      await _userService.updateEmailVerified(widget.userId);
 
       if (!mounted) return;
 
@@ -110,10 +113,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
         const SnackBar(content: Text('Email verified successfully!')),
       );
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const HomePage()),
-      );
+      Navigator.of(context).popUntil((route) => route.isFirst);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(

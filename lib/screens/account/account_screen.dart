@@ -7,8 +7,6 @@ import '../../services/friends/friend_service.dart';
 import '../../services/notification/notification_service.dart';
 import '../../models/user_entity.dart';
 import '../../widgets/animated_background.dart';
-import '../auth/welcome/welcome_page.dart';
-import '../../widgets/animated_background.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -101,12 +99,6 @@ class _AccountScreenState extends State<AccountScreen> {
 
     if (confirmed == true && mounted) {
       await _auth.signOut();
-      if (mounted) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const WelcomePage()),
-          (route) => false,
-        );
-      }
     }
   }
 
@@ -152,11 +144,10 @@ class _AccountScreenState extends State<AccountScreen> {
                                       fontFamily: 'Poppins',
                                     ),
                                   ),
-                                ),
-                                _buildNotificationBell(),
-                              ],
-                            ),
-                            const SizedBox(height: 24),
+                                  _buildNotificationBell(),
+                                ],
+                              ),
+                              const SizedBox(height: 24),
                             _buildProfileCard(),
                             const SizedBox(height: 16),
                             _buildAccountInfoCard(),
@@ -164,7 +155,8 @@ class _AccountScreenState extends State<AccountScreen> {
                             _buildSettingsCard(),
                             const SizedBox(height: 16),
                             _buildLogoutButton(),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                       if (_showNotifications) _buildNotificationsPanel(),
