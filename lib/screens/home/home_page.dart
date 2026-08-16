@@ -347,82 +347,10 @@ class _CenterLogoButtonState extends State<_CenterLogoButton>
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        // ── Radial popup menu ──────────────────────────────────
-        Positioned(
-          bottom: 54,
-          left: -90,
-          right: -90,
-          child: AnimatedBuilder(
-            animation: _menuCtrl,
-            builder: (context, _) {
-              return Opacity(
-                opacity: _menuFade.value,
-                child: SizedBox(
-                  height: 110,
-                  width: 180,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      // Left — Create Session (upper-left of arc)
-                      Positioned(
-                        left: 44,
-                        bottom: 20 * _menuScale.value,
-                        child: Transform.translate(
-                          offset: Offset(0, 30 * (1 - _menuScale.value)),
-                          child: _PopupCircle(
-                            icon: 'assets/icons/create.png',
-                            onTap: () => _onChoiceTap(() {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const CreateSessionScreen(),
-                                ),
-                              );
-                            }),
-                          ),
-                        ),
-                      ),
-                      // Middle — Placeholder (top of arc)
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 40 * _menuScale.value,
-                        child: Transform.translate(
-                          offset: Offset(0, 20 * (1 - _menuScale.value)),
-                          child: _PopupCircle(
-                            icon: 'assets/icons/controller.png',
-                            onTap: () => _onChoiceTap(null),
-                          ),
-                        ),
-                      ),
-                      // Right — Join Session (upper-right of arc)
-                      Positioned(
-                        right: 44,
-                        bottom: 20 * _menuScale.value,
-                        child: Transform.translate(
-                          offset: Offset(0, 30 * (1 - _menuScale.value)),
-                          child: _PopupCircle(
-                            icon: 'assets/icons/connect.png',
-                            onTap: () => _onChoiceTap(() {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const JoinSessionScreen(),
-                                ),
-                              );
-                            }),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-
-        // ── Center capsule button ───────────────────────────────
+        // ── Center capsule button (painted first = lower hit-test priority) ──
         Positioned.fill(
           child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
             onTap: () {
               if (!_isMenuOpen) {
                 widget.onTap();
@@ -503,6 +431,79 @@ class _CenterLogoButtonState extends State<_CenterLogoButton>
                 ),
               ),
             ),
+          ),
+        ),
+
+        // ── Radial popup menu (painted last = higher hit-test priority) ──
+        Positioned(
+          bottom: 54,
+          left: -90,
+          right: -90,
+          child: AnimatedBuilder(
+            animation: _menuCtrl,
+            builder: (context, _) {
+              return Opacity(
+                opacity: _menuFade.value,
+                child: SizedBox(
+                  height: 110,
+                  width: 180,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      // Left — Create Session (upper-left of arc)
+                      Positioned(
+                        left: 44,
+                        bottom: 20 * _menuScale.value,
+                        child: Transform.translate(
+                          offset: Offset(0, 30 * (1 - _menuScale.value)),
+                          child: _PopupCircle(
+                            icon: 'assets/icons/create.png',
+                            onTap: () => _onChoiceTap(() {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const CreateSessionScreen(),
+                                ),
+                              );
+                            }),
+                          ),
+                        ),
+                      ),
+                      // Middle — Placeholder (top of arc)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 40 * _menuScale.value,
+                        child: Transform.translate(
+                          offset: Offset(0, 20 * (1 - _menuScale.value)),
+                          child: _PopupCircle(
+                            icon: 'assets/icons/controller.png',
+                            onTap: () => _onChoiceTap(null),
+                          ),
+                        ),
+                      ),
+                      // Right — Join Session (upper-right of arc)
+                      Positioned(
+                        right: 44,
+                        bottom: 20 * _menuScale.value,
+                        child: Transform.translate(
+                          offset: Offset(0, 30 * (1 - _menuScale.value)),
+                          child: _PopupCircle(
+                            icon: 'assets/icons/connect.png',
+                            onTap: () => _onChoiceTap(() {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const JoinSessionScreen(),
+                                ),
+                              );
+                            }),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ],
