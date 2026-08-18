@@ -6,6 +6,7 @@ import 'waiting_lobby_screen.dart';
 import 'places/places_to_go_screen.dart';
 import 'places/where_to_eat_screen.dart';
 import 'movie/movie_category_screen.dart';
+import 'create_own_topic_screen.dart';
 
 class CreateSessionScreen extends StatefulWidget {
   const CreateSessionScreen({super.key});
@@ -28,6 +29,7 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
     _HardcodedTopic(title: 'Where should we eat?', icon: Icons.restaurant),
     _HardcodedTopic(title: 'Places to go', icon: Icons.location_on),
     _HardcodedTopic(title: 'Movies to watch', icon: Icons.movie),
+    _HardcodedTopic(title: 'Create own topic', icon: Icons.edit),
   ];
 
   @override
@@ -122,7 +124,7 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
   }
 
   Widget _buildTopicGrid() {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: GridView.count(
         crossAxisCount: 2,
@@ -176,6 +178,8 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const PlacesToGoScreen()));
                 } else if (topic.title == 'Movies to watch') {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const MovieCategoryScreen()));
+                } else if (topic.title == 'Create own topic') {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateOwnTopicScreen()));
                 }
               },
               child: Container(
