@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:just_audio/just_audio.dart';
 
 class MessageBubble extends StatelessWidget {
   final String content;
@@ -6,6 +7,8 @@ class MessageBubble extends StatelessWidget {
   final String? senderName;
   final String time;
   final String? imageUrl;
+  final String? audioUrl;
+  final int? durationSeconds;
   final bool isSystem;
 
   const MessageBubble({
@@ -15,6 +18,8 @@ class MessageBubble extends StatelessWidget {
     this.senderName,
     required this.time,
     this.imageUrl,
+    this.audioUrl,
+    this.durationSeconds,
     this.isSystem = false,
   });
 
@@ -53,6 +58,16 @@ class MessageBubble extends StatelessWidget {
             ],
           ),
         ),
+      );
+    }
+
+    if (audioUrl != null) {
+      return _AudioMessageBubble(
+        audioUrl: audioUrl!,
+        durationSeconds: durationSeconds,
+        isMe: isMe,
+        senderName: senderName,
+        time: time,
       );
     }
 
@@ -118,6 +133,162 @@ class MessageBubble extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Text(time, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AudioMessageBubble extends StatefulWidget {
+  final String audioUrl;
+  final int? durationSeconds;
+  final bool isMe;
+  final String? senderName;
+  final String time;
+
+  const _AudioMessageBubble({
+    required this.audioUrl,
+    this.durationSeconds,
+    required this.isMe,
+    this.senderName,
+    required this.time,
+  });
+
+  @override
+  State<_AudioMessageBubble> createState() => _AudioMessageBubbleState();
+}
+
+class _AudioMessageBubbleState extends State<_AudioMessageBubble> {
+  final AudioPlayer _player = AudioPlayer();
+  bool _isPlaying = false;
+  Duration _duration = Duration.zero;
+  Duration _position = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _initPlayer();
+  }
+
+  Future<void> _initPlayer() async {
+    try {
+      await _player.setUrl(widget.audioUrl);
+      _player.durationStream.listen((duration) {
+        if (mounted && duration != null) {
+          setState(() => _duration = duration);
+        }
+      });
+      _player.positionStream.listen((position) {
+        if (mounted) {
+          setState(() => _position = position);
+        }
+      });
+      _player.playerStateStream.listen((state) {
+        if (mounted) {
+          setState(() => _isPlaying = state.playing);
+        }
+      });
+    } catch (e) {
+      debugPrint('Error loading audio: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _player.dispose();
+    super.dispose();
+  }
+
+  String _formatDuration(Duration d) {
+    final minutes = d.inMinutes;
+    final seconds = d.inSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: widget.isMe ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+        child: Column(
+          crossAxisAlignment: widget.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          children: [
+            if (widget.senderName != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text(
+                  widget.senderName!,
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey),
+                ),
+              ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: widget.isMe ? Colors.blue : Colors.grey[200],
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GestureDetector(
+                    onTap: () async {
+                      if (_isPlaying) {
+                        await _player.pause();
+                      } else {
+                        await _player.play();
+                      }
+                    },
+                    child: Icon(
+                      _isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
+                      color: widget.isMe ? Colors.white : Colors.blue,
+                      size: 36,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 120,
+                        child: SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            trackHeight: 3,
+                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
+                            activeTrackColor: widget.isMe ? Colors.white70 : Colors.blue,
+                            inactiveTrackColor: widget.isMe ? Colors.white30 : Colors.blue[100],
+                            thumbColor: widget.isMe ? Colors.white : Colors.blue,
+                          ),
+                          child: Slider(
+                            value: _position.inMilliseconds.toDouble().clamp(
+                              0,
+                              _duration.inMilliseconds.toDouble().clamp(1, double.infinity),
+                            ),
+                            max: _duration.inMilliseconds.toDouble().clamp(1, double.infinity),
+                            onChanged: (value) {
+                              _player.seek(Duration(milliseconds: value.toInt()));
+                            },
+                          ),
+                        ),
+                      ),
+                      Text(
+                        _formatDuration(_duration),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: widget.isMe ? Colors.white70 : Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(widget.time, style: const TextStyle(fontSize: 10, color: Colors.grey)),
             ),
           ],
         ),

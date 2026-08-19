@@ -5,9 +5,28 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'app.dart';
 import 'services/auth/user_service.dart';
+import 'services/call/call_service.dart';
+import 'screens/call/incoming_call_screen.dart';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+}
+
+void _handleIncomingCall(Map<String, dynamic> data) {
+  final callId = data['callId'] as String?;
+  if (callId == null) return;
+
+  final context = navigatorKey.currentContext;
+  if (context == null) return;
+
+  Navigator.of(context).push(
+    MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => _IncomingCallListener(callId: callId),
+    ),
+  );
 }
 
 Future<void> main() async {
@@ -46,11 +65,67 @@ Future<void> main() async {
 
   FirebaseMessaging.onMessage.listen((RemoteMessage message) {
     debugPrint('Foreground message: ${message.notification?.title}');
+    if (message.data.containsKey('callId')) {
+      _handleIncomingCall(message.data);
+    }
   });
 
   FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
     debugPrint('Notification opened app: ${message.notification?.title}');
+    if (message.data.containsKey('callId')) {
+      _handleIncomingCall(message.data);
+    }
   });
 
-  runApp(const MyApp());
+  runApp(MyApp(navigatorKey: navigatorKey));
+}
+
+class _IncomingCallListener extends StatefulWidget {
+  final String callId;
+  const _IncomingCallListener({required this.callId});
+
+  @override
+  State<_IncomingCallListener> createState() => _IncomingCallListenerState();
+}
+
+class _IncomingCallListenerState extends State<_IncomingCallListener> {
+  final _callService = CallService();
+
+  @override
+  void initState() {
+    super.initState();
+    _listenForCall();
+  }
+
+  void _listenForCall() {
+    _callService.getCallStream(widget.callId).listen((call) {
+      if (call == null) {
+        if (mounted) Navigator.of(context).pop();
+        return;
+      }
+
+      if (call.status.name == 'ended') {
+        if (mounted) Navigator.of(context).pop();
+        return;
+      }
+
+      if (call.status.name == 'ringing' && mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => IncomingCallScreen(
+              call: call,
+              callerName: call.createdBy,
+            ),
+          ),
+        );
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(child: CircularProgressIndicator()),
+    );
+  }
 }

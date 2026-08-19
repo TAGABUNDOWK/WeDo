@@ -20,15 +20,9 @@ service cloud.firestore {
         && request.auth.uid in get(/databases/$(database)/documents/direct_chats/$(chatId)).data.members;
     }
 
-    function isSessionHost(sessionId) {
+    function isCallMember(callId) {
       return isSignedIn()
-        && request.auth.uid == get(/databases/$(database)/documents/sessions/$(sessionId)).data.hostId;
-    }
-
-    function isSessionParticipant(sessionId) {
-      return isSignedIn()
-        && (request.auth.uid == get(/databases/$(database)/documents/sessions/$(sessionId)).data.hostId
-            || exists(/databases/$(database)/documents/sessions/$(sessionId)/participants/$(request.auth.uid)));
+        && request.auth.uid in get(/databases/$(database)/documents/calls/$(callId)).data.members;
     }
 
     match /users/{userId} {
@@ -87,6 +81,18 @@ service cloud.firestore {
       }
     }
 
+    match /topics/{topicId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && resource.data.createdBy == request.auth.uid;
+
+      match /cards/{cardId} {
+        allow read: if true;
+        allow create: if isSignedIn();
+        allow update, delete: if isSignedIn() && resource.data.createdBy == request.auth.uid;
+      }
+    }
+
     match /direct_chats/{chatId} {
       allow read: if isSignedIn()
         && request.auth.uid in resource.data.members;
@@ -105,31 +111,31 @@ service cloud.firestore {
       }
     }
 
-    match /topics/{topicId} {
-      allow read: if true;
-      allow create: if isSignedIn();
-      allow update, delete: if isSignedIn();
+    match /sessions/{sessionId} {
+      allow read, write: if isSignedIn();
 
-      match /cards/{cardId} {
-        allow read: if true;
-        allow create: if isSignedIn();
-        allow update, delete: if isSignedIn();
+      match /participants/{userId} {
+        allow read, write: if isSignedIn();
       }
     }
 
-    match /sessions/{sessionId} {
-      allow read: if isSignedIn() && isSessionParticipant(sessionId);
+    match /calls/{callId} {
+      allow read: if isSignedIn()
+        && request.auth.uid in resource.data.members;
       allow create: if isSignedIn()
-        && request.resource.data.hostId == request.auth.uid
-        && request.resource.data.sessionId == sessionId;
-      allow update: if isSignedIn() && isSessionParticipant(sessionId);
-      allow delete: if isSignedIn() && isSessionHost(sessionId);
+        && request.resource.data.members is list
+        && request.resource.data.members.hasAny([request.auth.uid])
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isSignedIn()
+        && request.auth.uid in resource.data.members;
+      allow delete: if isSignedIn();
 
-      match /participants/{userId} {
-        allow read: if isSignedIn() && isSessionParticipant(sessionId);
-        allow create: if isSignedIn() && request.auth.uid == userId;
-        allow update: if isSignedIn() && request.auth.uid == userId;
-        allow delete: if isSignedIn() && isSessionHost(sessionId);
+      match /signals/{signalId} {
+        allow read, write: if isSignedIn();
+      }
+
+      match /participants/{participantUid} {
+        allow read, write: if isSignedIn() && request.auth.uid == participantUid;
       }
     }
   }

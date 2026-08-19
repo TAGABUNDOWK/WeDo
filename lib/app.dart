@@ -8,7 +8,8 @@ import 'screens/chat/group/group_info_screen.dart';
 import 'services/auth/user_service.dart';
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+  final GlobalKey<NavigatorState>? navigatorKey;
+  const MyApp({super.key, this.navigatorKey});
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -77,6 +78,7 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'WeDo',
+      navigatorKey: widget.navigatorKey,
       theme: ThemeData(
         primarySwatch: Colors.blue,
         scaffoldBackgroundColor: const Color(0xFF190831),

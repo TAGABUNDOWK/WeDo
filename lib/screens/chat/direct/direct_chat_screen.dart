@@ -1,11 +1,17 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../../models/call.dart';
 import '../../../models/message.dart';
 import '../../../models/user_entity.dart';
 import '../../../services/direct/direct_service.dart';
+import '../../../services/call/call_service.dart';
 import '../../../utils/time_format.dart';
 import '../../../widgets/message_bubble.dart';
 import '../../../widgets/composer_option.dart';
+import '../../../widgets/audio_recorder_button.dart';
+import '../../call/call_screen.dart';
 import '../search/direct_chat_search_screen.dart';
 
 class DirectChatScreen extends StatefulWidget {
@@ -25,10 +31,12 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   final _messageCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   final _directService = DirectService();
+  final _callService = CallService();
   final _currentUser = FirebaseAuth.instance.currentUser;
+  final _imagePicker = ImagePicker();
   String _otherName = '';
-  UserEntity? _otherUser;
   Map<String, String> _nicknames = {};
+  bool _isUploading = false;
 
   @override
   void initState() {
@@ -44,7 +52,6 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     final nicknames = await _directService.getNicknames(widget.chatId);
     if (mounted) {
       setState(() {
-        _otherUser = user;
         _otherName = user?.displayName ?? widget.otherUid;
         _nicknames = nicknames;
       });
@@ -77,6 +84,98 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     _messageCtrl.clear();
   }
 
+  Future<void> _pickAndSendImage() async {
+    final source = await showDialog<ImageSource>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select Source'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, ImageSource.camera),
+            child: const Text('Camera'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, ImageSource.gallery),
+            child: const Text('Gallery'),
+          ),
+        ],
+      ),
+    );
+
+    if (source == null) return;
+
+    final picked = await _imagePicker.pickImage(source: source, imageQuality: 80);
+    if (picked == null || _currentUser == null) return;
+
+    setState(() => _isUploading = true);
+
+    try {
+      await _directService.sendImageMessage(
+        chatId: widget.chatId,
+        senderId: _currentUser.uid,
+        senderName: _currentUser.displayName ?? _currentUser.email ?? 'Unknown',
+        imageFile: File(picked.path),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send photo: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
+  Future<void> _onAudioRecorded(File audioFile, int durationSeconds) async {
+    if (_currentUser == null) return;
+
+    setState(() => _isUploading = true);
+
+    try {
+      await _directService.sendAudioMessage(
+        chatId: widget.chatId,
+        senderId: _currentUser.uid,
+        senderName: _currentUser.displayName ?? _currentUser.email ?? 'Unknown',
+        audioFile: audioFile,
+        durationSeconds: durationSeconds,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send voice message: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
+  Future<void> _startCall(CallType type) async {
+    if (_currentUser == null) return;
+
+    final callId = await _callService.startCall(
+      chatId: widget.chatId,
+      createdBy: _currentUser.uid,
+      type: type,
+      members: [_currentUser.uid, widget.otherUid],
+    );
+
+    if (!mounted) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CallScreen(
+          callId: callId,
+          callName: _otherName,
+          callType: type,
+          members: [_currentUser.uid, widget.otherUid],
+        ),
+      ),
+    );
+  }
+
   void _showAttachMenu() {
     showModalBottomSheet<void>(
       context: context,
@@ -106,11 +205,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                     color: Colors.blue,
                     onTap: () {
                       Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Sending photos coming soon'),
-                        ),
-                      );
+                      _pickAndSendImage();
                     },
                   ),
                 ],
@@ -128,6 +223,16 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       appBar: AppBar(
         title: Text(_getDisplayName()),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.phone),
+            tooltip: 'Audio call',
+            onPressed: () => _startCall(CallType.audio),
+          ),
+          IconButton(
+            icon: const Icon(Icons.videocam),
+            tooltip: 'Video call',
+            onPressed: () => _startCall(CallType.video),
+          ),
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: () async {
@@ -171,6 +276,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       ),
       body: Column(
         children: [
+          if (_isUploading)
+            const LinearProgressIndicator(backgroundColor: Colors.transparent),
           Expanded(
             child: StreamBuilder<List<ChatMessage>>(
               stream: _directService.getMessagesStream(widget.chatId),
@@ -194,6 +301,17 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                       return MessageBubble(
                         content: msg.content,
                         imageUrl: msg.imageUrl,
+                        isMe: isMe,
+                        senderName: null,
+                        time: formatChatTime(msg.createdAt),
+                      );
+                    }
+
+                    if (msg.type == MessageType.audio && msg.audioUrl != null) {
+                      return MessageBubble(
+                        content: msg.content,
+                        audioUrl: msg.audioUrl,
+                        durationSeconds: msg.durationSeconds,
                         isMe: isMe,
                         senderName: null,
                         time: formatChatTime(msg.createdAt),
@@ -233,6 +351,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                     ),
                     onPressed: _showAttachMenu,
                   ),
+                  AudioRecorderButton(onRecordingComplete: _onAudioRecorded),
+                  const SizedBox(width: 4),
                   Expanded(
                     child: TextField(
                       controller: _messageCtrl,

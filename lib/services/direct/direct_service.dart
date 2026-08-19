@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../../models/direct_chat.dart';
 import '../../models/message.dart';
 import '../../models/user_entity.dart';
@@ -80,6 +82,87 @@ class DirectService {
     batch.update(_chats.doc(chatId), {
       'last_message': {
         'text': text,
+        'senderId': senderId,
+        'sentAt': FieldValue.serverTimestamp(),
+      },
+      'lastMessageAt': FieldValue.serverTimestamp(),
+      'lastMessageReadBy': [senderId],
+    });
+
+    await batch.commit();
+  }
+
+  Future<void> sendImageMessage({
+    required String chatId,
+    required String senderId,
+    required String senderName,
+    required File imageFile,
+    String caption = '',
+  }) async {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final ref = FirebaseStorage.instance
+        .ref('chat_images/direct/$chatId/$timestamp.jpg');
+    await ref.putFile(imageFile);
+    final url = await ref.getDownloadURL();
+
+    final batch = _db.batch();
+
+    batch.set(_messages(chatId).doc(), {
+      'sender_id': senderId,
+      'senderName': senderName,
+      'type': 'image',
+      'content': caption,
+      'imageUrl': url,
+      'read_by': [senderId],
+      'created_at': FieldValue.serverTimestamp(),
+      'createdAtLocal': DateTime.now().toIso8601String(),
+      'edited': false,
+    });
+
+    batch.update(_chats.doc(chatId), {
+      'last_message': {
+        'text': caption.isNotEmpty ? caption : '📷 Photo',
+        'senderId': senderId,
+        'sentAt': FieldValue.serverTimestamp(),
+      },
+      'lastMessageAt': FieldValue.serverTimestamp(),
+      'lastMessageReadBy': [senderId],
+    });
+
+    await batch.commit();
+  }
+
+  Future<void> sendAudioMessage({
+    required String chatId,
+    required String senderId,
+    required String senderName,
+    required File audioFile,
+    required int durationSeconds,
+  }) async {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final ref = FirebaseStorage.instance
+        .ref('chat_audio/direct/$chatId/$timestamp.m4a');
+    await ref.putFile(audioFile);
+    final url = await ref.getDownloadURL();
+
+    final batch = _db.batch();
+
+    batch.set(_messages(chatId).doc(), {
+      'sender_id': senderId,
+      'senderName': senderName,
+      'type': 'audio',
+      'content': '',
+      'audioUrl': url,
+      'durationSeconds': durationSeconds,
+      'read_by': [senderId],
+      'created_at': FieldValue.serverTimestamp(),
+      'createdAtLocal': DateTime.now().toIso8601String(),
+      'edited': false,
+    });
+
+    batch.update(_chats.doc(chatId), {
+      'last_message': {
+        'text': '🎤 Voice message',
         'senderId': senderId,
         'sentAt': FieldValue.serverTimestamp(),
       },
