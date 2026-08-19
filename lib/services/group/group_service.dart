@@ -148,7 +148,7 @@ class GroupService {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final ref = FirebaseStorage.instance
         .ref('chat_audio/$groupId/$timestamp.m4a');
-    await ref.putFile(audioFile);
+    await ref.putFile(audioFile, SettableMetadata(contentType: 'audio/mp4'));
     final url = await ref.getDownloadURL();
 
     final batch = _db.batch();
