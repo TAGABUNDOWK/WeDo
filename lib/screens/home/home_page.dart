@@ -1126,7 +1126,7 @@ class _NowPlayingSection extends StatelessWidget {
                   fontFamily: 'Poppins',
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF9A5AB0),
+                  color: Colors.white,
                 ),
               ),
               GestureDetector(
