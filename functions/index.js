@@ -54,3 +54,58 @@ exports.scheduledSessionCleanup = functions.pubsub
   .onRun(async (context) => {
     await cleanupExpiredSessions();
   });
+
+// ──────────────────── Call Notification (sends FCM when a call is created) ────────────────────
+
+exports.onCallCreated = functions.firestore
+  .document('calls/{callId}')
+  .onCreate(async (snap, context) => {
+    const callData = snap.data();
+    if (!callData) return;
+
+    const createdBy = callData.createdBy;
+    const members = callData.members || [];
+    const type = callData.type || 'audio';
+
+    const otherMembers = members.filter((uid) => uid !== createdBy);
+    if (otherMembers.length === 0) return;
+
+    const callerDoc = await db.collection('users').doc(createdBy).get();
+    const callerName = callerDoc.data()?.display_name || callerDoc.data()?.displayName || 'Someone';
+
+    const tokens = [];
+    for (const uid of otherMembers) {
+      const userDoc = await db.collection('users').doc(uid).get();
+      const token = userDoc.data()?.fcm_token;
+      if (token) tokens.push(token);
+    }
+
+    if (tokens.length === 0) return;
+
+    const payload = {
+      data: {
+        callId: context.params.callId,
+        callerName: callerName,
+        callerUid: createdBy,
+        type: type,
+      },
+      notification: {
+        title: `Incoming ${type} call`,
+        body: `${callerName} is calling you`,
+      },
+    };
+
+    const { getMessaging } = require('firebase-admin/messaging');
+    const messaging = getMessaging();
+
+    const results = await messaging.sendEachForMulticast({
+      tokens: tokens,
+      data: payload.data,
+      notification: payload.notification,
+      android: {
+        priority: 'high',
+      },
+    });
+
+    console.log(`Call notification sent to ${tokens.length} devices, ${results.successCount} succeeded`);
+  });
