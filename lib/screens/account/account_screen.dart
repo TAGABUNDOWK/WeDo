@@ -49,12 +49,14 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Future<void> _acceptRequest(String friendshipId, String notificationId) async {
-    await _friendService.acceptRequest(friendshipId);
+    await _friendService.acceptRequest(friendshipId,
+        acceptorUid: _uid, acceptorNotificationId: notificationId);
     _loadUser();
   }
 
   Future<void> _declineRequest(String friendshipId, String notificationId) async {
-    await _friendService.declineRequest(friendshipId);
+    await _friendService.declineRequest(friendshipId,
+        declinerUid: _uid, declinerNotificationId: notificationId);
     _loadUser();
   }
 
@@ -651,6 +653,17 @@ class _AccountScreenState extends State<AccountScreen> {
                           ),
                           const SizedBox(width: 12),
                           GestureDetector(
+                            onTap: () async {
+                              await _notificationService.deleteReadNotifications(_uid);
+                            },
+                            child: Icon(
+                              Icons.delete_outline,
+                              size: 20,
+                              color: Colors.white.withValues(alpha: 0.5),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          GestureDetector(
                             onTap: () => setState(() => _showNotifications = false),
                             child: Icon(
                               Icons.close,
@@ -782,7 +795,6 @@ class _NotificationItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         padding: const EdgeInsets.all(12),
@@ -809,35 +821,43 @@ class _NotificationItem extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    notification.title,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: notification.isRead
-                          ? FontWeight.w500
-                          : FontWeight.w700,
-                      color: Colors.white,
-                      fontFamily: 'Poppins',
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    notification.message,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.white.withValues(alpha: 0.6),
-                      fontFamily: 'Poppins',
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _timeAgo(),
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.white.withValues(alpha: 0.4),
-                      fontFamily: 'Poppins',
+                  GestureDetector(
+                    onTap: onTap,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          notification.title,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: notification.isRead
+                                ? FontWeight.w500
+                                : FontWeight.w700,
+                            color: Colors.white,
+                            fontFamily: 'Poppins',
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          notification.message,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white.withValues(alpha: 0.6),
+                            fontFamily: 'Poppins',
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _timeAgo(),
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.white.withValues(alpha: 0.4),
+                            fontFamily: 'Poppins',
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   if (notification.type == NotificationType.friendRequest) ...[
