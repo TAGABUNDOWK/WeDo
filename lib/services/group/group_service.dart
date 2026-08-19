@@ -129,40 +129,6 @@ class GroupService {
     await batch.commit();
   }
 
-  Future<void> sendInviteMessage({
-    required String groupId,
-    required String senderId,
-    required String senderName,
-    required String sessionId,
-    required String topic,
-    required String hostName,
-  }) async {
-    final batch = _db.batch();
-
-    batch.set(_messages(groupId).doc(), {
-      'sender_id': senderId,
-      'senderName': senderName,
-      'type': 'invite',
-      'content': '\ud83e\udd4a $hostName started a PickFight: "$topic"',
-      'activityId': sessionId,
-      'reactions': {},
-      'read_by': [senderId],
-      'created_at': FieldValue.serverTimestamp(),
-      'createdAtLocal': DateTime.now().toIso8601String(),
-      'edited': false,
-    });
-
-    final previewText = '\ud83e\udd4a PickFight: $topic';
-    batch.update(_groups.doc(groupId), {
-      'lastMessage': previewText,
-      'lastMessageSenderId': senderId,
-      'lastMessageAt': FieldValue.serverTimestamp(),
-      'lastMessageReadBy': [senderId],
-    });
-
-    await batch.commit();
-  }
-
   Future<void> sendImageMessage({
     required String groupId,
     required String senderId,
@@ -214,7 +180,7 @@ class GroupService {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final ref = FirebaseStorage.instance
         .ref('chat_audio/$groupId/$timestamp.m4a');
-    await ref.putFile(audioFile, SettableMetadata(contentType: 'audio/mp4'));
+    await ref.putFile(audioFile);
     final url = await ref.getDownloadURL();
 
     final batch = _db.batch();
