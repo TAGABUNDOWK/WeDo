@@ -115,8 +115,8 @@ class _CircleAnimation {
 
     final baseX = _basePositions[index][0];
     final baseY = _basePositions[index][1];
-    final driftX = 0.20;
-    final driftY = 0.20;
+    const driftX = 0.20;
+    const driftY = 0.20;
 
     final startX = baseX - driftX / 2;
     final endX = baseX + driftX / 2;

@@ -66,7 +66,7 @@ class SessionService {
       final existing = await _sessions.doc(code).get();
       if (!existing.exists) return code;
     }
-    throw SessionException('Failed to generate unique session code. Try again.');
+    throw const SessionException('Failed to generate unique session code. Try again.');
   }
 
   /// Creates a new session document with status "lobby".
@@ -103,14 +103,14 @@ class SessionService {
     try {
       final doc = await _sessions.doc(code).get();
       if (!doc.exists) {
-        throw SessionException('Session not found. Check the code and try again.');
+        throw const SessionException('Session not found. Check the code and try again.');
       }
       final session = SessionEntity.fromMap(
         doc.id,
         doc.data() as Map<String, dynamic>,
       );
       if (session.status != SessionStatus.lobby) {
-        throw SessionException('Session already started or ended.');
+        throw const SessionException('Session already started or ended.');
       }
       return session;
     } on FirebaseException catch (e) {
@@ -231,10 +231,10 @@ class SessionService {
   Future<void> startSession(String sessionId, String hostId) async {
     try {
       final doc = await _sessions.doc(sessionId).get();
-      if (!doc.exists) throw SessionException('Session not found.');
+      if (!doc.exists) throw const SessionException('Session not found.');
       final data = doc.data() as Map<String, dynamic>;
       if (data['hostId'] != hostId) {
-        throw SessionException('Only the host can start the session.');
+        throw const SessionException('Only the host can start the session.');
       }
       await _sessions.doc(sessionId).update({'status': SessionStatus.active.value});
     } on FirebaseException catch (e) {
@@ -255,10 +255,10 @@ class SessionService {
   Future<void> deleteSession(String sessionId, String hostId) async {
     try {
       final doc = await _sessions.doc(sessionId).get();
-      if (!doc.exists) throw SessionException('Session not found.');
+      if (!doc.exists) throw const SessionException('Session not found.');
       final data = doc.data() as Map<String, dynamic>;
       if (data['hostId'] != hostId) {
-        throw SessionException('Only the host can delete the session.');
+        throw const SessionException('Only the host can delete the session.');
       }
 
       final participantsSnap = await _participants(sessionId).get();
@@ -276,10 +276,10 @@ class SessionService {
   Future<void> cancelSession(String sessionId, String hostId) async {
     try {
       final doc = await _sessions.doc(sessionId).get();
-      if (!doc.exists) throw SessionException('Session not found.');
+      if (!doc.exists) throw const SessionException('Session not found.');
       final data = doc.data() as Map<String, dynamic>;
       if (data['hostId'] != hostId) {
-        throw SessionException('Only the host can cancel the session.');
+        throw const SessionException('Only the host can cancel the session.');
       }
       await _sessions.doc(sessionId).update({'status': SessionStatus.cancelled.value});
     } on FirebaseException catch (e) {
