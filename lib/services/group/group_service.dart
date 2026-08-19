@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../../models/group_chat.dart';
 import '../../models/message.dart';
 import '../../utils/constants.dart';
@@ -90,6 +92,83 @@ class GroupService {
 
     batch.update(_groups.doc(groupId), {
       'lastMessage': text,
+      'lastMessageSenderId': senderId,
+      'lastMessageAt': FieldValue.serverTimestamp(),
+      'lastMessageReadBy': [senderId],
+    });
+
+    await batch.commit();
+  }
+
+  Future<void> sendImageMessage({
+    required String groupId,
+    required String senderId,
+    required String senderName,
+    required File imageFile,
+    String caption = '',
+  }) async {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final ref = FirebaseStorage.instance
+        .ref('chat_images/$groupId/$timestamp.jpg');
+    await ref.putFile(imageFile);
+    final url = await ref.getDownloadURL();
+
+    final batch = _db.batch();
+
+    batch.set(_messages(groupId).doc(), {
+      'sender_id': senderId,
+      'senderName': senderName,
+      'type': 'image',
+      'content': caption,
+      'imageUrl': url,
+      'reactions': {},
+      'read_by': [senderId],
+      'created_at': FieldValue.serverTimestamp(),
+      'createdAtLocal': DateTime.now().toIso8601String(),
+      'edited': false,
+    });
+
+    batch.update(_groups.doc(groupId), {
+      'lastMessage': caption.isNotEmpty ? caption : '📷 Photo',
+      'lastMessageSenderId': senderId,
+      'lastMessageAt': FieldValue.serverTimestamp(),
+      'lastMessageReadBy': [senderId],
+    });
+
+    await batch.commit();
+  }
+
+  Future<void> sendAudioMessage({
+    required String groupId,
+    required String senderId,
+    required String senderName,
+    required File audioFile,
+    required int durationSeconds,
+  }) async {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final ref = FirebaseStorage.instance
+        .ref('chat_audio/$groupId/$timestamp.m4a');
+    await ref.putFile(audioFile, SettableMetadata(contentType: 'audio/mp4'));
+    final url = await ref.getDownloadURL();
+
+    final batch = _db.batch();
+
+    batch.set(_messages(groupId).doc(), {
+      'sender_id': senderId,
+      'senderName': senderName,
+      'type': 'audio',
+      'content': '',
+      'audioUrl': url,
+      'durationSeconds': durationSeconds,
+      'reactions': {},
+      'read_by': [senderId],
+      'created_at': FieldValue.serverTimestamp(),
+      'createdAtLocal': DateTime.now().toIso8601String(),
+      'edited': false,
+    });
+
+    batch.update(_groups.doc(groupId), {
+      'lastMessage': '🎤 Voice message',
       'lastMessageSenderId': senderId,
       'lastMessageAt': FieldValue.serverTimestamp(),
       'lastMessageReadBy': [senderId],

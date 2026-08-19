@@ -1,10 +1,16 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../../models/call.dart';
 import '../../../models/message.dart';
 import '../../../services/group/group_service.dart';
+import '../../../services/call/call_service.dart';
 import '../../../utils/time_format.dart';
 import '../../../widgets/message_bubble.dart';
 import '../../../widgets/composer_option.dart';
+import '../../../widgets/audio_recorder_button.dart';
+import '../../call/call_screen.dart';
 import '../search/chat_search_screen.dart';
 
 class GroupChatScreen extends StatefulWidget {
@@ -19,9 +25,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   final _messageCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   final _groupService = GroupService();
+  final _callService = CallService();
   final _currentUser = FirebaseAuth.instance.currentUser;
+  final _imagePicker = ImagePicker();
   String _groupName = '';
   Map<String, String> _nicknames = {};
+  bool _isUploading = false;
 
   @override
   void initState() {
@@ -68,6 +77,104 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     _messageCtrl.clear();
   }
 
+  Future<void> _pickAndSendImage() async {
+    final source = await showDialog<ImageSource>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select Source'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, ImageSource.camera),
+            child: const Text('Camera'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, ImageSource.gallery),
+            child: const Text('Gallery'),
+          ),
+        ],
+      ),
+    );
+
+    if (source == null) return;
+
+    final picked = await _imagePicker.pickImage(source: source, imageQuality: 80);
+    if (picked == null || _currentUser == null) return;
+
+    setState(() => _isUploading = true);
+
+    try {
+      await _groupService.sendImageMessage(
+        groupId: widget.groupId,
+        senderId: _currentUser.uid,
+        senderName: _getDisplayName(_currentUser.uid, _currentUser.displayName ?? _currentUser.email ?? 'Unknown'),
+        imageFile: File(picked.path),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send photo: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
+  Future<void> _onAudioRecorded(File audioFile, int durationSeconds) async {
+    if (_currentUser == null) return;
+
+    setState(() => _isUploading = true);
+
+    try {
+      await _groupService.sendAudioMessage(
+        groupId: widget.groupId,
+        senderId: _currentUser.uid,
+        senderName: _getDisplayName(_currentUser.uid, _currentUser.displayName ?? _currentUser.email ?? 'Unknown'),
+        audioFile: audioFile,
+        durationSeconds: durationSeconds,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send voice message: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
+  Future<void> _startCall(CallType type) async {
+    if (_currentUser == null) return;
+
+    final group = await _groupService.getGroup(widget.groupId);
+    if (group == null) return;
+
+    final members = List<String>.from(group.members);
+
+    final callId = await _callService.startCall(
+      groupId: widget.groupId,
+      createdBy: _currentUser.uid,
+      type: type,
+      members: members,
+    );
+
+    if (!mounted) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CallScreen(
+          callId: callId,
+          callName: _groupName,
+          callType: type,
+          members: members,
+          isGroup: true,
+        ),
+      ),
+    );
+  }
+
   void _showComposerMenu() {
     showModalBottomSheet<void>(
       context: context,
@@ -97,9 +204,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                     color: Colors.blue,
                     onTap: () {
                       Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Sending photos coming soon')),
-                      );
+                      _pickAndSendImage();
                     },
                   ),
                   ComposerOption(
@@ -138,6 +243,16 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.phone),
+            tooltip: 'Audio call',
+            onPressed: () => _startCall(CallType.audio),
+          ),
+          IconButton(
+            icon: const Icon(Icons.videocam),
+            tooltip: 'Video call',
+            onPressed: () => _startCall(CallType.video),
+          ),
+          IconButton(
             icon: const Icon(Icons.search),
             onPressed: () async {
               final messageId = await Navigator.push<String>(
@@ -170,6 +285,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       ),
       body: Column(
         children: [
+          if (_isUploading)
+            const LinearProgressIndicator(backgroundColor: Colors.transparent),
           Expanded(
             child: StreamBuilder<List<ChatMessage>>(
               stream: _groupService.getMessagesStream(widget.groupId),
@@ -215,6 +332,17 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                       );
                     }
 
+                    if (msg.type == MessageType.audio && msg.audioUrl != null) {
+                      return MessageBubble(
+                        content: msg.content,
+                        audioUrl: msg.audioUrl,
+                        durationSeconds: msg.durationSeconds,
+                        isMe: isMe,
+                        senderName: isMe ? null : displayName,
+                        time: formatChatTime(msg.createdAt),
+                      );
+                    }
+
                     return MessageBubble(
                       content: msg.content,
                       isMe: isMe,
@@ -241,6 +369,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                     icon: const Icon(Icons.add_circle_outline, color: Colors.grey),
                     onPressed: _showComposerMenu,
                   ),
+                  AudioRecorderButton(onRecordingComplete: _onAudioRecorded),
+                  const SizedBox(width: 4),
                   Expanded(
                     child: TextField(
                       controller: _messageCtrl,

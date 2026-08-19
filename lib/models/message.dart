@@ -3,12 +3,18 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 enum MessageType {
   text,
   image,
+  audio,
+  call,
   system;
 
   static MessageType fromString(String? value) {
     switch (value) {
       case 'image':
         return MessageType.image;
+      case 'audio':
+        return MessageType.audio;
+      case 'call':
+        return MessageType.call;
       case 'system':
         return MessageType.system;
       default:
@@ -22,6 +28,10 @@ enum MessageType {
         return 'text';
       case MessageType.image:
         return 'image';
+      case MessageType.audio:
+        return 'audio';
+      case MessageType.call:
+        return 'call';
       case MessageType.system:
         return 'system';
     }
@@ -35,6 +45,8 @@ class ChatMessage {
   final String content;
   final MessageType type;
   final String? imageUrl;
+  final String? audioUrl;
+  final int? durationSeconds;
   final List<String> readBy;
   final Map<String, dynamic> reactions;
   final bool edited;
@@ -47,6 +59,8 @@ class ChatMessage {
     required this.content,
     required this.type,
     this.imageUrl,
+    this.audioUrl,
+    this.durationSeconds,
     required this.readBy,
     required this.reactions,
     required this.edited,
@@ -56,7 +70,6 @@ class ChatMessage {
   factory ChatMessage.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data()!;
 
-    // Support both camelCase and snake_case fields
     final senderId = data['senderId'] as String?
         ?? data['sender_id'] as String?
         ?? '';
@@ -67,6 +80,10 @@ class ChatMessage {
     final type = MessageType.fromString(data['type'] as String?);
     final imageUrl = data['imageUrl'] as String?
         ?? data['image_url'] as String?;
+    final audioUrl = data['audioUrl'] as String?
+        ?? data['audio_url'] as String?;
+    final durationSeconds = data['durationSeconds'] as int?
+        ?? data['duration_seconds'] as int?;
     final readBy = (data['readBy'] as List?)
         ?? (data['read_by'] as List?)
         ?? const [];
@@ -83,6 +100,8 @@ class ChatMessage {
       content: content,
       type: type,
       imageUrl: imageUrl,
+      audioUrl: audioUrl,
+      durationSeconds: durationSeconds,
       readBy: readBy.cast<String>(),
       reactions: reactions,
       edited: edited,
@@ -97,6 +116,8 @@ class ChatMessage {
       'content': content,
       'type': type.value,
       'imageUrl': imageUrl,
+      'audioUrl': audioUrl,
+      'durationSeconds': durationSeconds,
       'readBy': readBy,
       'reactions': reactions,
       'edited': edited,
