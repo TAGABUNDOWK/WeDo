@@ -9,6 +9,7 @@ import '../../../services/direct/direct_service.dart';
 import '../../../services/call/call_service.dart';
 import '../../../utils/time_format.dart';
 import '../../../widgets/message_bubble.dart';
+import '../../../widgets/invite_message_card.dart';
 import '../../../widgets/composer_option.dart';
 import '../../../widgets/audio_recorder_button.dart';
 import '../../call/call_screen.dart';
@@ -296,6 +297,16 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                   itemBuilder: (context, index) {
                     final msg = messages[index];
                     final isMe = msg.senderId == _currentUser?.uid;
+
+                    if (msg.type == MessageType.invite && msg.activityId != null) {
+                      return InviteMessageCard(
+                        sessionId: msg.activityId!,
+                        content: msg.content,
+                        isMe: isMe,
+                        senderName: null,
+                        time: formatChatTime(msg.createdAt),
+                      );
+                    }
 
                     if (msg.type == MessageType.image && msg.imageUrl != null) {
                       return MessageBubble(
