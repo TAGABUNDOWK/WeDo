@@ -233,7 +233,7 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
           const CircularProgressIndicator(),
           const SizedBox(height: 20),
           Text(
-            'Creating session...',
+            'Creating PickFight...',
             style: TextStyle(color: Colors.white70, fontSize: 16),
           ),
           const SizedBox(height: 8),
