@@ -43,11 +43,20 @@ class FriendService {
     );
   }
 
-  Future<void> acceptRequest(String friendshipId) async {
+  Future<void> acceptRequest(String friendshipId,
+      {String? acceptorUid, String? acceptorNotificationId}) async {
     await _db.collection('friends').doc(friendshipId).update({
       'status': 'friends',
       'updatedAt': FieldValue.serverTimestamp(),
     });
+
+    if (acceptorUid != null && acceptorNotificationId != null) {
+      await _notificationService.updateNotificationStatus(
+        acceptorUid,
+        acceptorNotificationId,
+        NotificationStatus.accepted,
+      );
+    }
 
     final friendshipDoc =
         await _db.collection('friends').doc(friendshipId).get();
@@ -86,12 +95,21 @@ class FriendService {
     );
   }
 
-  Future<void> declineRequest(String friendshipId) async {
+  Future<void> declineRequest(String friendshipId,
+      {String? declinerUid, String? declinerNotificationId}) async {
     final friendshipDoc =
         await _db.collection('friends').doc(friendshipId).get();
     final friendshipData = friendshipDoc.data();
 
     await _db.collection('friends').doc(friendshipId).delete();
+
+    if (declinerUid != null && declinerNotificationId != null) {
+      await _notificationService.updateNotificationStatus(
+        declinerUid,
+        declinerNotificationId,
+        NotificationStatus.declined,
+      );
+    }
 
     if (friendshipData != null) {
       final userIds =

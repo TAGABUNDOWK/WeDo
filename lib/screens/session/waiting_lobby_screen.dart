@@ -4,6 +4,7 @@ import '../../models/session_entity.dart';
 import '../../services/session/session_service.dart';
 import 'swiping_screen.dart';
 import 'results_screen.dart';
+import 'invite_picker_screen.dart';
 
 class WaitingLobbyScreen extends StatefulWidget {
   final String sessionId;
@@ -166,6 +167,10 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
             'Topic: ${session.topic}',
             style: const TextStyle(color: Colors.white70, fontSize: 13),
           ),
+          if (widget.isHost) ...[
+            const SizedBox(height: 16),
+            _buildInviteButton(session),
+          ],
           const SizedBox(height: 32),
           const Align(
             alignment: Alignment.centerLeft,
@@ -292,6 +297,50 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildInviteButton(SessionEntity session) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => InvitePickerScreen(
+              sessionId: widget.sessionId,
+              hostId: _currentUser!.uid,
+              topic: session.topic,
+            ),
+          ),
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.15),
+            width: 1,
+          ),
+        ),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.person_add_alt_1, size: 18, color: Color(0xFFFE4EF0)),
+            SizedBox(width: 8),
+            Text(
+              'Invite Friends',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFFFE4EF0),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

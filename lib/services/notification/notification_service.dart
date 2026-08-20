@@ -52,6 +52,18 @@ class NotificationService {
     await batch.commit();
   }
 
+  Future<void> deleteReadNotifications(String userId) async {
+    final read = await _userNotifications(userId)
+        .where('is_read', isEqualTo: true)
+        .get();
+
+    final batch = _db.batch();
+    for (final doc in read.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
+  }
+
   Future<void> updateNotificationStatus(
       String userId, String notificationId, NotificationStatus status) async {
     await _userNotifications(userId).doc(notificationId).update({

@@ -6,6 +6,7 @@ import 'waiting_lobby_screen.dart';
 import 'places/places_to_go_screen.dart';
 import 'places/where_to_eat_screen.dart';
 import 'movie/movie_category_screen.dart';
+import 'create_own_topic_screen.dart';
 
 class CreateSessionScreen extends StatefulWidget {
   const CreateSessionScreen({super.key});
@@ -110,6 +111,14 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
           'Choose a Topic',
           style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
         ),
+        actions: [
+          IconButton(
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateOwnTopicScreen()));
+            },
+            icon: const Icon(Icons.edit, color: Colors.white),
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -122,7 +131,7 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
   }
 
   Widget _buildTopicGrid() {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: GridView.count(
         crossAxisCount: 2,
@@ -224,7 +233,7 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
           const CircularProgressIndicator(),
           const SizedBox(height: 20),
           Text(
-            'Creating session...',
+            'Creating PickFight...',
             style: TextStyle(color: Colors.white70, fontSize: 16),
           ),
           const SizedBox(height: 8),

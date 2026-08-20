@@ -355,6 +355,26 @@ class SessionService {
       throw SessionException('Failed to aggregate results: ${e.message}');
     }
   }
+  /// Marks users as invited on the session document.
+  Future<void> markInvited({
+    required String sessionId,
+    required String hostId,
+    required List<String> invitedUserIds,
+  }) async {
+    try {
+      final doc = await _sessions.doc(sessionId).get();
+      if (!doc.exists) throw SessionException('Session not found.');
+      final data = doc.data() as Map<String, dynamic>;
+      if (data['hostId'] != hostId) {
+        throw SessionException('Only the host can send invites.');
+      }
+      await _sessions.doc(sessionId).update({
+        'invitedUserIds': FieldValue.arrayUnion(invitedUserIds),
+      });
+    } on FirebaseException catch (e) {
+      throw SessionException('Failed to mark invited users: ${e.message}');
+    }
+  }
 }
 
 /// Typed exception for session operations.

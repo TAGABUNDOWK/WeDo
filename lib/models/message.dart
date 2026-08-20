@@ -5,7 +5,8 @@ enum MessageType {
   image,
   audio,
   call,
-  system;
+  system,
+  invite;
 
   static MessageType fromString(String? value) {
     switch (value) {
@@ -17,6 +18,8 @@ enum MessageType {
         return MessageType.call;
       case 'system':
         return MessageType.system;
+      case 'invite':
+        return MessageType.invite;
       default:
         return MessageType.text;
     }
@@ -34,6 +37,8 @@ enum MessageType {
         return 'call';
       case MessageType.system:
         return 'system';
+      case MessageType.invite:
+        return 'invite';
     }
   }
 }
@@ -47,6 +52,7 @@ class ChatMessage {
   final String? imageUrl;
   final String? audioUrl;
   final int? durationSeconds;
+  final String? activityId;
   final List<String> readBy;
   final Map<String, dynamic> reactions;
   final bool edited;
@@ -61,6 +67,7 @@ class ChatMessage {
     this.imageUrl,
     this.audioUrl,
     this.durationSeconds,
+    this.activityId,
     required this.readBy,
     required this.reactions,
     required this.edited,
@@ -84,6 +91,7 @@ class ChatMessage {
         ?? data['audio_url'] as String?;
     final durationSeconds = data['durationSeconds'] as int?
         ?? data['duration_seconds'] as int?;
+    final activityId = data['activityId'] as String?;
     final readBy = (data['readBy'] as List?)
         ?? (data['read_by'] as List?)
         ?? const [];
@@ -102,6 +110,7 @@ class ChatMessage {
       imageUrl: imageUrl,
       audioUrl: audioUrl,
       durationSeconds: durationSeconds,
+      activityId: activityId,
       readBy: readBy.cast<String>(),
       reactions: reactions,
       edited: edited,
@@ -118,6 +127,7 @@ class ChatMessage {
       'imageUrl': imageUrl,
       'audioUrl': audioUrl,
       'durationSeconds': durationSeconds,
+      'activityId': activityId,
       'readBy': readBy,
       'reactions': reactions,
       'edited': edited,
