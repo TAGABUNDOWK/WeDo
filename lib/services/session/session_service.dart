@@ -129,12 +129,20 @@ class SessionService {
       final existing = await participantDoc.get();
       if (existing.exists) return;
 
-      await participantDoc.set({
+      final batch = _db.batch();
+
+      batch.set(participantDoc, {
         'userName': userName,
         'status': ParticipantStatus.active.value,
         'eliminatedCardIds': [],
         'timeoutCount': 0,
       });
+
+      batch.update(_sessions.doc(sessionId), {
+        'participantUids': FieldValue.arrayUnion([userId]),
+      });
+
+      await batch.commit();
     } on FirebaseException catch (e) {
       throw SessionException('Failed to join session: ${e.message}');
     }
@@ -160,6 +168,61 @@ class SessionService {
               ))
           .toList();
     });
+  }
+
+  /// Fetches completed sessions where the user was host (one-time read).
+  Future<List<SessionEntity>> getHostCompletedSessions(String uid, {int limit = 3}) async {
+    try {
+      final snap = await _sessions
+          .where('hostId', isEqualTo: uid)
+          .where('status', isEqualTo: 'completed')
+          .orderBy('createdAt', descending: true)
+          .limit(limit)
+          .get();
+
+      return snap.docs
+          .map((d) => SessionEntity.fromMap(d.id, d.data() as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Fetches completed sessions where the user was participant (one-time read).
+  Future<List<SessionEntity>> getParticipantCompletedSessions(String uid, {int limit = 3}) async {
+    try {
+      final snap = await _sessions
+          .where('participantUids', arrayContains: uid)
+          .where('status', isEqualTo: 'completed')
+          .orderBy('createdAt', descending: true)
+          .limit(limit)
+          .get();
+
+      return snap.docs
+          .map((d) => SessionEntity.fromMap(d.id, d.data() as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Merges host + participant completed sessions, deduplicates, sorts, limits.
+  Future<List<SessionEntity>> getUserCompletedSessions(String uid, {int limit = 3}) async {
+    final hostResults = await getHostCompletedSessions(uid, limit: limit);
+    final participantResults = await getParticipantCompletedSessions(uid, limit: limit);
+
+    final seen = <String>{};
+    final results = <SessionEntity>[];
+
+    for (final s in hostResults) {
+      if (seen.add(s.id)) results.add(s);
+    }
+    for (final s in participantResults) {
+      if (seen.add(s.id)) results.add(s);
+    }
+
+    results.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return results.take(limit).toList();
   }
 
   // ──────────────────────────── Session Actions ───────────────────────────

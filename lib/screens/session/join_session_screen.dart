@@ -75,7 +75,7 @@ class _JoinSessionScreenState extends State<JoinSessionScreen> {
         elevation: 0,
         foregroundColor: Colors.white,
         title: const Text(
-          'Join Session',
+          'Join a PickFight',
           style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
         ),
       ),

@@ -43,6 +43,7 @@ class SessionEntity {
   final String? speedShieldWinnerId;
   final Map<String, dynamic>? aggregatedResults;
   final List<String> invitedUserIds;
+  final List<String> participantUids;
   final DateTime createdAt;
   final DateTime expiresAt;
 
@@ -56,6 +57,7 @@ class SessionEntity {
     this.speedShieldWinnerId,
     this.aggregatedResults,
     this.invitedUserIds = const [],
+    this.participantUids = const [],
     required this.createdAt,
     required this.expiresAt,
   });
@@ -74,6 +76,7 @@ class SessionEntity {
       speedShieldWinnerId: map['speedShieldWinnerId'] as String?,
       aggregatedResults: map['aggregatedResults'] as Map<String, dynamic>?,
       invitedUserIds: (map['invitedUserIds'] as List?)?.cast<String>() ?? const [],
+      participantUids: (map['participantUids'] as List?)?.cast<String>() ?? const [],
       createdAt: _parseTimestamp(map['createdAt']),
       expiresAt: _parseTimestamp(map['expiresAt']),
     );
@@ -89,6 +92,7 @@ class SessionEntity {
       'speedShieldWinnerId': speedShieldWinnerId,
       'aggregatedResults': aggregatedResults,
       'invitedUserIds': invitedUserIds,
+      'participantUids': participantUids,
       'createdAt': Timestamp.fromDate(createdAt),
       'expiresAt': Timestamp.fromDate(expiresAt),
     };
@@ -104,11 +108,13 @@ class SessionEntity {
     String? speedShieldWinnerId,
     Map<String, dynamic>? aggregatedResults,
     List<String>? invitedUserIds,
+    List<String>? participantUids,
     DateTime? createdAt,
     DateTime? expiresAt,
     bool clearSpeedShieldWinnerId = false,
     bool clearAggregatedResults = false,
     bool clearInvitedUserIds = false,
+    bool clearParticipantUids = false,
   }) {
     return SessionEntity(
       id: id ?? this.id,
@@ -123,6 +129,8 @@ class SessionEntity {
           clearAggregatedResults ? null : (aggregatedResults ?? this.aggregatedResults),
       invitedUserIds:
           clearInvitedUserIds ? const [] : (invitedUserIds ?? this.invitedUserIds),
+      participantUids:
+          clearParticipantUids ? const [] : (participantUids ?? this.participantUids),
       createdAt: createdAt ?? this.createdAt,
       expiresAt: expiresAt ?? this.expiresAt,
     );
@@ -142,7 +150,8 @@ class SessionEntity {
         'status: ${status.value}, cards: $cards, '
         'speedShieldWinnerId: $speedShieldWinnerId, '
         'aggregatedResults: $aggregatedResults, '
-        'invitedUserIds: $invitedUserIds)';
+        'invitedUserIds: $invitedUserIds, '
+        'participantUids: $participantUids)';
   }
 
   @override

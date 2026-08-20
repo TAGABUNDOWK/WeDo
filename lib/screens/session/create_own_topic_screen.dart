@@ -439,12 +439,12 @@ class _CreateOwnTopicScreenState extends State<CreateOwnTopicScreen> {
         child: Center(
           child: Text(
             enabled
-                ? 'Start Session (${_cards.length} card${_cards.length == 1 ? '' : 's'})'
+                ? 'Start PickFight (${_cards.length} card${_cards.length == 1 ? '' : 's'})'
                 : _topicController.text.trim().isEmpty
                     ? 'Enter a topic to continue'
                     : _cards.length < _minCards
                         ? 'Add at least $_minCards cards'
-                        : 'Start Session',
+                        : 'Start PickFight',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 16,
@@ -464,7 +464,7 @@ class _CreateOwnTopicScreenState extends State<CreateOwnTopicScreen> {
           const CircularProgressIndicator(),
           const SizedBox(height: 20),
           const Text(
-            'Creating session...',
+            'Creating PickFight...',
             style: TextStyle(color: Colors.white70, fontSize: 16),
           ),
           const SizedBox(height: 8),

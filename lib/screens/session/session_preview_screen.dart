@@ -75,7 +75,7 @@ class _SessionPreviewScreenState extends State<SessionPreviewScreen> {
         elevation: 0,
         foregroundColor: Colors.white,
         title: const Text(
-          'Session Invite',
+          'PickFight Invite',
           style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
         ),
       ),
@@ -325,7 +325,7 @@ class _SessionPreviewScreenState extends State<SessionPreviewScreen> {
                               child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                             )
                           : const Text(
-                              'Join Session',
+                              'Join PickFight',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,
@@ -354,7 +354,7 @@ class _SessionPreviewScreenState extends State<SessionPreviewScreen> {
   Widget _buildAlreadyStarted() {
     return _buildStatusScreen(
       icon: Icons.play_circle_outline,
-      title: 'Session already started',
+      title: 'PickFight already started',
       subtitle: 'This session started without you.',
     );
   }
@@ -362,7 +362,7 @@ class _SessionPreviewScreenState extends State<SessionPreviewScreen> {
   Widget _buildCancelled() {
     return _buildStatusScreen(
       icon: Icons.cancel_outlined,
-      title: 'Session cancelled',
+      title: 'PickFight cancelled',
       subtitle: 'The host cancelled this session.',
     );
   }
@@ -370,7 +370,7 @@ class _SessionPreviewScreenState extends State<SessionPreviewScreen> {
   Widget _buildCompleted() {
     return _buildStatusScreen(
       icon: Icons.check_circle_outline,
-      title: 'Session ended',
+      title: 'PickFight ended',
       subtitle: 'This session has already wrapped up.',
     );
   }

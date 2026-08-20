@@ -38,7 +38,7 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
         title: const Text('Leave Lobby?'),
         content: Text(
           widget.isHost
-              ? 'This will cancel the session for all players.'
+              ? 'This will cancel the PickFight for all players.'
               : 'Are you sure you want to leave?',
         ),
         actions: [
@@ -49,7 +49,7 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             child: Text(
-              widget.isHost ? 'Cancel Session' : 'Leave',
+              widget.isHost ? 'Cancel PickFight' : 'Leave',
               style: const TextStyle(color: Colors.redAccent),
             ),
           ),
@@ -90,7 +90,7 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
             onPressed: () => _onPopInvoked(false, null),
           ),
           title: const Text(
-            'Waiting Lobby',
+            'PickFight Lobby',
             style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
           ),
         ),
@@ -373,7 +373,7 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
             ),
             child: Center(
               child: Text(
-                'Start Session ($count player${count == 1 ? '' : 's'})',
+                'Start PickFight ($count player${count == 1 ? '' : 's'})',
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 16,
@@ -405,7 +405,7 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('Session Cancelled'),
+        title: const Text('PickFight Cancelled'),
         content: const Text('The host closed the lobby.'),
         actions: [
           TextButton(

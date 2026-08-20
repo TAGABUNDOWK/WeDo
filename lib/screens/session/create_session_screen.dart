@@ -29,6 +29,7 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
     _HardcodedTopic(title: 'Where should we eat?', icon: Icons.restaurant),
     _HardcodedTopic(title: 'Places to go', icon: Icons.location_on),
     _HardcodedTopic(title: 'Movies to watch', icon: Icons.movie),
+    _HardcodedTopic(title: 'Create own topic', icon: Icons.edit),
   ];
 
   @override
@@ -185,6 +186,8 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const PlacesToGoScreen()));
                 } else if (topic.title == 'Movies to watch') {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const MovieCategoryScreen()));
+                } else if (topic.title == 'Create own topic') {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateOwnTopicScreen()));
                 }
               },
               child: Container(

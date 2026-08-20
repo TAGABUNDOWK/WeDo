@@ -139,7 +139,7 @@ class _MovieResultsScreenState extends State<MovieResultsScreen> {
                 backgroundColor: Colors.transparent,
                 elevation: 0,
                 foregroundColor: Colors.white,
-                label: Text(_isCreatingSession ? 'Creating...' : 'Start Session'),
+                label: Text(_isCreatingSession ? 'Creating...' : 'Start PickFight'),
                 icon: _isCreatingSession
                     ? const SizedBox(
                         width: 20,
