@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/session_entity.dart';
 import '../../services/session/session_service.dart';
+import 'session_entry_screen.dart';
 
 class ResultsScreen extends StatefulWidget {
   final String sessionId;
@@ -374,6 +375,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
   Widget _buildBackButton() {
     return GestureDetector(
       onTap: () {
+        sessionRefreshEvent.value++;
         Navigator.of(context).popUntil((route) => route.isFirst);
       },
       child: Container(
