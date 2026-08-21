@@ -1,4 +1,4 @@
-# choosly
+# WeDo
 
 A new Flutter project.
 
