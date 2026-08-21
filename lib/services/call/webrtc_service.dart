@@ -51,7 +51,23 @@ class WebRTCService {
       _localStream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
       _localStreamController.add(_localStream!);
     } catch (e) {
-      debugPrint('Error getting user media: $e');
+      debugPrint('Error getting user media with video: $e');
+
+      // If video failed and we weren't already audio-only, fall back to audio only
+      if (!audioOnly) {
+        debugPrint('Falling back to audio-only mode');
+        _isAudioOnly = true;
+        try {
+          final audioConstraints = {
+            'audio': true,
+            'video': false,
+          };
+          _localStream = await navigator.mediaDevices.getUserMedia(audioConstraints);
+          _localStreamController.add(_localStream!);
+        } catch (audioError) {
+          debugPrint('Error getting audio-only media: $audioError');
+        }
+      }
     }
   }
 
@@ -61,6 +77,16 @@ class WebRTCService {
         {'urls': 'stun:stun.l.google.com:19302'},
         {'urls': 'stun:stun1.l.google.com:19302'},
         {'urls': 'stun:stun2.l.google.com:19302'},
+        {
+          'urls': 'turn:openrelay.metered.ca:80',
+          'username': 'openrelayproject',
+          'credential': 'openrelayproject',
+        },
+        {
+          'urls': 'turn:openrelay.metered.ca:443',
+          'username': 'openrelayproject',
+          'credential': 'openrelayproject',
+        },
       ],
     };
 

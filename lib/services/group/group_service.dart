@@ -211,6 +211,53 @@ class GroupService {
     await batch.commit();
   }
 
+  Future<void> sendCallMessage({
+    required String groupId,
+    required String senderId,
+    required String senderName,
+    required String callType,
+    required String callStatus,
+    required int durationSeconds,
+  }) async {
+    final batch = _db.batch();
+
+    final callText = callType == 'video' ? 'Video call' : 'Audio call';
+    final statusText = callStatus == 'missed' ? 'Missed' : '';
+    final displayText = callStatus == 'missed'
+        ? '$statusText $callText'
+        : '$callText · ${_formatDuration(durationSeconds)}';
+
+    batch.set(_messages(groupId).doc(), {
+      'sender_id': senderId,
+      'senderName': senderName,
+      'type': 'call',
+      'content': displayText,
+      'callType': callType,
+      'callStatus': callStatus,
+      'durationSeconds': durationSeconds,
+      'reactions': {},
+      'read_by': [senderId],
+      'created_at': FieldValue.serverTimestamp(),
+      'createdAtLocal': DateTime.now().toIso8601String(),
+      'edited': false,
+    });
+
+    batch.update(_groups.doc(groupId), {
+      'lastMessage': displayText,
+      'lastMessageSenderId': senderId,
+      'lastMessageAt': FieldValue.serverTimestamp(),
+      'lastMessageReadBy': [senderId],
+    });
+
+    await batch.commit();
+  }
+
+  String _formatDuration(int totalSeconds) {
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
   Future<void> sendSystemMessage({
     required String groupId,
     required String content,

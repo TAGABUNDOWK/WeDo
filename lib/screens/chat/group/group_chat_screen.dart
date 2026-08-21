@@ -11,7 +11,7 @@ import '../../../widgets/message_bubble.dart';
 import '../../../widgets/invite_message_card.dart';
 import '../../../widgets/composer_option.dart';
 import '../../../widgets/audio_recorder_button.dart';
-import '../../call/call_screen.dart';
+import '../../call/outgoing_call_screen.dart';
 import '../search/chat_search_screen.dart';
 
 class GroupChatScreen extends StatefulWidget {
@@ -31,6 +31,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   final _imagePicker = ImagePicker();
   String _groupName = '';
   Map<String, String> _nicknames = {};
+  List<String> _members = [];
   bool _isUploading = false;
 
   @override
@@ -49,6 +50,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       setState(() {
         _groupName = group.name;
         _nicknames = nicknames;
+        _members = List<String>.from(group.members);
       });
     }
   }
@@ -162,15 +164,17 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
     if (!mounted) return;
 
+    final callStream = _callService.getCallStream(callId);
+    final call = await callStream.firstWhere((c) => c != null);
+
+    if (!mounted || call == null) return;
+
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => CallScreen(
-          callId: callId,
+        builder: (_) => OutgoingCallScreen(
+          call: call,
           callName: _groupName,
-          callType: type,
-          members: members,
-          isGroup: true,
         ),
       ),
     );
@@ -351,6 +355,20 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                         isMe: isMe,
                         senderName: isMe ? null : displayName,
                         time: formatChatTime(msg.createdAt),
+                      );
+                    }
+
+                    if (msg.type == MessageType.call) {
+                      return CallMessageBubble(
+                        callType: msg.callType ?? 'audio',
+                        callStatus: msg.callStatus ?? 'active',
+                        durationSeconds: msg.durationSeconds,
+                        time: formatChatTime(msg.createdAt),
+                        isMe: isMe,
+                        senderId: msg.senderId,
+                        senderName: isMe ? 'You' : displayName,
+                        groupId: widget.groupId,
+                        members: _members,
                       );
                     }
 

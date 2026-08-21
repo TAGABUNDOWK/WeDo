@@ -19,7 +19,8 @@ enum CallType {
 enum CallStatus {
   ringing,
   active,
-  ended;
+  ended,
+  missed;
 
   static CallStatus fromString(String? value) {
     switch (value) {
@@ -27,6 +28,8 @@ enum CallStatus {
         return CallStatus.active;
       case 'ended':
         return CallStatus.ended;
+      case 'missed':
+        return CallStatus.missed;
       default:
         return CallStatus.ringing;
     }
@@ -40,6 +43,8 @@ enum CallStatus {
         return 'active';
       case CallStatus.ended:
         return 'ended';
+      case CallStatus.missed:
+        return 'missed';
     }
   }
 }

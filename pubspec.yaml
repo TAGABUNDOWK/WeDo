@@ -69,6 +69,7 @@ flutter:
   assets:
     - assets/icons/
     - assets/images/
+    - assets/audio/
     - assets/data/philippines_provinces_cities.json
 
   # An image asset can refer to one or more resolution-specific "variants", see

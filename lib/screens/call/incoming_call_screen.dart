@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/call.dart';
 import '../../services/call/call_service.dart';
+import '../../services/direct/direct_service.dart';
+import '../../services/group/group_service.dart';
 import 'call_screen.dart';
 
 class IncomingCallScreen extends StatelessWidget {
@@ -67,6 +70,7 @@ class IncomingCallScreen extends StatelessWidget {
                   label: 'Decline',
                   color: Colors.red,
                   onTap: () {
+                    _sendMissedCallMessage(callService);
                     callService.endCall(call.id);
                     Navigator.of(context).pop();
                   },
@@ -75,7 +79,12 @@ class IncomingCallScreen extends StatelessWidget {
                   icon: isVideo ? Icons.videocam : Icons.call,
                   label: 'Accept',
                   color: Colors.green,
-                  onTap: () {
+                  onTap: () async {
+                    final currentUser = FirebaseAuth.instance.currentUser;
+                    if (currentUser != null) {
+                      await callService.joinCall(call.id, currentUser.uid);
+                    }
+                    if (!context.mounted) return;
                     Navigator.of(context).pop();
                     Navigator.push(
                       context,
@@ -86,6 +95,8 @@ class IncomingCallScreen extends StatelessWidget {
                           callType: call.type,
                           members: call.members,
                           isGroup: call.groupId != null,
+                          chatId: call.chatId,
+                          groupId: call.groupId,
                         ),
                       ),
                     );
@@ -128,5 +139,32 @@ class IncomingCallScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  void _sendMissedCallMessage(CallService callService) {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return;
+
+    final callTypeStr = call.type == CallType.video ? 'video' : 'audio';
+
+    if (call.groupId != null) {
+      GroupService().sendCallMessage(
+        groupId: call.groupId!,
+        senderId: currentUser.uid,
+        senderName: callerName,
+        callType: callTypeStr,
+        callStatus: 'missed',
+        durationSeconds: 0,
+      );
+    } else if (call.chatId != null) {
+      DirectService().sendCallMessage(
+        chatId: call.chatId!,
+        senderId: currentUser.uid,
+        senderName: callerName,
+        callType: callTypeStr,
+        callStatus: 'missed',
+        durationSeconds: 0,
+      );
+    }
   }
 }

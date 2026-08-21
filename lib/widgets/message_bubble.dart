@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
+import '../screens/chat/image_viewer_screen.dart';
+import '../screens/call/outgoing_call_screen.dart';
+import '../services/call/call_service.dart';
+import '../models/call.dart';
 
 class MessageBubble extends StatelessWidget {
   final String content;
@@ -97,27 +101,39 @@ class MessageBubble extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (imageUrl != null)
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        imageUrl!,
-                        width: 200,
-                        fit: BoxFit.cover,
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return const SizedBox(
-                            width: 200,
-                            height: 150,
-                            child: Center(child: CircularProgressIndicator()),
-                          );
-                        },
-                        errorBuilder: (context, error, stackTrace) {
-                          return const SizedBox(
-                            width: 200,
-                            height: 100,
-                            child: Center(child: Icon(Icons.broken_image, color: Colors.grey)),
-                          );
-                        },
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ImageViewerScreen(
+                              imageUrl: imageUrl!,
+                            ),
+                          ),
+                        );
+                      },
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.network(
+                          imageUrl!,
+                          width: 200,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return const SizedBox(
+                              width: 200,
+                              height: 150,
+                              child: Center(child: CircularProgressIndicator()),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) {
+                            return const SizedBox(
+                              width: 200,
+                              height: 100,
+                              child: Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+                            );
+                          },
+                        ),
                       ),
                     ),
                   if (imageUrl != null && content.isNotEmpty)
@@ -294,5 +310,122 @@ class _AudioMessageBubbleState extends State<_AudioMessageBubble> {
         ),
       ),
     );
+  }
+}
+
+class CallMessageBubble extends StatelessWidget {
+  final String callType;
+  final String callStatus;
+  final int? durationSeconds;
+  final String time;
+  final bool isMe;
+  final String senderId;
+  final String senderName;
+  final String? chatId;
+  final String? groupId;
+  final List<String> members;
+
+  const CallMessageBubble({
+    super.key,
+    required this.callType,
+    required this.callStatus,
+    this.durationSeconds,
+    required this.time,
+    required this.isMe,
+    required this.senderId,
+    required this.senderName,
+    this.chatId,
+    this.groupId,
+    required this.members,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isMissed = callStatus == 'missed';
+    final isVideo = callType == 'video';
+    final icon = isVideo ? Icons.videocam : Icons.call;
+    final iconColor = isMissed ? Colors.red : Colors.green;
+
+    return Center(
+      child: GestureDetector(
+        onTap: isMissed ? () => _callBack(context) : null,
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: isMissed ? Colors.red[50] : Colors.green[50],
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: iconColor, size: 16),
+              const SizedBox(width: 8),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    isMissed
+                        ? (isVideo ? 'Missed video call' : 'Missed audio call')
+                        : (isVideo ? 'Video call' : 'Audio call'),
+                    style: TextStyle(
+                      color: isMissed ? Colors.red : Colors.green,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  if (!isMissed && durationSeconds != null && durationSeconds! > 0)
+                    Text(
+                      _formatDuration(durationSeconds!),
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 11,
+                      ),
+                    ),
+                ],
+              ),
+              if (isMissed) ...[
+                const SizedBox(width: 8),
+                Icon(Icons.call, color: Colors.green, size: 14),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _callBack(BuildContext context) async {
+    final callService = CallService();
+    final callTypeValue = callType == 'video' ? CallType.video : CallType.audio;
+
+    final callId = await callService.startCall(
+      chatId: chatId,
+      groupId: groupId,
+      createdBy: senderId,
+      type: callTypeValue,
+      members: members,
+    );
+
+    final callStream = callService.getCallStream(callId);
+    final call = await callStream.firstWhere((c) => c != null);
+
+    if (call == null || !context.mounted) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => OutgoingCallScreen(
+          call: call,
+          callName: senderName,
+        ),
+      ),
+    );
+  }
+
+  String _formatDuration(int totalSeconds) {
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 }
