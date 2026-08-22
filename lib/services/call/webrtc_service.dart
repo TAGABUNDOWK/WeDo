@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'call_service.dart';
 
@@ -74,21 +75,31 @@ class WebRTCService {
   Future<RTCPeerConnection?> _createPeerConnection(String peerId) async {
     final config = {
       'iceServers': [
-        {'urls': 'stun:stun.l.google.com:19302'},
-        {'urls': 'stun:stun1.l.google.com:19302'},
-        {'urls': 'stun:stun2.l.google.com:19302'},
+        {'urls': 'stun:stun.relay.metered.ca:80'},
         {
-          'urls': 'turn:openrelay.metered.ca:80',
-          'username': 'openrelayproject',
-          'credential': 'openrelayproject',
+          'urls': 'turn:standard.relay.metered.ca:80',
+          'username': dotenv.env['TURN_USERNAME'] ?? '',
+          'credential': dotenv.env['TURN_CREDENTIAL'] ?? '',
         },
         {
-          'urls': 'turn:openrelay.metered.ca:443',
-          'username': 'openrelayproject',
-          'credential': 'openrelayproject',
+          'urls': 'turn:standard.relay.metered.ca:80?transport=tcp',
+          'username': dotenv.env['TURN_USERNAME'] ?? '',
+          'credential': dotenv.env['TURN_CREDENTIAL'] ?? '',
+        },
+        {
+          'urls': 'turn:standard.relay.metered.ca:443',
+          'username': dotenv.env['TURN_USERNAME'] ?? '',
+          'credential': dotenv.env['TURN_CREDENTIAL'] ?? '',
+        },
+        {
+          'urls': 'turns:standard.relay.metered.ca:443?transport=tcp',
+          'username': dotenv.env['TURN_USERNAME'] ?? '',
+          'credential': dotenv.env['TURN_CREDENTIAL'] ?? '',
         },
       ],
     };
+
+    debugPrint('TURN Username loaded: ${dotenv.env['TURN_USERNAME']?.isNotEmpty == true ? "YES" : "EMPTY"}');
 
     try {
       final pc = await createPeerConnection(config);
