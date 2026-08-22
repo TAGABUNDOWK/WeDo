@@ -6,6 +6,7 @@ import '../../../models/user_entity.dart';
 import '../../../services/group/group_service.dart';
 import '../../../services/friends/friend_service.dart';
 import '../../../services/direct/direct_service.dart';
+import '../image_viewer_screen.dart';
 
 class GroupInfoScreen extends StatefulWidget {
   final String groupId;
@@ -497,13 +498,25 @@ class _GroupMediaSectionState extends State<_GroupMediaSection> {
       ),
       itemCount: _imageUrls.length,
       itemBuilder: (context, index) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Image.network(
-            _imageUrls[index],
-            fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => const Center(
-              child: Icon(Icons.broken_image, color: Colors.grey),
+        return GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ImageViewerScreen(
+                  imageUrl: _imageUrls[index],
+                ),
+              ),
+            );
+          },
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.network(
+              _imageUrls[index],
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => const Center(
+                child: Icon(Icons.broken_image, color: Colors.grey),
+              ),
             ),
           ),
         );

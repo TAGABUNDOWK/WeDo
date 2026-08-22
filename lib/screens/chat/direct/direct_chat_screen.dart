@@ -12,7 +12,8 @@ import '../../../widgets/message_bubble.dart';
 import '../../../widgets/invite_message_card.dart';
 import '../../../widgets/composer_option.dart';
 import '../../../widgets/audio_recorder_button.dart';
-import '../../call/call_screen.dart';
+import '../../call/outgoing_call_screen.dart';
+import '../image_viewer_screen.dart';
 import '../search/direct_chat_search_screen.dart';
 
 class DirectChatScreen extends StatefulWidget {
@@ -164,14 +165,17 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
 
     if (!mounted) return;
 
+    final callStream = _callService.getCallStream(callId);
+    final call = await callStream.firstWhere((c) => c != null);
+
+    if (!mounted || call == null) return;
+
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => CallScreen(
-          callId: callId,
+        builder: (_) => OutgoingCallScreen(
+          call: call,
           callName: _otherName,
-          callType: type,
-          members: [_currentUser.uid, widget.otherUid],
         ),
       ),
     );
@@ -326,6 +330,20 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                         isMe: isMe,
                         senderName: null,
                         time: formatChatTime(msg.createdAt),
+                      );
+                    }
+
+                    if (msg.type == MessageType.call) {
+                      return CallMessageBubble(
+                        callType: msg.callType ?? 'audio',
+                        callStatus: msg.callStatus ?? 'active',
+                        durationSeconds: msg.durationSeconds,
+                        time: formatChatTime(msg.createdAt),
+                        isMe: isMe,
+                        senderId: msg.senderId,
+                        senderName: _otherName,
+                        chatId: widget.chatId,
+                        members: [_currentUser!.uid, widget.otherUid],
                       );
                     }
 
@@ -595,13 +613,25 @@ class _MediaSectionState extends State<_MediaSection> {
       ),
       itemCount: _imageUrls.length,
       itemBuilder: (context, index) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Image.network(
-            _imageUrls[index],
-            fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => const Center(
-              child: Icon(Icons.broken_image, color: Colors.grey),
+        return GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ImageViewerScreen(
+                  imageUrl: _imageUrls[index],
+                ),
+              ),
+            );
+          },
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.network(
+              _imageUrls[index],
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => const Center(
+                child: Icon(Icons.broken_image, color: Colors.grey),
+              ),
             ),
           ),
         );

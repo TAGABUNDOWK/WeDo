@@ -209,6 +209,55 @@ class DirectService {
     await batch.commit();
   }
 
+  Future<void> sendCallMessage({
+    required String chatId,
+    required String senderId,
+    required String senderName,
+    required String callType,
+    required String callStatus,
+    required int durationSeconds,
+  }) async {
+    final batch = _db.batch();
+
+    final callText = callType == 'video' ? 'Video call' : 'Audio call';
+    final statusText = callStatus == 'missed' ? 'Missed' : '';
+    final displayText = callStatus == 'missed'
+        ? '$statusText $callText'
+        : '$callText · ${_formatDuration(durationSeconds)}';
+
+    batch.set(_messages(chatId).doc(), {
+      'sender_id': senderId,
+      'senderName': senderName,
+      'type': 'call',
+      'content': displayText,
+      'callType': callType,
+      'callStatus': callStatus,
+      'durationSeconds': durationSeconds,
+      'read_by': [senderId],
+      'created_at': FieldValue.serverTimestamp(),
+      'createdAtLocal': DateTime.now().toIso8601String(),
+      'edited': false,
+    });
+
+    batch.update(_chats.doc(chatId), {
+      'last_message': {
+        'text': displayText,
+        'senderId': senderId,
+        'sentAt': FieldValue.serverTimestamp(),
+      },
+      'lastMessageAt': FieldValue.serverTimestamp(),
+      'lastMessageReadBy': [senderId],
+    });
+
+    await batch.commit();
+  }
+
+  String _formatDuration(int totalSeconds) {
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
   Future<void> updateNickname({
     required String chatId,
     required String uid,

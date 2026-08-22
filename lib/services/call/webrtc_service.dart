@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'call_service.dart';
 
@@ -51,18 +52,54 @@ class WebRTCService {
       _localStream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
       _localStreamController.add(_localStream!);
     } catch (e) {
-      debugPrint('Error getting user media: $e');
+      debugPrint('Error getting user media with video: $e');
+
+      // If video failed and we weren't already audio-only, fall back to audio only
+      if (!audioOnly) {
+        debugPrint('Falling back to audio-only mode');
+        _isAudioOnly = true;
+        try {
+          final audioConstraints = {
+            'audio': true,
+            'video': false,
+          };
+          _localStream = await navigator.mediaDevices.getUserMedia(audioConstraints);
+          _localStreamController.add(_localStream!);
+        } catch (audioError) {
+          debugPrint('Error getting audio-only media: $audioError');
+        }
+      }
     }
   }
 
   Future<RTCPeerConnection?> _createPeerConnection(String peerId) async {
     final config = {
       'iceServers': [
-        {'urls': 'stun:stun.l.google.com:19302'},
-        {'urls': 'stun:stun1.l.google.com:19302'},
-        {'urls': 'stun:stun2.l.google.com:19302'},
+        {'urls': 'stun:stun.relay.metered.ca:80'},
+        {
+          'urls': 'turn:standard.relay.metered.ca:80',
+          'username': dotenv.env['TURN_USERNAME'] ?? '',
+          'credential': dotenv.env['TURN_CREDENTIAL'] ?? '',
+        },
+        {
+          'urls': 'turn:standard.relay.metered.ca:80?transport=tcp',
+          'username': dotenv.env['TURN_USERNAME'] ?? '',
+          'credential': dotenv.env['TURN_CREDENTIAL'] ?? '',
+        },
+        {
+          'urls': 'turn:standard.relay.metered.ca:443',
+          'username': dotenv.env['TURN_USERNAME'] ?? '',
+          'credential': dotenv.env['TURN_CREDENTIAL'] ?? '',
+        },
+        {
+          'urls': 'turns:standard.relay.metered.ca:443?transport=tcp',
+          'username': dotenv.env['TURN_USERNAME'] ?? '',
+          'credential': dotenv.env['TURN_CREDENTIAL'] ?? '',
+        },
       ],
     };
+
+    debugPrint('TURN Username loaded: ${dotenv.env['TURN_USERNAME']?.isNotEmpty == true ? "YES" : "EMPTY"}');
 
     try {
       final pc = await createPeerConnection(config);

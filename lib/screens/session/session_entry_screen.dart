@@ -9,8 +9,6 @@ import 'create_session_screen.dart';
 import 'results_screen.dart';
 import 'waiting_lobby_screen.dart';
 
-final sessionRefreshEvent = ValueNotifier<int>(0);
-
 class SessionEntryScreen extends StatefulWidget {
   const SessionEntryScreen({super.key});
 
@@ -33,7 +31,6 @@ class _SessionEntryScreenState extends State<SessionEntryScreen> {
   void initState() {
     super.initState();
     _loadSessions();
-    sessionRefreshEvent.addListener(_loadSessions);
   }
 
   Future<void> _loadSessions() async {
@@ -60,7 +57,6 @@ class _SessionEntryScreenState extends State<SessionEntryScreen> {
 
   @override
   void dispose() {
-    sessionRefreshEvent.removeListener(_loadSessions);
     _codeController.dispose();
     _codeFocusNode.dispose();
     super.dispose();

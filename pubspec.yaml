@@ -42,6 +42,7 @@ dependencies:
   record: ^7.1.1
   just_audio: ^0.9.42
   flutter_webrtc: ^1.6.0
+  flutter_dotenv: ^5.2.0
   path_provider: ^2.1.0
 
 dev_dependencies:
@@ -67,8 +68,10 @@ flutter:
   uses-material-design: true
 
   assets:
+    - .env
     - assets/icons/
     - assets/images/
+    - assets/audio/
     - assets/data/philippines_provinces_cities.json
 
   # An image asset can refer to one or more resolution-specific "variants", see

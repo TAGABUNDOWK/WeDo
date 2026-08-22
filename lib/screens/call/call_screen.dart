@@ -5,6 +5,8 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../../models/call.dart';
 import '../../services/call/call_service.dart';
 import '../../services/call/webrtc_service.dart';
+import '../../services/direct/direct_service.dart';
+import '../../services/group/group_service.dart';
 
 class CallScreen extends StatefulWidget {
   final String callId;
@@ -12,6 +14,8 @@ class CallScreen extends StatefulWidget {
   final CallType callType;
   final List<String> members;
   final bool isGroup;
+  final String? chatId;
+  final String? groupId;
 
   const CallScreen({
     super.key,
@@ -20,6 +24,8 @@ class CallScreen extends StatefulWidget {
     required this.callType,
     required this.members,
     this.isGroup = false,
+    this.chatId,
+    this.groupId,
   });
 
   @override
@@ -39,6 +45,9 @@ class _CallScreenState extends State<CallScreen> {
   StreamSubscription? _callSub;
   StreamSubscription? _signalsSub;
 
+  RTCVideoRenderer? _localRenderer;
+  RTCVideoRenderer? _remoteRenderer;
+
   @override
   void initState() {
     super.initState();
@@ -48,8 +57,34 @@ class _CallScreenState extends State<CallScreen> {
   Future<void> _initializeCall() async {
     final audioOnly = widget.callType == CallType.audio;
 
+    // Initialize WebRTC and get local media
     await _webrtcService.initialize(audioOnly: audioOnly);
 
+    // Initialize renderers
+    _localRenderer = RTCVideoRenderer();
+    _remoteRenderer = RTCVideoRenderer();
+    await _localRenderer!.initialize();
+    await _remoteRenderer!.initialize();
+
+    // Listen for local stream
+    _webrtcService.onLocalStream.listen((stream) {
+      if (mounted) {
+        setState(() {
+          _localRenderer!.srcObject = stream;
+        });
+      }
+    });
+
+    // Listen for remote stream
+    _webrtcService.onRemoteStream.listen((stream) {
+      if (mounted) {
+        setState(() {
+          _remoteRenderer!.srcObject = stream;
+        });
+      }
+    });
+
+    // Set up ICE candidate callback
     _webrtcService.onIceCandidateGenerated = (peerId, candidateJson) {
       final toUid = peerId;
       _callService.sendIceCandidate(
@@ -60,8 +95,10 @@ class _CallScreenState extends State<CallScreen> {
       );
     };
 
+    // Join the call
     await _callService.joinCall(widget.callId, _currentUser!.uid);
 
+    // Listen for call status changes
     _callSub = _callService.getCallStream(widget.callId).listen((call) {
       if (call == null || call.status == CallStatus.ended) {
         _endCall();
@@ -69,6 +106,7 @@ class _CallScreenState extends State<CallScreen> {
       }
     });
 
+    // Listen for signaling messages
     _signalsSub = _callService
         .getSignalsForUser(widget.callId, _currentUser!.uid)
         .listen((snapshot) {
@@ -100,6 +138,7 @@ class _CallScreenState extends State<CallScreen> {
       }
     });
 
+    // Create offers for all other members
     for (final memberUid in widget.members) {
       if (memberUid != _currentUser!.uid) {
         await _webrtcService.createOffer(
@@ -110,6 +149,7 @@ class _CallScreenState extends State<CallScreen> {
       }
     }
 
+    // Start call duration timer
     _callTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) setState(() => _callDuration++);
     });
@@ -122,8 +162,37 @@ class _CallScreenState extends State<CallScreen> {
     _callService.leaveCall(widget.callId, _currentUser!.uid);
     _webrtcService.dispose();
 
+    _sendCallMessage();
+
     if (mounted) {
       Navigator.of(context).pop();
+    }
+  }
+
+  void _sendCallMessage() {
+    if (_currentUser == null) return;
+
+    final callTypeStr = widget.callType == CallType.video ? 'video' : 'audio';
+    final duration = _callDuration;
+
+    if (widget.isGroup && widget.groupId != null) {
+      GroupService().sendCallMessage(
+        groupId: widget.groupId!,
+        senderId: _currentUser!.uid,
+        senderName: _currentUser!.displayName ?? _currentUser!.email ?? 'Unknown',
+        callType: callTypeStr,
+        callStatus: 'active',
+        durationSeconds: duration,
+      );
+    } else if (widget.chatId != null) {
+      DirectService().sendCallMessage(
+        chatId: widget.chatId!,
+        senderId: _currentUser!.uid,
+        senderName: _currentUser!.displayName ?? _currentUser!.email ?? 'Unknown',
+        callType: callTypeStr,
+        callStatus: 'active',
+        durationSeconds: duration,
+      );
     }
   }
 
@@ -156,6 +225,8 @@ class _CallScreenState extends State<CallScreen> {
     _callTimer?.cancel();
     _callSub?.cancel();
     _signalsSub?.cancel();
+    _localRenderer?.dispose();
+    _remoteRenderer?.dispose();
     _webrtcService.dispose();
     super.dispose();
   }
@@ -180,14 +251,15 @@ class _CallScreenState extends State<CallScreen> {
   }
 
   Widget _buildVideoView() {
-    final remoteTracks = _webrtcService.remoteStreams.values.toList();
+    final hasRemoteStream = _remoteRenderer?.srcObject != null;
+    final hasLocalStream = _localRenderer?.srcObject != null;
 
     return Stack(
       children: [
-        if (remoteTracks.isNotEmpty)
+        if (hasRemoteStream)
           Center(
             child: RTCVideoView(
-              RTCVideoRenderer()..srcObject = remoteTracks.first,
+              _remoteRenderer!,
               objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
             ),
           )
@@ -195,6 +267,7 @@ class _CallScreenState extends State<CallScreen> {
           Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 CircleAvatar(
                   radius: 60,
@@ -209,12 +282,13 @@ class _CallScreenState extends State<CallScreen> {
                 const SizedBox(height: 16),
                 const Text(
                   'Connecting...',
+                  textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.white70, fontSize: 16),
                 ),
               ],
             ),
           ),
-        if (_webrtcService.localStream != null)
+        if (hasLocalStream)
           Positioned(
             top: 16,
             right: 16,
@@ -223,7 +297,7 @@ class _CallScreenState extends State<CallScreen> {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: RTCVideoView(
-                RTCVideoRenderer()..srcObject = _webrtcService.localStream,
+                _localRenderer!,
                 mirror: true,
                 objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
               ),
@@ -259,6 +333,7 @@ class _CallScreenState extends State<CallScreen> {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           CircleAvatar(
             radius: 70,
@@ -273,6 +348,7 @@ class _CallScreenState extends State<CallScreen> {
           const SizedBox(height: 24),
           Text(
             widget.callName,
+            textAlign: TextAlign.center,
             style: const TextStyle(
               color: Colors.white,
               fontSize: 24,
@@ -282,12 +358,14 @@ class _CallScreenState extends State<CallScreen> {
           const SizedBox(height: 8),
           Text(
             _formatDuration(_callDuration),
+            textAlign: TextAlign.center,
             style: const TextStyle(color: Colors.white70, fontSize: 16),
           ),
           if (widget.isGroup) ...[
             const SizedBox(height: 8),
             Text(
               '${widget.members.length} participants',
+              textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.white54, fontSize: 14),
             ),
           ],

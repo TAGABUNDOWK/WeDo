@@ -53,6 +53,8 @@ class ChatMessage {
   final String? audioUrl;
   final int? durationSeconds;
   final String? activityId;
+  final String? callType;
+  final String? callStatus;
   final List<String> readBy;
   final Map<String, dynamic> reactions;
   final bool edited;
@@ -68,6 +70,8 @@ class ChatMessage {
     this.audioUrl,
     this.durationSeconds,
     this.activityId,
+    this.callType,
+    this.callStatus,
     required this.readBy,
     required this.reactions,
     required this.edited,
@@ -92,6 +96,10 @@ class ChatMessage {
     final durationSeconds = data['durationSeconds'] as int?
         ?? data['duration_seconds'] as int?;
     final activityId = data['activityId'] as String?;
+    final callType = data['callType'] as String?
+        ?? data['call_type'] as String?;
+    final callStatus = data['callStatus'] as String?
+        ?? data['call_status'] as String?;
     final readBy = (data['readBy'] as List?)
         ?? (data['read_by'] as List?)
         ?? const [];
@@ -111,6 +119,8 @@ class ChatMessage {
       audioUrl: audioUrl,
       durationSeconds: durationSeconds,
       activityId: activityId,
+      callType: callType,
+      callStatus: callStatus,
       readBy: readBy.cast<String>(),
       reactions: reactions,
       edited: edited,
@@ -128,6 +138,8 @@ class ChatMessage {
       'audioUrl': audioUrl,
       'durationSeconds': durationSeconds,
       'activityId': activityId,
+      'callType': callType,
+      'callStatus': callStatus,
       'readBy': readBy,
       'reactions': reactions,
       'edited': edited,
