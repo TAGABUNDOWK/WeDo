@@ -2,7 +2,9 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../../models/event.dart';
+import '../../models/user_entity.dart';
 import '../../services/event/event_service.dart';
+import '../../services/auth/user_service.dart';
 import '../../utils/constants.dart';
 
 const _fontFamily = 'PlusJakartaSans';
@@ -13,7 +15,6 @@ class EventMessageCard extends StatefulWidget {
   final String senderName;
   final String currentUid;
   final VoidCallback? onTap;
-  final List<String> attendeeNames;
   final VoidCallback? onInfoTap;
 
   const EventMessageCard({
@@ -23,7 +24,6 @@ class EventMessageCard extends StatefulWidget {
     required this.senderName,
     required this.currentUid,
     this.onTap,
-    this.attendeeNames = const [],
     this.onInfoTap,
   });
 
@@ -33,8 +33,11 @@ class EventMessageCard extends StatefulWidget {
 
 class _EventMessageCardState extends State<EventMessageCard> {
   final _eventService = EventService();
+  final _userService = UserService();
   late final Stream<ChatEvent?> _eventStream;
   Timer? _expiryTimer;
+  final Map<String, UserEntity> _userCache = {};
+  final Set<String> _requestedUids = {};
 
   @override
   void initState() {
@@ -55,7 +58,23 @@ class _EventMessageCardState extends State<EventMessageCard> {
     super.dispose();
   }
 
+  void _loadAttendeeUsers(ChatEvent event) {
+    for (final uid in event.rsvps.keys) {
+      if (_requestedUids.contains(uid)) continue;
+      _requestedUids.add(uid);
+      _fetchUser(uid);
+    }
+  }
+
+  Future<void> _fetchUser(String uid) async {
+    final user = await _userService.getUserDocument(uid);
+    if (user != null && mounted) {
+      setState(() => _userCache[uid] = user);
+    }
+  }
+
   Future<void> _rsvp(String response) async {
+    if (widget.currentUid.isEmpty) return;
     final event = widget.event;
     final now = DateTime.now();
     final isStarted = now.isAfter(event.date);
@@ -78,6 +97,7 @@ class _EventMessageCardState extends State<EventMessageCard> {
       builder: (context, snapshot) {
         final event = snapshot.data ?? widget.event;
         final myResponse = event.myRsvp(widget.currentUid);
+        _loadAttendeeUsers(event);
 
         return GestureDetector(
           onTap: widget.onTap,
@@ -138,8 +158,7 @@ class _EventMessageCardState extends State<EventMessageCard> {
                                 const SizedBox(height: 8),
                                 _AttendeeRow(
                                   event: event,
-                                  attendeeNames: widget.attendeeNames,
-                                  currentUid: widget.currentUid,
+                                  userCache: _userCache,
                                 ),
                                 const SizedBox(height: 8),
                                 _MetadataSection(event: event),
@@ -246,13 +265,11 @@ class _AppBarSection extends StatelessWidget {
 
 class _AttendeeRow extends StatelessWidget {
   final ChatEvent event;
-  final List<String> attendeeNames;
-  final String currentUid;
+  final Map<String, UserEntity> userCache;
 
   const _AttendeeRow({
     required this.event,
-    required this.attendeeNames,
-    required this.currentUid,
+    required this.userCache,
   });
 
   @override
@@ -269,11 +286,20 @@ class _AttendeeRow extends StatelessWidget {
       );
     }
 
-    final displayNames = <String>[];
-    for (final uid in respondents) {
-      final nameIdx = attendeeNames.indexOf(uid);
-      displayNames.add(nameIdx != -1 ? attendeeNames[nameIdx] : uid.substring(0, 6));
+    String nameFor(String uid) {
+      final user = userCache[uid];
+      if (user != null) {
+        final n =
+            (user.displayName.isNotEmpty ? user.displayName : (user.email ?? ''))
+                .trim();
+        if (n.isNotEmpty) return n;
+      }
+      return uid.length > 6 ? uid.substring(0, 6) : uid;
     }
+
+    final displayNames = <String>[
+      for (final uid in respondents) nameFor(uid),
+    ];
 
     final visibleCount = displayNames.length.clamp(0, 4);
     final overflow = displayNames.length - visibleCount;

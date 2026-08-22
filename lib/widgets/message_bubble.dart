@@ -21,7 +21,6 @@ class MessageBubble extends StatelessWidget {
   final ChatEvent? event;
   final ChatPoll? poll;
   final String? currentUid;
-  final List<String> attendeeNames;
   final VoidCallback? onEventTap;
 
   const MessageBubble({
@@ -37,7 +36,6 @@ class MessageBubble extends StatelessWidget {
     this.event,
     this.poll,
     this.currentUid,
-    this.attendeeNames = const [],
     this.onEventTap,
   });
 
@@ -80,14 +78,15 @@ class MessageBubble extends StatelessWidget {
     }
 
     if (event != null) {
+      final String resolvedUid = currentUid ?? '';
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: EventMessageCard(
           event: event!,
           isMe: isMe,
           senderName: senderName ?? '',
-          currentUid: currentUid ?? '',
-          attendeeNames: attendeeNames,
+          currentUid: resolvedUid,
+          onTap: onEventTap,
           onInfoTap: onEventTap,
         ),
       );
@@ -364,7 +363,7 @@ class _AudioMessageBubbleState extends State<_AudioMessageBubble> {
   }
 }
 
-class CallMessageBubble extends StatelessWidget {
+class CallMessageBubble extends StatefulWidget {
   final String callType;
   final String callStatus;
   final int? durationSeconds;
@@ -372,6 +371,7 @@ class CallMessageBubble extends StatelessWidget {
   final bool isMe;
   final String senderId;
   final String senderName;
+  final String currentUserId;
   final String? chatId;
   final String? groupId;
   final List<String> members;
@@ -385,21 +385,29 @@ class CallMessageBubble extends StatelessWidget {
     required this.isMe,
     required this.senderId,
     required this.senderName,
+    required this.currentUserId,
     this.chatId,
     this.groupId,
     required this.members,
   });
 
   @override
+  State<CallMessageBubble> createState() => _CallMessageBubbleState();
+}
+
+class _CallMessageBubbleState extends State<CallMessageBubble> {
+  bool _isCalling = false;
+
+  @override
   Widget build(BuildContext context) {
-    final isMissed = callStatus == 'missed';
-    final isVideo = callType == 'video';
+    final isMissed = widget.callStatus == 'missed';
+    final isVideo = widget.callType == 'video';
     final icon = isVideo ? Icons.videocam : Icons.call;
     final iconColor = isMissed ? Colors.red : Colors.green;
 
     return Center(
       child: GestureDetector(
-        onTap: isMissed ? () => _callBack(context) : null,
+        onTap: isMissed && !_isCalling ? () => _callBack() : null,
         child: Container(
           margin: const EdgeInsets.symmetric(vertical: 4),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -425,9 +433,11 @@ class CallMessageBubble extends StatelessWidget {
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  if (!isMissed && durationSeconds != null && durationSeconds! > 0)
+                  if (!isMissed &&
+                      widget.durationSeconds != null &&
+                      widget.durationSeconds! > 0)
                     Text(
-                      _formatDuration(durationSeconds!),
+                      _formatDuration(widget.durationSeconds!),
                       style: TextStyle(
                         color: Colors.grey[600],
                         fontSize: 11,
@@ -437,7 +447,11 @@ class CallMessageBubble extends StatelessWidget {
               ),
               if (isMissed) ...[
                 const SizedBox(width: 8),
-                const Icon(Icons.call, color: Colors.green, size: 14),
+                Icon(
+                  _isCalling ? Icons.hourglass_top : Icons.call,
+                  color: Colors.green,
+                  size: 14,
+                ),
               ],
             ],
           ),
@@ -446,32 +460,49 @@ class CallMessageBubble extends StatelessWidget {
     );
   }
 
-  void _callBack(BuildContext context) async {
-    final callService = CallService();
-    final callTypeValue = callType == 'video' ? CallType.video : CallType.audio;
+  Future<void> _callBack() async {
+    if (_isCalling) return;
+    setState(() => _isCalling = true);
 
-    final callId = await callService.startCall(
-      chatId: chatId,
-      groupId: groupId,
-      createdBy: senderId,
-      type: callTypeValue,
-      members: members,
-    );
+    try {
+      final callService = CallService();
+      final callTypeValue =
+          widget.callType == 'video' ? CallType.video : CallType.audio;
 
-    final callStream = callService.getCallStream(callId);
-    final call = await callStream.firstWhere((c) => c != null);
+      final callId = await callService.startCall(
+        chatId: widget.chatId,
+        groupId: widget.groupId,
+        createdBy: widget.currentUserId,
+        type: callTypeValue,
+        members: widget.members,
+      );
 
-    if (call == null || !context.mounted) return;
+      final call = await callService
+          .getCallStream(callId)
+          .firstWhere((c) => c != null)
+          .timeout(const Duration(seconds: 15));
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => OutgoingCallScreen(
-          call: call,
-          callName: senderName,
+      if (!mounted || call == null) return;
+
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => OutgoingCallScreen(
+            call: call,
+            callName: widget.senderName,
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      debugPrint('Call back failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not start call. Please try again.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isCalling = false);
+    }
   }
 
   String _formatDuration(int totalSeconds) {

@@ -84,6 +84,7 @@ class _PollMessageCardState extends State<PollMessageCard> {
   }
 
   Future<void> _checkVoteStatus() async {
+    if (widget.currentUid.isEmpty) return;
     final hasVoted = await _pollService.hasVoted(
       widget.poll.id,
       widget.currentUid,
@@ -137,6 +138,7 @@ class _PollMessageCardState extends State<PollMessageCard> {
   }
 
   Future<void> _vote(String option) async {
+    if (widget.currentUid.isEmpty) return;
     final currentPoll = _latestPoll ?? widget.poll;
     if (currentPoll.isClosed || _hasVoted || _isVoting) return;
 

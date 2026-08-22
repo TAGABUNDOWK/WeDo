@@ -44,7 +44,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   bool _isUploading = false;
   final Map<String, ChatEvent> _events = {};
   final Map<String, ChatPoll> _polls = {};
-  List<String> _memberUids = [];
 
   @override
   void initState() {
@@ -63,7 +62,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         _groupName = group.name;
         _nicknames = nicknames;
         _members = List<String>.from(group.members);
-        _memberUids = List<String>.from(group.members);
       });
     }
   }
@@ -390,7 +388,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                         time: formatChatTime(msg.createdAt),
                         event: evt,
                         currentUid: _currentUser?.uid,
-                        attendeeNames: _memberUids,
                         onEventTap: evt != null
                             ? () {
                                 Navigator.push(
@@ -464,6 +461,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                         isMe: isMe,
                         senderId: msg.senderId,
                         senderName: isMe ? 'You' : displayName,
+                        currentUserId: _currentUser!.uid,
                         groupId: widget.groupId,
                         members: _members,
                       );

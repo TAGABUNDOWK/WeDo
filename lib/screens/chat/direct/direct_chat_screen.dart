@@ -390,10 +390,6 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                         time: formatChatTime(msg.createdAt),
                         event: evt,
                         currentUid: _currentUser?.uid,
-                        attendeeNames: [
-                          if (_currentUser != null) _currentUser.uid,
-                          widget.otherUid,
-                        ],
                         onEventTap: evt != null
                             ? () {
                                 Navigator.push(
@@ -462,8 +458,9 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                         isMe: isMe,
                         senderId: msg.senderId,
                         senderName: _otherName,
+                        currentUserId: _currentUser!.uid,
                         chatId: widget.chatId,
-                        members: [_currentUser!.uid, widget.otherUid],
+                        members: [_currentUser.uid, widget.otherUid],
                       );
                     }
 
