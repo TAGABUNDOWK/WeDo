@@ -325,30 +325,33 @@ class _SwipingScreenState extends State<SwipingScreen>
             ),
             const SizedBox(height: 12),
             Expanded(
-              child: GestureDetector(
-                onVerticalDragUpdate: _onDragUpdate,
-                onVerticalDragEnd: _onDragEnd,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    // Bottom card (challenger) — affected by drag
-                    _buildDraggableCard(
-                      card: challengerCard,
-                      isTop: false,
-                      offset: _dragOffset,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final stackHeight = constraints.maxHeight;
+                  return GestureDetector(
+                    onVerticalDragUpdate: _onDragUpdate,
+                    onVerticalDragEnd: _onDragEnd,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        _buildDraggableCard(
+                          card: challengerCard,
+                          isTop: false,
+                          offset: _dragOffset,
+                          stackHeight: stackHeight,
+                        ),
+                        _buildStaticCard(
+                          card: championCard,
+                          isTop: true,
+                          stackHeight: stackHeight,
+                        ),
+                        _buildVsMarker(stackHeight: stackHeight),
+                        if (_showEliminationOverlay)
+                          _buildEliminationOverlay(),
+                      ],
                     ),
-                    // Top card (champion) — static
-                    _buildStaticCard(
-                      card: championCard,
-                      isTop: true,
-                    ),
-                    // VS marker overlapping the seam
-                    _buildVsMarker(),
-                    // Elimination overlay
-                    if (_showEliminationOverlay)
-                      _buildEliminationOverlay(),
-                  ],
-                ),
+                  );
+                },
               ),
             ),
             const SizedBox(height: 16),
@@ -464,17 +467,19 @@ class _SwipingScreenState extends State<SwipingScreen>
   Widget _buildStaticCard({
     required Map<String, dynamic> card,
     required bool isTop,
+    required double stackHeight,
   }) {
     final swipeDown = _dragOffset.dy > 0 ? _dragOffset.dy : 0.0;
     final dragFraction = (swipeDown / _swipeThreshold).clamp(0.0, 1.0);
     final showCommitHint = swipeDown > _swipeThreshold * 0.6;
+    final halfGap = 20.0;
 
     return AnimatedPositioned(
       duration: _isAnimating ? Duration.zero : const Duration(milliseconds: 50),
       top: swipeDown,
       left: 20,
       right: 20,
-      bottom: MediaQuery.of(context).size.height * 0.42 - swipeDown,
+      bottom: stackHeight / 2 + halfGap - swipeDown,
       child: Transform.rotate(
         angle: -dragFraction * _maxRotation,
         child: _buildCardContent(
@@ -491,19 +496,20 @@ class _SwipingScreenState extends State<SwipingScreen>
     required Map<String, dynamic> card,
     required bool isTop,
     required Offset offset,
+    required double stackHeight,
   }) {
     final swipeUp = offset.dy < 0 ? offset.dy : 0.0;
     final dragFraction = (swipeUp / _swipeThreshold).clamp(-1.0, 0.0);
     final rotation = dragFraction * _maxRotation;
     final showCommitHint = swipeUp.abs() > _swipeThreshold * 0.6;
-    final gap = 10.0;
+    final halfGap = 20.0;
 
     return AnimatedPositioned(
       duration: _isAnimating ? Duration.zero : const Duration(milliseconds: 50),
-      top: MediaQuery.of(context).size.height * 0.42 + gap + swipeUp,
+      top: stackHeight / 2 + halfGap + swipeUp,
       left: 20,
       right: 20,
-      bottom: -gap - swipeUp,
+      bottom: -swipeUp,
       child: Transform.rotate(
         angle: rotation,
         child: _buildCardContent(
@@ -869,10 +875,12 @@ class _SwipingScreenState extends State<SwipingScreen>
     );
   }
 
-  Widget _buildVsMarker() {
-    return Positioned.fill(
-      child: Align(
-        alignment: const Alignment(0, -0.12),
+  Widget _buildVsMarker({required double stackHeight}) {
+    return Positioned(
+      top: stackHeight / 2 - 17,
+      left: 0,
+      right: 0,
+      child: Center(
         child: Container(
           width: 34,
           height: 34,
