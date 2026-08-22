@@ -4,6 +4,10 @@ import '../screens/chat/image_viewer_screen.dart';
 import '../screens/call/outgoing_call_screen.dart';
 import '../services/call/call_service.dart';
 import '../models/call.dart';
+import '../models/event.dart';
+import '../models/poll.dart';
+import 'event_message_card.dart';
+import 'poll_message_card.dart';
 
 class MessageBubble extends StatelessWidget {
   final String content;
@@ -14,6 +18,11 @@ class MessageBubble extends StatelessWidget {
   final String? audioUrl;
   final int? durationSeconds;
   final bool isSystem;
+  final ChatEvent? event;
+  final ChatPoll? poll;
+  final String? currentUid;
+  final List<String> attendeeNames;
+  final VoidCallback? onEventTap;
 
   const MessageBubble({
     super.key,
@@ -25,6 +34,11 @@ class MessageBubble extends StatelessWidget {
     this.audioUrl,
     this.durationSeconds,
     this.isSystem = false,
+    this.event,
+    this.poll,
+    this.currentUid,
+    this.attendeeNames = const [],
+    this.onEventTap,
   });
 
   @override
@@ -65,6 +79,33 @@ class MessageBubble extends StatelessWidget {
       );
     }
 
+    if (event != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: EventMessageCard(
+          event: event!,
+          isMe: isMe,
+          senderName: senderName ?? '',
+          currentUid: currentUid ?? '',
+          attendeeNames: attendeeNames,
+          onInfoTap: onEventTap,
+        ),
+      );
+    }
+
+    if (poll != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 48),
+        child: PollMessageCard(
+          key: ValueKey(poll!.id),
+          poll: poll!,
+          isMe: isMe,
+          senderName: senderName ?? '',
+          currentUid: currentUid ?? '',
+        ),
+      );
+    }
+
     if (audioUrl != null) {
       return _AudioMessageBubble(
         audioUrl: audioUrl!,
@@ -95,7 +136,12 @@ class MessageBubble extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: isMe ? Colors.blue : Colors.grey[200],
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(16),
+                  topRight: const Radius.circular(16),
+                  bottomLeft: Radius.circular(isMe ? 16 : 4),
+                  bottomRight: Radius.circular(isMe ? 4 : 16),
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -245,7 +291,12 @@ class _AudioMessageBubbleState extends State<_AudioMessageBubble> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: widget.isMe ? Colors.blue : Colors.grey[200],
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(16),
+                  topRight: const Radius.circular(16),
+                  bottomLeft: Radius.circular(widget.isMe ? 16 : 4),
+                  bottomRight: Radius.circular(widget.isMe ? 4 : 16),
+                ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,

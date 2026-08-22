@@ -7,6 +7,9 @@ import '../../../services/group/group_service.dart';
 import '../../../services/friends/friend_service.dart';
 import '../../../services/direct/direct_service.dart';
 import '../image_viewer_screen.dart';
+import '../../../utils/constants.dart';
+
+const _fontFamily = 'PlusJakartaSans';
 
 class GroupInfoScreen extends StatefulWidget {
   final String groupId;
@@ -55,72 +58,126 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Rename Group'),
+        backgroundColor: const Color(0xFF211635),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.glassBorder, width: 0.5),
+        ),
+        title: const Text(
+          'Rename Group',
+          style: TextStyle(
+            fontFamily: _fontFamily,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
         content: TextField(
           controller: ctrl,
           autofocus: true,
-          decoration: const InputDecoration(
+          style: const TextStyle(fontFamily: _fontFamily, color: AppColors.textPrimary),
+          decoration: InputDecoration(
             hintText: 'Group name',
-            border: OutlineInputBorder(),
+            hintStyle: const TextStyle(color: AppColors.textSecondary),
+            filled: true,
+            fillColor: AppColors.midnightBg,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.glassBorder),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.glassBorder),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.lavenderAccent),
+            ),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: const Text('Cancel', style: TextStyle(fontFamily: _fontFamily, color: AppColors.textSecondary)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Save'),
+            child: const Text('Save', style: TextStyle(fontFamily: _fontFamily, color: AppColors.lavenderAccent, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
     );
 
-    if (result != null && result.isNotEmpty && mounted) {
-      await _groupService.updateGroupName(
-        groupId: widget.groupId,
-        name: result,
-      );
-      _loadData();
-    }
-  }
+            if (result != null && result.isNotEmpty && mounted) {
+              await _groupService.updateGroupName(
+                groupId: widget.groupId,
+                name: result,
+              );
+              _loadData();
+            }
+          }
 
   Future<void> _changeGroupPhoto() async {
     final ctrl = TextEditingController(text: _group?.photoUrl ?? '');
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Change Group Photo'),
+        backgroundColor: const Color(0xFF211635),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.glassBorder, width: 0.5),
+        ),
+        title: const Text(
+          'Change Group Photo',
+          style: TextStyle(
+            fontFamily: _fontFamily,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
         content: TextField(
           controller: ctrl,
           autofocus: true,
-          decoration: const InputDecoration(
+          style: const TextStyle(fontFamily: _fontFamily, color: AppColors.textPrimary),
+          decoration: InputDecoration(
             hintText: 'Paste image URL',
-            border: OutlineInputBorder(),
+            hintStyle: const TextStyle(color: AppColors.textSecondary),
+            filled: true,
+            fillColor: AppColors.midnightBg,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.glassBorder),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.glassBorder),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.lavenderAccent),
+            ),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: const Text('Cancel', style: TextStyle(fontFamily: _fontFamily, color: AppColors.textSecondary)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Save'),
+            child: const Text('Save', style: TextStyle(fontFamily: _fontFamily, color: AppColors.lavenderAccent, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
     );
 
-    if (result != null && result.isNotEmpty && mounted) {
-      await _groupService.updateGroupPhoto(
-        groupId: widget.groupId,
-        photoUrl: result,
-      );
-      _loadData();
-    }
-  }
+            if (result != null && result.isNotEmpty && mounted) {
+              await _groupService.updateGroupPhoto(
+                groupId: widget.groupId,
+                photoUrl: result,
+              );
+              _loadData();
+            }
+          }
 
   Future<void> _changeNickname(String memberUid) async {
     final currentName = _getMemberName(memberUid);
@@ -128,23 +185,50 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Change Nickname'),
+        backgroundColor: const Color(0xFF211635),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.glassBorder, width: 0.5),
+        ),
+        title: const Text(
+          'Change Nickname',
+          style: TextStyle(
+            fontFamily: _fontFamily,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
         content: TextField(
           controller: ctrl,
           autofocus: true,
-          decoration: const InputDecoration(
+          style: const TextStyle(fontFamily: _fontFamily, color: AppColors.textPrimary),
+          decoration: InputDecoration(
             hintText: 'Nickname',
-            border: OutlineInputBorder(),
+            hintStyle: const TextStyle(color: AppColors.textSecondary),
+            filled: true,
+            fillColor: AppColors.midnightBg,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.glassBorder),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.glassBorder),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.lavenderAccent),
+            ),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: const Text('Cancel', style: TextStyle(fontFamily: _fontFamily, color: AppColors.textSecondary)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Save'),
+            child: const Text('Save', style: TextStyle(fontFamily: _fontFamily, color: AppColors.lavenderAccent, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -222,16 +306,31 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Remove Member?'),
-        content: Text('Remove $memberName from this group?'),
+        backgroundColor: const Color(0xFF211635),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.glassBorder, width: 0.5),
+        ),
+        title: const Text(
+          'Remove Member?',
+          style: TextStyle(
+            fontFamily: _fontFamily,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        content: Text(
+          'Remove $memberName from this group?',
+          style: const TextStyle(fontFamily: _fontFamily, color: AppColors.textSecondary),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: const Text('Cancel', style: TextStyle(fontFamily: _fontFamily, color: AppColors.textSecondary)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Remove', style: TextStyle(color: Colors.red)),
+            child: const Text('Remove', style: TextStyle(fontFamily: _fontFamily, color: Colors.redAccent, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -257,16 +356,31 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Group?'),
-        content: const Text('This cannot be undone.'),
+        backgroundColor: const Color(0xFF211635),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.glassBorder, width: 0.5),
+        ),
+        title: const Text(
+          'Delete Group?',
+          style: TextStyle(
+            fontFamily: _fontFamily,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        content: const Text(
+          'This cannot be undone.',
+          style: TextStyle(fontFamily: _fontFamily, color: AppColors.textSecondary),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: const Text('Cancel', style: TextStyle(fontFamily: _fontFamily, color: AppColors.textSecondary)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: const Text('Delete', style: TextStyle(fontFamily: _fontFamily, color: Colors.redAccent, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -278,54 +392,417 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     }
   }
 
+  Future<void> _leaveGroup() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF211635),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.glassBorder, width: 0.5),
+        ),
+        title: const Text(
+          'Leave Group?',
+          style: TextStyle(
+            fontFamily: _fontFamily,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        content: const Text(
+          'You will no longer be a member of this group.',
+          style: TextStyle(fontFamily: _fontFamily, color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(fontFamily: _fontFamily, color: AppColors.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Leave', style: TextStyle(fontFamily: _fontFamily, color: Colors.redAccent, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      final senderName = _currentUser?.displayName ?? _currentUser?.email ?? 'Someone';
+      await _groupService.removeMember(
+        groupId: widget.groupId,
+        memberUid: _currentUser!.uid,
+      );
+      await _groupService.sendSystemMessage(
+        groupId: widget.groupId,
+        content: '$senderName left the group',
+        senderName: senderName,
+      );
+      if (mounted) Navigator.pop(context);
+    }
+  }
+
+  Future<void> _toggleMute() async {
+    final user = _currentUser;
+    if (user == null || _group == null) return;
+    await _groupService.toggleMute(
+      groupId: widget.groupId,
+      uid: user.uid,
+    );
+    _loadData();
+  }
+
+  void _showInviteLink() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF211635),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.glassBorder, width: 0.5),
+        ),
+        title: const Text(
+          'Invite to Group',
+          style: TextStyle(
+            fontFamily: _fontFamily,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Share this Group ID with friends to invite them:',
+              style: TextStyle(fontFamily: _fontFamily, color: AppColors.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.midnightBg,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.glassBorder),
+              ),
+              child: Text(
+                widget.groupId,
+                style: const TextStyle(
+                  fontFamily: _fontFamily,
+                  color: AppColors.lavenderAccent,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close', style: TextStyle(fontFamily: _fontFamily, color: AppColors.textSecondary)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSearchMembers() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF211635),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        final searchCtrl = TextEditingController();
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            final query = searchCtrl.text.toLowerCase();
+            final filtered = query.isEmpty
+                ? _members
+                : _members.where((m) {
+                    final name = (m['displayName'] as String? ?? '').toLowerCase();
+                    return name.contains(query);
+                  }).toList();
+            return Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.textSecondary.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: searchCtrl,
+                    autofocus: true,
+                    onChanged: (_) => setSheetState(() {}),
+                    style: const TextStyle(fontFamily: _fontFamily, color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      hintText: 'Search members...',
+                      hintStyle: const TextStyle(color: AppColors.textSecondary),
+                      prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
+                      filled: true,
+                      fillColor: AppColors.midnightBg,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: AppColors.glassBorder),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: AppColors.glassBorder),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: AppColors.lavenderAccent),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: filtered.length,
+                      itemBuilder: (_, i) {
+                        final m = filtered[i];
+                        final name = m['displayName'] as String? ?? '';
+                        final uid = m['uid'] as String;
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                            radius: 16,
+                            backgroundColor: AppColors.lavenderAccent.withValues(alpha: 0.15),
+                            child: Text(
+                              name.isNotEmpty ? name[0].toUpperCase() : '?',
+                              style: const TextStyle(
+                                fontFamily: _fontFamily,
+                                fontSize: 13,
+                                color: AppColors.lavenderAccent,
+                              ),
+                            ),
+                          ),
+                          title: Text(
+                            name,
+                            style: const TextStyle(
+                              fontFamily: _fontFamily,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          subtitle: uid == _group?.createdBy
+                              ? const Text('Creator', style: TextStyle(fontFamily: _fontFamily, fontSize: 11, color: AppColors.lavenderAccent))
+                              : null,
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final group = _group;
     final isAdmin = group?.isAdmin(_currentUser?.uid ?? '') ?? false;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Group Info')),
+      backgroundColor: AppColors.midnightBg,
+      appBar: AppBar(
+        backgroundColor: AppColors.midnightBg,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'Group Info',
+          style: TextStyle(
+            fontFamily: _fontFamily,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+            fontSize: 18,
+          ),
+        ),
+        centerTitle: true,
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: AppColors.textPrimary),
+            color: AppColors.glassBg,
+            surfaceTintColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: const BorderSide(color: AppColors.glassBorder, width: 0.5),
+            ),
+            onSelected: (value) {
+              switch (value) {
+                case 'leave':
+                  _leaveGroup();
+                  break;
+                case 'mute':
+                  _toggleMute();
+                  break;
+                case 'search':
+                  _showSearchMembers();
+                  break;
+                case 'invite':
+                  _showInviteLink();
+                  break;
+              }
+            },
+            itemBuilder: (context) {
+              final isMuted = _group?.mutedBy.contains(_currentUser?.uid) ?? false;
+              return [
+                PopupMenuItem<String>(
+                  value: 'leave',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.exit_to_app, size: 20, color: Colors.redAccent),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Leave Group',
+                        style: TextStyle(
+                          fontFamily: _fontFamily,
+                          color: Colors.redAccent,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuItem<String>(
+                  value: 'mute',
+                  child: Row(
+                    children: [
+                      Icon(
+                        isMuted ? Icons.notifications : Icons.notifications_off,
+                        size: 20,
+                        color: AppColors.textSecondary,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        isMuted ? 'Unmute Notifications' : 'Mute Notifications',
+                        style: const TextStyle(
+                          fontFamily: _fontFamily,
+                          color: AppColors.textPrimary,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuItem<String>(
+                  value: 'search',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.search, size: 20, color: AppColors.textSecondary),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Search Members',
+                        style: TextStyle(
+                          fontFamily: _fontFamily,
+                          color: AppColors.textPrimary,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuItem<String>(
+                  value: 'invite',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.link, size: 20, color: AppColors.textSecondary),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Invite via Link',
+                        style: TextStyle(
+                          fontFamily: _fontFamily,
+                          color: AppColors.textPrimary,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ];
+            },
+          ),
+        ],
+      ),
       body: group == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.lavenderAccent),
+            )
           : ListView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               children: [
-                GestureDetector(
-                  onTap: isAdmin ? _changeGroupPhoto : null,
-                  child: Center(
+                const SizedBox(height: 12),
+
+                // ── Profile Section ──
+                Center(
+                  child: GestureDetector(
+                    onTap: isAdmin ? _changeGroupPhoto : null,
                     child: Stack(
                       children: [
-                        CircleAvatar(
-                          radius: 50,
-                          backgroundImage:
-                              group.photoUrl != null &&
-                                  group.photoUrl!.isNotEmpty
-                              ? NetworkImage(group.photoUrl!)
-                              : null,
-                          child:
-                              group.photoUrl == null || group.photoUrl!.isEmpty
-                              ? Text(
-                                  group.name.isNotEmpty
-                                      ? group.name[0].toUpperCase()
-                                      : '?',
-                                  style: const TextStyle(fontSize: 32),
-                                )
-                              : null,
+                        Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.lavenderAccent.withValues(alpha: 0.15),
+                                blurRadius: 30,
+                                spreadRadius: 2,
+                              ),
+                            ],
+                          ),
+                          child: CircleAvatar(
+                            radius: 55,
+                            backgroundColor: const Color(0xFF211635),
+                            backgroundImage:
+                                group.photoUrl != null &&
+                                    group.photoUrl!.isNotEmpty
+                                ? NetworkImage(group.photoUrl!)
+                                : null,
+                            child:
+                                group.photoUrl == null || group.photoUrl!.isEmpty
+                                ? Text(
+                                    group.name.isNotEmpty
+                                        ? group.name[0].toUpperCase()
+                                        : '?',
+                                    style: const TextStyle(
+                                      fontSize: 36,
+                                      fontFamily: _fontFamily,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.lavenderAccent,
+                                    ),
+                                  )
+                                : null,
+                          ),
                         ),
                         if (isAdmin)
                           Positioned(
-                            bottom: 0,
-                            right: 0,
+                            bottom: 2,
+                            right: 2,
                             child: Container(
                               padding: const EdgeInsets.all(6),
                               decoration: const BoxDecoration(
-                                color: Colors.blue,
+                                color: AppColors.lavenderAccent,
                                 shape: BoxShape.circle,
                               ),
                               child: const Icon(
                                 Icons.camera_alt,
-                                size: 16,
-                                color: Colors.white,
+                                size: 14,
+                                color: AppColors.midnightBg,
                               ),
                             ),
                           ),
@@ -334,101 +811,235 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                GestureDetector(
-                  onTap: isAdmin ? _renameGroup : null,
-                  child: Center(
+                Center(
+                  child: GestureDetector(
+                    onTap: isAdmin ? _renameGroup : null,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          group.name,
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w600,
+                        Flexible(
+                          child: Text(
+                            group.name,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontFamily: _fontFamily,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
+                            textAlign: TextAlign.center,
                           ),
                         ),
-                        if (isAdmin)
-                          const Icon(Icons.edit, size: 16, color: Colors.grey),
+                        if (isAdmin) ...[
+                          const SizedBox(width: 6),
+                          const Icon(
+                            Icons.edit,
+                            size: 16,
+                            color: AppColors.lavenderAccent,
+                          ),
+                        ],
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 Center(
                   child: Text(
                     '${group.memberCount} members',
-                    style: const TextStyle(color: Colors.grey),
+                    style: const TextStyle(
+                      fontFamily: _fontFamily,
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),
-                const Divider(),
-                if (isAdmin)
-                  ListTile(
-                    leading: const Icon(Icons.person_add, color: Colors.blue),
-                    title: const Text('Add Members'),
-                    onTap: _addMember,
-                  ),
-                const Divider(),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Text(
-                    'Members',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                ...group.members.map((id) {
-                  final isMe = id == _currentUser?.uid;
-                  return ListTile(
-                    leading: CircleAvatar(child: Text(id[0].toUpperCase())),
-                    title: Text(_getMemberName(id)),
-                    subtitle: id == group.createdBy
-                        ? const Text('Creator', style: TextStyle(fontSize: 12))
-                        : null,
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(
-                            Icons.edit,
-                            size: 18,
-                            color: Colors.grey,
-                          ),
-                          onPressed: () => _changeNickname(id),
-                          tooltip: 'Change nickname',
-                        ),
-                        if (isAdmin && !isMe)
-                          IconButton(
-                            icon: const Icon(
-                              Icons.remove_circle_outline,
-                              color: Colors.red,
+
+                // ── Members Card ──
+                _GlassCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Members',
+                              style: TextStyle(
+                                fontFamily: _fontFamily,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
                             ),
-                            onPressed: () => _removeMember(id),
                           ),
-                      ],
-                    ),
-                  );
-                }),
-                const Divider(),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Text(
-                    'Media',
-                    style: TextStyle(fontWeight: FontWeight.w600),
+                          if (isAdmin)
+                            GestureDetector(
+                              onTap: _addMember,
+                              child: const Icon(
+                                Icons.person_add,
+                                size: 20,
+                                color: AppColors.lavenderAccent,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      ...group.members.map((id) {
+                        final isMe = id == _currentUser?.uid;
+                        final isCreator = id == group.createdBy;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 16,
+                                backgroundColor: AppColors.lavenderAccent.withValues(alpha: 0.15),
+                                child: Text(
+                                  _getMemberName(id).isNotEmpty
+                                      ? _getMemberName(id)[0].toUpperCase()
+                                      : '?',
+                                  style: const TextStyle(
+                                    fontFamily: _fontFamily,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.lavenderAccent,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _getMemberName(id),
+                                      style: const TextStyle(
+                                        fontFamily: _fontFamily,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                    if (isCreator)
+                                      Container(
+                                        margin: const EdgeInsets.only(top: 3),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.lavenderAccent.withValues(alpha: 0.15),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(
+                                            color: AppColors.lavenderAccent.withValues(alpha: 0.3),
+                                          ),
+                                        ),
+                                        child: const Text(
+                                          'Creator',
+                                          style: TextStyle(
+                                            fontFamily: _fontFamily,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.lavenderAccent,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: () => _changeNickname(id),
+                                child: const Icon(
+                                  Icons.edit,
+                                  size: 18,
+                                  color: AppColors.lavenderAccent,
+                                ),
+                              ),
+                              if (isAdmin && !isMe) ...[
+                                const SizedBox(width: 12),
+                                GestureDetector(
+                                  onTap: () => _removeMember(id),
+                                  child: const Icon(
+                                    Icons.remove_circle_outline,
+                                    size: 20,
+                                    color: Colors.redAccent,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
                   ),
                 ),
-                _GroupMediaSection(groupId: widget.groupId),
-                const Divider(),
-                if (isAdmin)
-                  ListTile(
-                    leading: const Icon(Icons.delete, color: Colors.red),
-                    title: const Text(
-                      'Delete Group',
-                      style: TextStyle(color: Colors.red),
-                    ),
-                    onTap: _deleteGroup,
+                const SizedBox(height: 16),
+
+                // ── Media Card ──
+                _GlassCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Media',
+                        style: TextStyle(
+                          fontFamily: _fontFamily,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _GroupMediaSection(groupId: widget.groupId),
+                    ],
                   ),
+                ),
+                const SizedBox(height: 16),
+
+                // ── Delete Group ──
+                if (isAdmin)
+                  _GlassCard(
+                    child: GestureDetector(
+                      onTap: _deleteGroup,
+                      child: const Row(
+                        children: [
+                          Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                          SizedBox(width: 12),
+                          Text(
+                            'Delete Group',
+                            style: TextStyle(
+                              fontFamily: _fontFamily,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.redAccent,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 32),
               ],
             ),
+    );
+  }
+}
+
+class _GlassCard extends StatelessWidget {
+  final Widget child;
+  const _GlassCard({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.glassBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.glassBorder, width: 0.5),
+      ),
+      child: child,
     );
   }
 }
@@ -475,15 +1086,35 @@ class _GroupMediaSectionState extends State<_GroupMediaSection> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_imageUrls.isEmpty) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(24),
-          child: Text(
-            'No media shared yet',
-            style: TextStyle(color: Colors.grey),
+          child: CircularProgressIndicator(color: AppColors.lavenderAccent, strokeWidth: 2),
+        ),
+      );
+    }
+    if (_imageUrls.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.image_outlined,
+                size: 48,
+                color: AppColors.textSecondary.withValues(alpha: 0.4),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'No media shared yet',
+                style: TextStyle(
+                  fontFamily: _fontFamily,
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
           ),
         ),
       );
@@ -493,8 +1124,8 @@ class _GroupMediaSectionState extends State<_GroupMediaSection> {
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
-        crossAxisSpacing: 4,
-        mainAxisSpacing: 4,
+        crossAxisSpacing: 6,
+        mainAxisSpacing: 6,
       ),
       itemCount: _imageUrls.length,
       itemBuilder: (context, index) {
@@ -510,12 +1141,16 @@ class _GroupMediaSectionState extends State<_GroupMediaSection> {
             );
           },
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(10),
             child: Image.network(
               _imageUrls[index],
               fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => const Center(
-                child: Icon(Icons.broken_image, color: Colors.grey),
+              errorBuilder: (_, _, _) => Container(
+                decoration: BoxDecoration(
+                  color: AppColors.glassBg,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.broken_image, color: AppColors.textSecondary),
               ),
             ),
           ),
@@ -557,8 +1192,24 @@ class _AddMemberScreenState extends State<_AddMemberScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.midnightBg,
       appBar: AppBar(
-        title: const Text('Add Members'),
+        backgroundColor: AppColors.midnightBg,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'Add Members',
+          style: TextStyle(
+            fontFamily: _fontFamily,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+            fontSize: 18,
+          ),
+        ),
+        centerTitle: true,
         actions: [
           if (_selected.isNotEmpty)
             TextButton(
@@ -566,7 +1217,8 @@ class _AddMemberScreenState extends State<_AddMemberScreen> {
               child: Text(
                 'Add (${_selected.length})',
                 style: const TextStyle(
-                  color: Colors.blue,
+                  fontFamily: _fontFamily,
+                  color: AppColors.lavenderAccent,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -580,15 +1232,25 @@ class _AddMemberScreenState extends State<_AddMemberScreen> {
             child: TextField(
               controller: _searchCtrl,
               onChanged: (v) => setState(() => _query = v),
+              style: const TextStyle(fontFamily: _fontFamily, color: AppColors.textPrimary),
               decoration: InputDecoration(
                 hintText: 'Search friends...',
-                prefixIcon: const Icon(Icons.search),
+                hintStyle: const TextStyle(color: AppColors.textSecondary),
+                prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
+                filled: true,
+                fillColor: AppColors.glassBg,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
+                  borderSide: const BorderSide(color: AppColors.glassBorder),
                 ),
-                filled: true,
-                fillColor: Colors.grey[100],
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.glassBorder),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.lavenderAccent),
+                ),
               ),
             ),
           ),
@@ -597,29 +1259,58 @@ class _AddMemberScreenState extends State<_AddMemberScreen> {
                 ? const Center(
                     child: Text(
                       'No friends found',
-                      style: TextStyle(color: Colors.grey),
+                      style: TextStyle(
+                        fontFamily: _fontFamily,
+                        color: AppColors.textSecondary,
+                      ),
                     ),
                   )
                 : ListView.separated(
                     itemCount: _filtered.length,
-                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    separatorBuilder: (_, _) => const Divider(
+                      height: 1,
+                      color: AppColors.divider,
+                    ),
                     itemBuilder: (context, index) {
                       final friend = _filtered[index];
                       final name = friend.user?.displayName ?? friend.uid;
                       final isSelected = _selected.contains(friend.uid);
                       return ListTile(
                         leading: CircleAvatar(
-                          child: Text(name[0].toUpperCase()),
+                          radius: 16,
+                          backgroundColor: AppColors.lavenderAccent.withValues(alpha: 0.15),
+                          child: Text(
+                            name[0].toUpperCase(),
+                            style: const TextStyle(
+                              fontFamily: _fontFamily,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.lavenderAccent,
+                            ),
+                          ),
                         ),
-                        title: Text(name),
+                        title: Text(
+                          name,
+                          style: const TextStyle(
+                            fontFamily: _fontFamily,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
                         subtitle: friend.user?.email != null
                             ? Text(
                                 friend.user!.email!,
-                                style: const TextStyle(fontSize: 12),
+                                style: const TextStyle(
+                                  fontFamily: _fontFamily,
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
                               )
                             : null,
                         trailing: Checkbox(
                           value: isSelected,
+                          activeColor: AppColors.lavenderAccent,
+                          checkColor: AppColors.midnightBg,
+                          side: const BorderSide(color: AppColors.glassBorder),
                           onChanged: (v) {
                             setState(() {
                               if (v == true) {

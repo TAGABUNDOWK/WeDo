@@ -3,9 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../models/call.dart';
+import '../../../models/event.dart';
 import '../../../models/message.dart';
+import '../../../models/poll.dart';
 import '../../../models/user_entity.dart';
 import '../../../services/direct/direct_service.dart';
+import '../../../services/event/event_service.dart';
+import '../../../services/poll/poll_service.dart';
 import '../../../services/call/call_service.dart';
 import '../../../utils/time_format.dart';
 import '../../../widgets/message_bubble.dart';
@@ -14,6 +18,9 @@ import '../../../widgets/composer_option.dart';
 import '../../../widgets/audio_recorder_button.dart';
 import '../../call/outgoing_call_screen.dart';
 import '../image_viewer_screen.dart';
+import '../event/create_event_screen.dart';
+import '../event/event_detail_screen.dart';
+import '../poll/create_poll_screen.dart';
 import '../search/direct_chat_search_screen.dart';
 
 class DirectChatScreen extends StatefulWidget {
@@ -34,11 +41,15 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   final _scrollCtrl = ScrollController();
   final _directService = DirectService();
   final _callService = CallService();
+  final _eventService = EventService();
+  final _pollService = PollService();
   final _currentUser = FirebaseAuth.instance.currentUser;
   final _imagePicker = ImagePicker();
   String _otherName = '';
   Map<String, String> _nicknames = {};
   bool _isUploading = false;
+  Map<String, ChatEvent> _events = {};
+  Map<String, ChatPoll> _polls = {};
 
   @override
   void initState() {
@@ -63,6 +74,27 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   String _getDisplayName() {
     if (_currentUser == null) return _otherName;
     return _nicknames[_currentUser.uid] ?? _otherName;
+  }
+
+  Future<void> _loadEventPollData(ChatMessage msg) async {
+    if (msg.refId == null) return;
+    if (msg.type == MessageType.event && !_events.containsKey(msg.refId)) {
+      final event = await _eventService.getEvent(
+        msg.refId!,
+        chatId: widget.chatId,
+      );
+      if (event != null && mounted) {
+        setState(() => _events[msg.refId!] = event);
+      }
+    } else if (msg.type == MessageType.poll && !_polls.containsKey(msg.refId)) {
+      final poll = await _pollService.getPoll(
+        msg.refId!,
+        chatId: widget.chatId,
+      );
+      if (poll != null && mounted) {
+        setState(() => _polls[msg.refId!] = poll);
+      }
+    }
   }
 
   @override
@@ -213,6 +245,40 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                       _pickAndSendImage();
                     },
                   ),
+                  ComposerOption(
+                    icon: Icons.event_outlined,
+                    label: 'Event',
+                    color: Colors.teal,
+                    onTap: () async {
+                      Navigator.pop(context);
+                      final result = await Navigator.push<bool>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => CreateEventScreen(
+                            chatId: widget.chatId,
+                          ),
+                        ),
+                      );
+                      if (result == true) _loadData();
+                    },
+                  ),
+                  ComposerOption(
+                    icon: Icons.poll_outlined,
+                    label: 'Poll',
+                    color: Colors.deepPurple,
+                    onTap: () async {
+                      Navigator.pop(context);
+                      final result = await Navigator.push<bool>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => CreatePollScreen(
+                            chatId: widget.chatId,
+                          ),
+                        ),
+                      );
+                      if (result == true) _loadData();
+                    },
+                  ),
                 ],
               ),
             ],
@@ -294,6 +360,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                 if (messages.isEmpty) {
                   return const Center(child: Text('No messages yet'));
                 }
+
                 return ListView.builder(
                   controller: _scrollCtrl,
                   padding: const EdgeInsets.all(16),
@@ -301,6 +368,59 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                   itemBuilder: (context, index) {
                     final msg = messages[index];
                     final isMe = msg.senderId == _currentUser?.uid;
+                    final isSystem = msg.type == MessageType.system;
+
+                    if (isSystem) {
+                      return MessageBubble(
+                        content: msg.content,
+                        isMe: false,
+                        senderName: msg.senderName.isNotEmpty ? msg.senderName : null,
+                        time: formatChatTime(msg.createdAt),
+                        isSystem: true,
+                      );
+                    }
+
+                    if (msg.type == MessageType.event && msg.refId != null) {
+                      _loadEventPollData(msg);
+                      final evt = _events[msg.refId];
+                      return MessageBubble(
+                        content: msg.content,
+                        isMe: isMe,
+                        senderName: msg.senderName.isNotEmpty ? msg.senderName : null,
+                        time: formatChatTime(msg.createdAt),
+                        event: evt,
+                        currentUid: _currentUser?.uid,
+                        attendeeNames: [
+                          if (_currentUser != null) _currentUser!.uid,
+                          widget.otherUid,
+                        ],
+                        onEventTap: evt != null
+                            ? () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => EventDetailScreen(
+                                      eventId: evt.id,
+                                      chatId: widget.chatId,
+                                    ),
+                                  ),
+                                );
+                              }
+                            : null,
+                      );
+                    }
+
+                    if (msg.type == MessageType.poll && msg.refId != null) {
+                      _loadEventPollData(msg);
+                      return MessageBubble(
+                        content: msg.content,
+                        isMe: isMe,
+                        senderName: null,
+                        time: formatChatTime(msg.createdAt),
+                        poll: _polls[msg.refId],
+                        currentUid: _currentUser?.uid,
+                      );
+                    }
 
                     if (msg.type == MessageType.invite && msg.activityId != null) {
                       return InviteMessageCard(

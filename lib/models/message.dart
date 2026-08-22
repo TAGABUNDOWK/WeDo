@@ -6,7 +6,9 @@ enum MessageType {
   audio,
   call,
   system,
-  invite;
+  invite,
+  event,
+  poll;
 
   static MessageType fromString(String? value) {
     switch (value) {
@@ -20,6 +22,10 @@ enum MessageType {
         return MessageType.system;
       case 'invite':
         return MessageType.invite;
+      case 'event':
+        return MessageType.event;
+      case 'poll':
+        return MessageType.poll;
       default:
         return MessageType.text;
     }
@@ -39,6 +45,10 @@ enum MessageType {
         return 'system';
       case MessageType.invite:
         return 'invite';
+      case MessageType.event:
+        return 'event';
+      case MessageType.poll:
+        return 'poll';
     }
   }
 }
@@ -55,6 +65,7 @@ class ChatMessage {
   final String? activityId;
   final String? callType;
   final String? callStatus;
+  final String? refId;
   final List<String> readBy;
   final Map<String, dynamic> reactions;
   final bool edited;
@@ -72,6 +83,7 @@ class ChatMessage {
     this.activityId,
     this.callType,
     this.callStatus,
+    this.refId,
     required this.readBy,
     required this.reactions,
     required this.edited,
@@ -100,6 +112,8 @@ class ChatMessage {
         ?? data['call_type'] as String?;
     final callStatus = data['callStatus'] as String?
         ?? data['call_status'] as String?;
+    final refId = data['refId'] as String?
+        ?? data['ref_id'] as String?;
     final readBy = (data['readBy'] as List?)
         ?? (data['read_by'] as List?)
         ?? const [];
@@ -121,6 +135,7 @@ class ChatMessage {
       activityId: activityId,
       callType: callType,
       callStatus: callStatus,
+      refId: refId,
       readBy: readBy.cast<String>(),
       reactions: reactions,
       edited: edited,
@@ -140,6 +155,7 @@ class ChatMessage {
       'activityId': activityId,
       'callType': callType,
       'callStatus': callStatus,
+      'refId': refId,
       'readBy': readBy,
       'reactions': reactions,
       'edited': edited,

@@ -252,10 +252,108 @@ class DirectService {
     await batch.commit();
   }
 
+  Future<void> sendEventMessage({
+    required String chatId,
+    required String senderId,
+    required String senderName,
+    required String eventId,
+    required String title,
+  }) async {
+    final batch = _db.batch();
+
+    batch.set(_messages(chatId).doc(), {
+      'sender_id': senderId,
+      'senderName': senderName,
+      'type': 'event',
+      'content': '📅 $title',
+      'refId': eventId,
+      'read_by': [senderId],
+      'created_at': FieldValue.serverTimestamp(),
+      'createdAtLocal': DateTime.now().toIso8601String(),
+      'edited': false,
+    });
+
+    batch.update(_chats.doc(chatId), {
+      'last_message': {
+        'text': '📅 $title',
+        'senderId': senderId,
+        'sentAt': FieldValue.serverTimestamp(),
+      },
+      'lastMessageAt': FieldValue.serverTimestamp(),
+      'lastMessageReadBy': [senderId],
+    });
+
+    await batch.commit();
+  }
+
   String _formatDuration(int totalSeconds) {
     final minutes = totalSeconds ~/ 60;
     final seconds = totalSeconds % 60;
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> sendPollMessage({
+    required String chatId,
+    required String senderId,
+    required String senderName,
+    required String pollId,
+    required String question,
+  }) async {
+    final batch = _db.batch();
+
+    batch.set(_messages(chatId).doc(), {
+      'sender_id': senderId,
+      'senderName': senderName,
+      'type': 'poll',
+      'content': '📊 $question',
+      'refId': pollId,
+      'read_by': [senderId],
+      'created_at': FieldValue.serverTimestamp(),
+      'createdAtLocal': DateTime.now().toIso8601String(),
+      'edited': false,
+    });
+
+    batch.update(_chats.doc(chatId), {
+      'last_message': {
+        'text': '📊 $question',
+        'senderId': senderId,
+        'sentAt': FieldValue.serverTimestamp(),
+      },
+      'lastMessageAt': FieldValue.serverTimestamp(),
+      'lastMessageReadBy': [senderId],
+    });
+
+    await batch.commit();
+  }
+
+  Future<void> sendSystemMessage({
+    required String chatId,
+    required String content,
+    String senderName = '',
+  }) async {
+    final batch = _db.batch();
+
+    batch.set(_messages(chatId).doc(), {
+      'sender_id': 'system',
+      'senderName': senderName,
+      'type': 'system',
+      'content': content,
+      'read_by': [],
+      'created_at': FieldValue.serverTimestamp(),
+      'createdAtLocal': DateTime.now().toIso8601String(),
+      'edited': false,
+    });
+
+    batch.update(_chats.doc(chatId), {
+      'last_message': {
+        'text': content,
+        'senderId': 'system',
+        'sentAt': FieldValue.serverTimestamp(),
+      },
+      'lastMessageAt': FieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
   }
 
   Future<void> updateNickname({

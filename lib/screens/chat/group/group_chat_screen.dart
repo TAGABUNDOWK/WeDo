@@ -3,8 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../models/call.dart';
+import '../../../models/event.dart';
 import '../../../models/message.dart';
+import '../../../models/poll.dart';
 import '../../../services/group/group_service.dart';
+import '../../../services/event/event_service.dart';
+import '../../../services/poll/poll_service.dart';
 import '../../../services/call/call_service.dart';
 import '../../../utils/time_format.dart';
 import '../../../widgets/message_bubble.dart';
@@ -12,6 +16,9 @@ import '../../../widgets/invite_message_card.dart';
 import '../../../widgets/composer_option.dart';
 import '../../../widgets/audio_recorder_button.dart';
 import '../../call/outgoing_call_screen.dart';
+import '../event/create_event_screen.dart';
+import '../event/event_detail_screen.dart';
+import '../poll/create_poll_screen.dart';
 import '../search/chat_search_screen.dart';
 
 class GroupChatScreen extends StatefulWidget {
@@ -27,12 +34,17 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   final _scrollCtrl = ScrollController();
   final _groupService = GroupService();
   final _callService = CallService();
+  final _eventService = EventService();
+  final _pollService = PollService();
   final _currentUser = FirebaseAuth.instance.currentUser;
   final _imagePicker = ImagePicker();
   String _groupName = '';
   Map<String, String> _nicknames = {};
   List<String> _members = [];
   bool _isUploading = false;
+  Map<String, ChatEvent> _events = {};
+  Map<String, ChatPoll> _polls = {};
+  List<String> _memberUids = [];
 
   @override
   void initState() {
@@ -51,7 +63,29 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         _groupName = group.name;
         _nicknames = nicknames;
         _members = List<String>.from(group.members);
+        _memberUids = List<String>.from(group.members);
       });
+    }
+  }
+
+  Future<void> _loadEventPollData(ChatMessage msg) async {
+    if (msg.refId == null) return;
+    if (msg.type == MessageType.event && !_events.containsKey(msg.refId)) {
+      final event = await _eventService.getEvent(
+        msg.refId!,
+        groupId: widget.groupId,
+      );
+      if (event != null && mounted) {
+        setState(() => _events[msg.refId!] = event);
+      }
+    } else if (msg.type == MessageType.poll && !_polls.containsKey(msg.refId)) {
+      final poll = await _pollService.getPoll(
+        msg.refId!,
+        groupId: widget.groupId,
+      );
+      if (poll != null && mounted) {
+        setState(() => _polls[msg.refId!] = poll);
+      }
     }
   }
 
@@ -213,14 +247,37 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                     },
                   ),
                   ComposerOption(
+                    icon: Icons.event_outlined,
+                    label: 'Event',
+                    color: Colors.teal,
+                    onTap: () async {
+                      Navigator.pop(context);
+                      final result = await Navigator.push<bool>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => CreateEventScreen(
+                            groupId: widget.groupId,
+                          ),
+                        ),
+                      );
+                      if (result == true) _loadGroupInfo();
+                    },
+                  ),
+                  ComposerOption(
                     icon: Icons.poll_outlined,
                     label: 'Poll',
                     color: Colors.deepPurple,
-                    onTap: () {
+                    onTap: () async {
                       Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Creating polls coming soon')),
+                      final result = await Navigator.push<bool>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => CreatePollScreen(
+                            groupId: widget.groupId,
+                          ),
+                        ),
                       );
+                      if (result == true) _loadGroupInfo();
                     },
                   ),
                 ],
@@ -303,6 +360,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 if (messages.isEmpty) {
                   return const Center(child: Text('No messages yet'));
                 }
+
                 return ListView.builder(
                   controller: _scrollCtrl,
                   padding: const EdgeInsets.all(16),
@@ -319,6 +377,45 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                         senderName: msg.senderName.isNotEmpty ? msg.senderName : null,
                         time: formatChatTime(msg.createdAt),
                         isSystem: true,
+                      );
+                    }
+
+                    if (msg.type == MessageType.event && msg.refId != null) {
+                      _loadEventPollData(msg);
+                      final evt = _events[msg.refId];
+                      return MessageBubble(
+                        content: msg.content,
+                        isMe: isMe,
+                        senderName: _getDisplayName(msg.senderId, msg.senderName),
+                        time: formatChatTime(msg.createdAt),
+                        event: evt,
+                        currentUid: _currentUser?.uid,
+                        attendeeNames: _memberUids,
+                        onEventTap: evt != null
+                            ? () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => EventDetailScreen(
+                                      eventId: evt.id,
+                                      groupId: widget.groupId,
+                                    ),
+                                  ),
+                                );
+                              }
+                            : null,
+                      );
+                    }
+
+                    if (msg.type == MessageType.poll && msg.refId != null) {
+                      _loadEventPollData(msg);
+                      return MessageBubble(
+                        content: msg.content,
+                        isMe: isMe,
+                        senderName: isMe ? null : _getDisplayName(msg.senderId, msg.senderName),
+                        time: formatChatTime(msg.createdAt),
+                        poll: _polls[msg.refId],
+                        currentUid: _currentUser?.uid,
                       );
                     }
 

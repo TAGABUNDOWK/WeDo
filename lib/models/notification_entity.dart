@@ -2,7 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum NotificationType {
   friendRequest,
-  friendRequestAccepted;
+  friendRequestAccepted,
+  pollVote;
 
   factory NotificationType.fromString(String? value) {
     return NotificationType.values.firstWhere(
