@@ -23,19 +23,13 @@ class _Tokens {
   static const mutedWhite = Color(0xB3FFFFFF);
   static const white = Colors.white;
 
-  static const inputRadius = BorderRadius.all(Radius.circular(16));
   static const buttonRadius = BorderRadius.all(Radius.circular(28));
   static const fieldGap = SizedBox(height: 20);
-  static const sectionGap = SizedBox(height: 28);
-  static const smallGap = SizedBox(height: 8);
 
   static const poppins = TextStyle(fontFamily: 'Poppins');
 
   static TextStyle get heading =>
       poppins.copyWith(fontSize: 26, fontWeight: FontWeight.bold, color: white);
-
-  static TextStyle get subHeading =>
-      poppins.copyWith(fontSize: 13, fontWeight: FontWeight.w600, color: white);
 
   static TextStyle get description =>
       poppins.copyWith(fontSize: 14, color: mutedWhite, height: 1.4);
@@ -43,11 +37,11 @@ class _Tokens {
   static TextStyle get label => poppins.copyWith(
     fontSize: 13,
     fontWeight: FontWeight.w500,
-    color: white.withOpacity(0.9),
+    color: white.withValues(alpha: 0.9),
   );
 
   static TextStyle get helper =>
-      poppins.copyWith(fontSize: 12, color: pink.withOpacity(0.8));
+      poppins.copyWith(fontSize: 12, color: pink.withValues(alpha: 0.8));
 
   static TextStyle get fieldInput =>
       poppins.copyWith(fontSize: 15, color: white);
@@ -71,7 +65,7 @@ InputDecoration _pillDecoration({
     hintText: hint,
     hintStyle: _Tokens.poppins.copyWith(
       fontSize: 14,
-      color: Colors.white.withOpacity(0.35),
+      color: Colors.white.withValues(alpha: 0.35),
     ),
     helperText: helperText,
     helperStyle: _Tokens.helper,
@@ -147,7 +141,7 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
             boxShadow: [
               BoxShadow(
                 color: (widget.isLoading ? Colors.grey : _Tokens.pink)
-                    .withOpacity(0.4),
+                    .withValues(alpha: 0.4),
                 offset: const Offset(0, 4),
                 blurRadius: 16,
               ),
@@ -195,7 +189,7 @@ class _StepProgress extends StatelessWidget {
                     height: 2,
                     color: isComplete
                         ? _Tokens.pink
-                        : _Tokens.mutedWhite.withOpacity(0.25),
+                        : _Tokens.mutedWhite.withValues(alpha: 0.25),
                   ),
                 ),
               Column(
@@ -217,7 +211,7 @@ class _StepProgress extends StatelessWidget {
                       border: (isActive || isComplete)
                           ? null
                           : Border.all(
-                              color: _Tokens.mutedWhite.withOpacity(0.35),
+                              color: _Tokens.mutedWhite.withValues(alpha: 0.35),
                               width: 1.5,
                             ),
                     ),
@@ -235,7 +229,7 @@ class _StepProgress extends StatelessWidget {
                                 fontWeight: FontWeight.w600,
                                 color: isActive
                                     ? Colors.white
-                                    : _Tokens.mutedWhite.withOpacity(0.6),
+                                    : _Tokens.mutedWhite.withValues(alpha: 0.6),
                               ),
                             ),
                     ),
@@ -248,7 +242,7 @@ class _StepProgress extends StatelessWidget {
                       fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
                       color: isActive
                           ? _Tokens.pink
-                          : _Tokens.mutedWhite.withOpacity(0.5),
+                          : _Tokens.mutedWhite.withValues(alpha: 0.5),
                     ),
                   ),
                 ],
@@ -259,7 +253,7 @@ class _StepProgress extends StatelessWidget {
                     height: 2,
                     color: isComplete
                         ? _Tokens.pink
-                        : _Tokens.mutedWhite.withOpacity(0.25),
+                        : _Tokens.mutedWhite.withValues(alpha: 0.25),
                   ),
                 ),
             ],
@@ -642,7 +636,7 @@ class _Step1EmailState extends State<_Step1Email> {
               'We\'ll verify this address before your account is created.',
               style: _Tokens.poppins.copyWith(
                 fontSize: 12,
-                color: _Tokens.mutedWhite.withOpacity(0.6),
+                color: _Tokens.mutedWhite.withValues(alpha: 0.6),
               ),
             ),
             const SizedBox(height: 32),
@@ -661,8 +655,8 @@ class _Step1EmailState extends State<_Step1Email> {
                       fontSize: 14,
                       color: _Tokens.mutedWhite,
                     ),
-                    children: [
-                      const TextSpan(text: 'Already have an account? '),
+                    children: const [
+                      TextSpan(text: 'Already have an account? '),
                       TextSpan(
                         text: 'Sign in',
                         style: TextStyle(
@@ -856,19 +850,19 @@ class _Step2OtpState extends State<_Step2Otp> {
                       fontWeight: FontWeight.bold,
                       color: _Tokens.pink,
                     ),
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       counterText: '',
                       filled: true,
                       fillColor: _Tokens.fieldFill,
                       contentPadding: EdgeInsets.zero,
-                      enabledBorder: const OutlineInputBorder(
+                      enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.all(Radius.circular(12)),
                         borderSide: BorderSide(
                           color: _Tokens.fieldBorder,
                           width: 1,
                         ),
                       ),
-                      focusedBorder: const OutlineInputBorder(
+                      focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.all(Radius.circular(12)),
                         borderSide: BorderSide(color: _Tokens.pink, width: 1.5),
                       ),
@@ -906,10 +900,10 @@ class _Step2OtpState extends State<_Step2Otp> {
                           TextSpan(
                             style: _Tokens.poppins.copyWith(
                               fontSize: 12,
-                              color: _Tokens.mutedWhite.withOpacity(0.7),
+                              color: _Tokens.mutedWhite.withValues(alpha: 0.7),
                             ),
-                            children: [
-                              const TextSpan(text: "Didn't get it? "),
+                            children: const [
+                              TextSpan(text: "Didn't get it? "),
                               TextSpan(
                                 text: 'Resend Code',
                                 style: TextStyle(
@@ -925,7 +919,7 @@ class _Step2OtpState extends State<_Step2Otp> {
                         "Didn't get it?",
                         style: _Tokens.poppins.copyWith(
                           fontSize: 12,
-                          color: _Tokens.mutedWhite.withOpacity(0.5),
+                          color: _Tokens.mutedWhite.withValues(alpha: 0.5),
                         ),
                       ),
               ),
@@ -936,7 +930,7 @@ class _Step2OtpState extends State<_Step2Otp> {
                   'Expires in $_formattedCountdown',
                   style: _Tokens.poppins.copyWith(
                     fontSize: 12,
-                    color: _Tokens.mutedWhite.withOpacity(0.6),
+                    color: _Tokens.mutedWhite.withValues(alpha: 0.6),
                   ),
                 ),
             ],
@@ -1004,7 +998,7 @@ class _Step3ProfileState extends State<_Step3Profile> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.dark(
+            colorScheme: const ColorScheme.dark(
               primary: _Tokens.pink,
               onPrimary: Colors.white,
               surface: _Tokens.darkBg,
@@ -1239,7 +1233,7 @@ class _Step3ProfileState extends State<_Step3Profile> {
               initialValue: widget.email,
               readOnly: true,
               style: _Tokens.fieldInput.copyWith(
-                color: _Tokens.mutedWhite.withOpacity(0.7),
+                color: _Tokens.mutedWhite.withValues(alpha: 0.7),
               ),
               decoration: _pillDecoration(
                 label: 'Verified Email Address',
@@ -1444,7 +1438,7 @@ class _Step3ProfileState extends State<_Step3Profile> {
                         setState(() => _agreedToTerms = v ?? false),
                     activeColor: _Tokens.pink,
                     checkColor: Colors.white,
-                    side: BorderSide(color: Colors.white.withOpacity(0.5)),
+                    side: BorderSide(color: Colors.white.withValues(alpha: 0.5)),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(4),
                     ),
@@ -1456,11 +1450,11 @@ class _Step3ProfileState extends State<_Step3Profile> {
                     TextSpan(
                       style: _Tokens.poppins.copyWith(
                         fontSize: 12,
-                        color: _Tokens.mutedWhite.withOpacity(0.7),
+                        color: _Tokens.mutedWhite.withValues(alpha: 0.7),
                         height: 1.4,
                       ),
-                      children: [
-                        const TextSpan(text: 'I agree to the '),
+                      children: const [
+                        TextSpan(text: 'I agree to the '),
                         TextSpan(
                           text: 'Terms of Service',
                           style: TextStyle(
@@ -1468,7 +1462,7 @@ class _Step3ProfileState extends State<_Step3Profile> {
                             fontWeight: FontWeight.w500,
                           ),
                         ),
-                        const TextSpan(text: ' and '),
+                        TextSpan(text: ' and '),
                         TextSpan(
                           text: 'Privacy Policy',
                           style: TextStyle(
@@ -1476,7 +1470,7 @@ class _Step3ProfileState extends State<_Step3Profile> {
                             fontWeight: FontWeight.w500,
                           ),
                         ),
-                        const TextSpan(
+                        TextSpan(
                           text:
                               ', and acknowledge that my personal information will be handled securely and responsibly.',
                         ),

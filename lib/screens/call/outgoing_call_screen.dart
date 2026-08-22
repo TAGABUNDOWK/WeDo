@@ -86,8 +86,8 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen> {
     if (widget.call.groupId != null) {
       GroupService().sendCallMessage(
         groupId: widget.call.groupId!,
-        senderId: _currentUser!.uid,
-        senderName: _currentUser!.displayName ?? _currentUser!.email ?? 'Unknown',
+        senderId: _currentUser.uid,
+        senderName: _currentUser.displayName ?? _currentUser.email ?? 'Unknown',
         callType: callTypeStr,
         callStatus: 'missed',
         durationSeconds: 0,
@@ -95,8 +95,8 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen> {
     } else if (widget.call.chatId != null) {
       DirectService().sendCallMessage(
         chatId: widget.call.chatId!,
-        senderId: _currentUser!.uid,
-        senderName: _currentUser!.displayName ?? _currentUser!.email ?? 'Unknown',
+        senderId: _currentUser.uid,
+        senderName: _currentUser.displayName ?? _currentUser.email ?? 'Unknown',
         callType: callTypeStr,
         callStatus: 'missed',
         durationSeconds: 0,

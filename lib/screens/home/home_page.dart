@@ -48,7 +48,7 @@ class _HomePageState extends State<HomePage> {
               child: Transform(
                 alignment: Alignment.center,
                 transform: Matrix4.identity()
-                  ..scale(-1.0, 1.0)
+                  ..scaleByDouble(-1.0, 1.0, 1.0, 1.0)
                   ..rotateZ(-0.55),
                 child: Opacity(
                   opacity: 0.05,
@@ -1392,10 +1392,10 @@ class _StackedCardsState extends State<_StackedCards>
                 ),
               ),
             ),
-            Positioned(
+            const Positioned(
               left: 21,
               top: 66,
-              child: const Text(
+              child: Text(
                 'Make Every Choice\nMore Fun!',
                 style: TextStyle(
                   fontFamily: 'ArialNBI',
@@ -1515,7 +1515,7 @@ class _StackedCardsState extends State<_StackedCards>
           child: Transform(
             alignment: Alignment.bottomCenter,
             transform: Matrix4.identity()
-              ..scale(-1.0, 1.0)
+              ..scaleByDouble(-1.0, 1.0, 1.0, 1.0)
               ..rotateZ(rightAng),
             child: _buildRightCard(slant, cornerR, cardSize),
           ),

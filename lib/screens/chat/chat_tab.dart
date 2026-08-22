@@ -12,8 +12,6 @@ import 'group/create_group_screen.dart';
 import 'direct/direct_chat_screen.dart';
 import 'direct/new_direct_chat.dart';
 
-const _bg = Color(0xFF190831);
-
 class ChatTab extends StatefulWidget {
   const ChatTab({super.key});
 

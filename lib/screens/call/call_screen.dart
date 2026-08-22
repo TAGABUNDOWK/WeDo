@@ -108,7 +108,7 @@ class _CallScreenState extends State<CallScreen> {
 
     // Listen for signaling messages
     _signalsSub = _callService
-        .getSignalsForUser(widget.callId, _currentUser!.uid)
+        .getSignalsForUser(widget.callId, _currentUser.uid)
         .listen((snapshot) {
       for (final doc in snapshot.docs) {
         final data = doc.data();
@@ -119,19 +119,19 @@ class _CallScreenState extends State<CallScreen> {
           _webrtcService.handleOffer(
             callId: widget.callId,
             fromUid: fromUid,
-            toUid: _currentUser!.uid,
+            toUid: _currentUser.uid,
             sdpJson: data['sdp'] as String,
           );
         } else if (type == 'answer') {
           _webrtcService.handleAnswer(
             fromUid: fromUid,
-            toUid: _currentUser!.uid,
+            toUid: _currentUser.uid,
             sdpJson: data['sdp'] as String,
           );
         } else if (type == 'candidate') {
           _webrtcService.handleIceCandidate(
             fromUid: fromUid,
-            toUid: _currentUser!.uid,
+            toUid: _currentUser.uid,
             candidateJson: data['candidate'] as String,
           );
         }
@@ -140,10 +140,10 @@ class _CallScreenState extends State<CallScreen> {
 
     // Create offers for all other members
     for (final memberUid in widget.members) {
-      if (memberUid != _currentUser!.uid) {
+      if (memberUid != _currentUser.uid) {
         await _webrtcService.createOffer(
           callId: widget.callId,
-          fromUid: _currentUser!.uid,
+          fromUid: _currentUser.uid,
           toUid: memberUid,
         );
       }
@@ -178,8 +178,8 @@ class _CallScreenState extends State<CallScreen> {
     if (widget.isGroup && widget.groupId != null) {
       GroupService().sendCallMessage(
         groupId: widget.groupId!,
-        senderId: _currentUser!.uid,
-        senderName: _currentUser!.displayName ?? _currentUser!.email ?? 'Unknown',
+        senderId: _currentUser.uid,
+        senderName: _currentUser.displayName ?? _currentUser.email ?? 'Unknown',
         callType: callTypeStr,
         callStatus: 'active',
         durationSeconds: duration,
@@ -187,8 +187,8 @@ class _CallScreenState extends State<CallScreen> {
     } else if (widget.chatId != null) {
       DirectService().sendCallMessage(
         chatId: widget.chatId!,
-        senderId: _currentUser!.uid,
-        senderName: _currentUser!.displayName ?? _currentUser!.email ?? 'Unknown',
+        senderId: _currentUser.uid,
+        senderName: _currentUser.displayName ?? _currentUser.email ?? 'Unknown',
         callType: callTypeStr,
         callStatus: 'active',
         durationSeconds: duration,

@@ -662,13 +662,13 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
             itemBuilder: (context) {
               final isMuted = _group?.mutedBy.contains(_currentUser?.uid) ?? false;
               return [
-                PopupMenuItem<String>(
+                const PopupMenuItem<String>(
                   value: 'leave',
                   child: Row(
                     children: [
-                      const Icon(Icons.exit_to_app, size: 20, color: Colors.redAccent),
-                      const SizedBox(width: 12),
-                      const Text(
+                      Icon(Icons.exit_to_app, size: 20, color: Colors.redAccent),
+                      SizedBox(width: 12),
+                      Text(
                         'Leave Group',
                         style: TextStyle(
                           fontFamily: _fontFamily,
@@ -700,13 +700,13 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                     ],
                   ),
                 ),
-                PopupMenuItem<String>(
+                const PopupMenuItem<String>(
                   value: 'search',
                   child: Row(
                     children: [
-                      const Icon(Icons.search, size: 20, color: AppColors.textSecondary),
-                      const SizedBox(width: 12),
-                      const Text(
+                      Icon(Icons.search, size: 20, color: AppColors.textSecondary),
+                      SizedBox(width: 12),
+                      Text(
                         'Search Members',
                         style: TextStyle(
                           fontFamily: _fontFamily,
@@ -717,13 +717,13 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                     ],
                   ),
                 ),
-                PopupMenuItem<String>(
+                const PopupMenuItem<String>(
                   value: 'invite',
                   child: Row(
                     children: [
-                      const Icon(Icons.link, size: 20, color: AppColors.textSecondary),
-                      const SizedBox(width: 12),
-                      const Text(
+                      Icon(Icons.link, size: 20, color: AppColors.textSecondary),
+                      SizedBox(width: 12),
+                      Text(
                         'Invite via Link',
                         style: TextStyle(
                           fontFamily: _fontFamily,

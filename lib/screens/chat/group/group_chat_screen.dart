@@ -42,8 +42,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   Map<String, String> _nicknames = {};
   List<String> _members = [];
   bool _isUploading = false;
-  Map<String, ChatEvent> _events = {};
-  Map<String, ChatPoll> _polls = {};
+  final Map<String, ChatEvent> _events = {};
+  final Map<String, ChatPoll> _polls = {};
   List<String> _memberUids = [];
 
   @override

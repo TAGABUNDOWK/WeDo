@@ -437,7 +437,7 @@ class CallMessageBubble extends StatelessWidget {
               ),
               if (isMissed) ...[
                 const SizedBox(width: 8),
-                Icon(Icons.call, color: Colors.green, size: 14),
+                const Icon(Icons.call, color: Colors.green, size: 14),
               ],
             ],
           ),

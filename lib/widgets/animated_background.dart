@@ -222,7 +222,6 @@ class _StarAnimation {
   late final double _size;
   late final double _rotation;
 
-  static const _totalStars = 8;
   static const _sizeRanges = [
     [22.0, 32.0], // small
     [36.0, 50.0], // medium

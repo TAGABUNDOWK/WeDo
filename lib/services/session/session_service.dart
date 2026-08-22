@@ -426,10 +426,10 @@ class SessionService {
   }) async {
     try {
       final doc = await _sessions.doc(sessionId).get();
-      if (!doc.exists) throw SessionException('Session not found.');
+      if (!doc.exists) throw const SessionException('Session not found.');
       final data = doc.data() as Map<String, dynamic>;
       if (data['hostId'] != hostId) {
-        throw SessionException('Only the host can send invites.');
+        throw const SessionException('Only the host can send invites.');
       }
       await _sessions.doc(sessionId).update({
         'invitedUserIds': FieldValue.arrayUnion(invitedUserIds),

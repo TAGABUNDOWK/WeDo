@@ -48,8 +48,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   String _otherName = '';
   Map<String, String> _nicknames = {};
   bool _isUploading = false;
-  Map<String, ChatEvent> _events = {};
-  Map<String, ChatPoll> _polls = {};
+  final Map<String, ChatEvent> _events = {};
+  final Map<String, ChatPoll> _polls = {};
 
   @override
   void initState() {
@@ -391,7 +391,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                         event: evt,
                         currentUid: _currentUser?.uid,
                         attendeeNames: [
-                          if (_currentUser != null) _currentUser!.uid,
+                          if (_currentUser != null) _currentUser.uid,
                           widget.otherUid,
                         ],
                         onEventTap: evt != null
