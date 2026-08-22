@@ -350,6 +350,7 @@ class SessionService {
         final cardId = card['id'] as String;
         cardTally[cardId] = {
           'title': card['title'] as String? ?? '',
+          'emoji': card['emoji'] as String? ?? '',
           'eliminationCount': eliminationCounts[cardId] ?? 0,
         };
       }
@@ -365,6 +366,7 @@ class SessionService {
 
       String winnerCardId = '';
       String winnerCardTitle = '';
+      String winnerCardEmoji = '';
       if (winnerVotes.isNotEmpty) {
         final sortedVotes = winnerVotes.entries.toList()
           ..sort((a, b) {
@@ -379,6 +381,7 @@ class SessionService {
           orElse: () => {},
         );
         winnerCardTitle = winnerCard['title'] as String? ?? '';
+        winnerCardEmoji = winnerCard['emoji'] as String? ?? '';
       }
 
       // ── Standings: sorted by elapsed time (fastest first) ──
@@ -410,6 +413,7 @@ class SessionService {
           'cardTally': cardTally,
           'winnerCardId': winnerCardId,
           'winnerCardTitle': winnerCardTitle,
+          'winnerCardEmoji': winnerCardEmoji,
           'totalParticipants': finished.length,
           'standings': orderedStandings,
         },
