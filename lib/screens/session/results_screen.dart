@@ -14,6 +14,7 @@ class ResultsScreen extends StatefulWidget {
 class _ResultsScreenState extends State<ResultsScreen> {
   final _service = SessionService();
   final _bg = const Color(0xFF190831);
+  static const _accent = Color(0xFFFFD700);
 
   @override
   Widget build(BuildContext context) {
@@ -68,6 +69,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
     final cardTally = results['cardTally'] as Map<String, dynamic>? ?? {};
     final winnerCardId = results['winnerCardId'] as String? ?? '';
     final winnerCardTitle = results['winnerCardTitle'] as String? ?? '';
+    final winnerCardEmoji = results['winnerCardEmoji'] as String? ?? '';
     final totalParticipants = results['totalParticipants'] as int? ?? 0;
     final standings = results['standings'] as Map<String, dynamic>? ?? {};
 
@@ -76,28 +78,18 @@ class _ResultsScreenState extends State<ResultsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildWinnerBanner(winnerCardTitle, totalParticipants),
-          const SizedBox(height: 24),
-          _buildSectionTitle('Card Tally'),
-          const SizedBox(height: 4),
-          const Text(
-            'X marks = how many players eliminated this card',
-            style: TextStyle(color: Colors.white54, fontSize: 12),
-          ),
+          _buildWinnerHero(winnerCardTitle, winnerCardEmoji, totalParticipants),
+          const SizedBox(height: 28),
+          _buildSectionHeader('Card Tally', 'X marks = how many players eliminated this card'),
           const SizedBox(height: 12),
           _buildCardTally(cardTally, winnerCardId),
           if (standings.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            _buildSectionTitle('Leaderboard'),
-            const SizedBox(height: 4),
-            const Text(
-              'Ranked by decision time (fastest first)',
-              style: TextStyle(color: Colors.white54, fontSize: 12),
-            ),
+            const SizedBox(height: 28),
+            _buildSectionHeader('Leaderboard', 'Ranked by decision time (fastest first)'),
             const SizedBox(height: 12),
             _buildStandings(standings),
           ],
-          const SizedBox(height: 24),
+          const SizedBox(height: 28),
           _buildBackButton(),
           const SizedBox(height: 20),
         ],
@@ -105,48 +97,51 @@ class _ResultsScreenState extends State<ResultsScreen> {
     );
   }
 
-  Widget _buildWinnerBanner(String winnerCardTitle, int totalParticipants) {
+  Widget _buildWinnerHero(String title, String emoji, int totalParticipants) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [Color(0xFFFFD700), Color(0xFFFFA000)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFFD700).withValues(alpha: 0.3),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+            color: _accent.withValues(alpha: 0.35),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Column(
         children: [
-          const Icon(Icons.emoji_events, color: Colors.white, size: 48),
-          const SizedBox(height: 12),
+          const Icon(Icons.emoji_events_rounded, color: Colors.white, size: 52),
+          const SizedBox(height: 10),
           const Text(
             'WINNING CARD',
             style: TextStyle(
               color: Colors.white70,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
               letterSpacing: 2,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 14),
+          if (emoji.isNotEmpty)
+            Text(emoji, style: const TextStyle(fontSize: 44)),
+          if (emoji.isNotEmpty) const SizedBox(height: 8),
           Text(
-            winnerCardTitle.isNotEmpty ? winnerCardTitle : 'No winner',
+            title.isNotEmpty ? title : 'No winner',
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 22,
+              fontSize: 24,
               fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Text(
             '$totalParticipants player${totalParticipants == 1 ? '' : 's'} voted',
             style: const TextStyle(color: Colors.white70, fontSize: 13),
@@ -156,10 +151,24 @@ class _ResultsScreenState extends State<ResultsScreen> {
     );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white),
+  Widget _buildSectionHeader(String title, String explainer) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          explainer,
+          style: const TextStyle(color: Colors.white54, fontSize: 12),
+        ),
+      ],
     );
   }
 
@@ -181,7 +190,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
         crossAxisCount: 2,
         mainAxisSpacing: 10,
         crossAxisSpacing: 10,
-        childAspectRatio: 1.6,
+        childAspectRatio: 1.5,
       ),
       itemCount: sorted.length,
       itemBuilder: (context, index) {
@@ -189,11 +198,13 @@ class _ResultsScreenState extends State<ResultsScreen> {
         final cardId = entry.key;
         final data = entry.value as Map<String, dynamic>;
         final title = data['title'] as String? ?? '';
+        final emoji = data['emoji'] as String? ?? '';
         final eliminations = data['eliminationCount'] as int? ?? 0;
         final isWinner = cardId == winnerCardId;
 
         return _buildCardTile(
           title: title,
+          emoji: emoji,
           eliminations: eliminations,
           isWinner: isWinner,
         );
@@ -203,17 +214,29 @@ class _ResultsScreenState extends State<ResultsScreen> {
 
   Widget _buildCardTile({
     required String title,
+    required String emoji,
     required int eliminations,
     required bool isWinner,
   }) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isWinner ? const Color(0x33FFD700) : Colors.black.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(14),
+        color: isWinner
+            ? _accent.withValues(alpha: 0.12)
+            : Colors.black.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(16),
         border: isWinner
-            ? Border.all(color: const Color(0xFFFFD700), width: 2)
-            : Border.all(color: Colors.white.withValues(alpha: 0.10), width: 1),
+            ? Border.all(color: _accent, width: 2)
+            : Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1),
+        boxShadow: isWinner
+            ? [
+                BoxShadow(
+                  color: _accent.withValues(alpha: 0.15),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -223,8 +246,11 @@ class _ResultsScreenState extends State<ResultsScreen> {
               if (isWinner)
                 const Padding(
                   padding: EdgeInsets.only(right: 4),
-                  child: Icon(Icons.emoji_events, color: Color(0xFFFFD700), size: 16),
+                  child: Icon(Icons.emoji_events, color: _accent, size: 16),
                 ),
+              if (emoji.isNotEmpty)
+                Text(emoji, style: const TextStyle(fontSize: 16)),
+              if (emoji.isNotEmpty) const SizedBox(width: 4),
               Expanded(
                 child: Text(
                   title,
@@ -233,28 +259,48 @@ class _ResultsScreenState extends State<ResultsScreen> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: isWinner ? FontWeight.w700 : FontWeight.w600,
-                    color: isWinner ? Colors.amber.shade800 : Colors.white,
+                    color: isWinner ? _accent : Colors.white,
                   ),
                 ),
               ),
             ],
           ),
           const Spacer(),
-          if (eliminations > 0)
-            Row(
-              children: List.generate(
-                eliminations.clamp(0, 10),
-                (i) => const Padding(
-                  padding: EdgeInsets.only(right: 3),
-                  child: Icon(Icons.close, color: Colors.redAccent, size: 14),
-                ),
-              ),
-            )
-          else
+          if (isWinner)
             const Text(
               'Safe',
               style: TextStyle(
-                color: Colors.green,
+                color: Color(0xFF4CAF50),
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            )
+          else if (eliminations > 0)
+            Row(
+              children: [
+                ...List.generate(
+                  eliminations.clamp(0, 5),
+                  (i) => const Padding(
+                    padding: EdgeInsets.only(right: 3),
+                    child: Icon(Icons.close, color: Colors.redAccent, size: 14),
+                  ),
+                ),
+                if (eliminations > 5)
+                  Text(
+                    '\u00d7$eliminations',
+                    style: const TextStyle(
+                      color: Colors.redAccent,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+              ],
+            )
+          else
+            Text(
+              'Safe',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.4),
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
@@ -291,77 +337,92 @@ class _ResultsScreenState extends State<ResultsScreen> {
     required int timeoutCount,
   }) {
     final timeSeconds = (elapsedTimeMs / 1000).toStringAsFixed(1);
-    final medal = rank == 1 ? '\u{1F947}' : rank == 2 ? '\u{1F948}' : rank == 3 ? '\u{1F949}' : '';
+    final isFirst = rank == 1;
+    final isMedal = rank <= 3;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.35),
+        color: isFirst
+            ? _accent.withValues(alpha: 0.08)
+            : Colors.black.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.10), width: 1),
+        border: Border.all(
+          color: isFirst ? _accent.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.08),
+          width: isFirst ? 1.5 : 1,
+        ),
       ),
       child: Row(
         children: [
+          // Rank / medal
           Container(
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: rank == 1
-                  ? Colors.amber
+              color: isFirst
+                  ? _accent
                   : rank == 2
-                      ? Colors.grey.shade300
+                      ? Colors.grey.shade400
                       : rank == 3
-                          ? Colors.brown.shade200
-                          : Colors.blue.shade50,
+                          ? const Color(0xFFCD7F32)
+                          : Colors.white.withValues(alpha: 0.08),
               shape: BoxShape.circle,
             ),
             child: Center(
-              child: medal.isNotEmpty
-                  ? Text(medal, style: const TextStyle(fontSize: 18))
+              child: isMedal
+                  ? Text(
+                      rank == 1 ? '\u{1F947}' : rank == 2 ? '\u{1F948}' : '\u{1F949}',
+                      style: const TextStyle(fontSize: 18),
+                    )
                   : Text(
                       '$rank',
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: rank <= 3 ? Colors.white : Colors.blue,
+                        color: Colors.white.withValues(alpha: 0.6),
                         fontSize: 14,
                       ),
                     ),
             ),
           ),
           const SizedBox(width: 12),
+          // Name + time
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   userName,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                    fontWeight: isFirst ? FontWeight.w700 : FontWeight.w600,
+                    color: isFirst ? _accent : Colors.white,
                   ),
                 ),
                 const SizedBox(height: 3),
                 Text(
                   '$timeSeconds s${timeoutCount > 0 ? ' \u00b7 $timeoutCount timeout${timeoutCount == 1 ? '' : 's'}' : ''}',
-                  style: const TextStyle(color: Colors.white70, fontSize: 11),
+                  style: const TextStyle(color: Colors.white54, fontSize: 11),
                 ),
               ],
             ),
           ),
+          // Time pill
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.35),
+              color: isFirst ? _accent.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.35),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.10), width: 1),
+              border: Border.all(
+                color: isFirst ? _accent.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.08),
+                width: 1,
+              ),
             ),
             child: Text(
               '$timeSeconds s',
               style: TextStyle(
                 fontWeight: FontWeight.w700,
-                color: rank == 1 ? Colors.amber.shade800 : const Color(0xFFFE4EF0),
+                color: isFirst ? _accent : const Color(0xFFFE4EF0),
                 fontSize: 13,
               ),
             ),
@@ -381,7 +442,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
           gradient: const LinearGradient(colors: [Color(0xFFFE4EF0), Color(0xFF800DD8)]),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
               color: const Color(0xFFFE4EF0).withValues(alpha: 0.4),
