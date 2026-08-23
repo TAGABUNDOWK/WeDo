@@ -874,8 +874,8 @@ class _FeatureCarouselState extends State<_FeatureCarousel>
   int _currentIndex = 0;
   late final AnimationController _controller;
 
-  static const _autoScrollInterval = 3;
-  static const _animDuration = Duration(milliseconds: 500);
+  static const _autoScrollInterval = 100;
+  static const _animDuration = Duration(milliseconds: 800);
 
   @override
   void initState() {
@@ -926,7 +926,14 @@ class _FeatureCarouselState extends State<_FeatureCarousel>
         switchInCurve: Curves.easeInOut,
         switchOutCurve: Curves.easeInOut,
         transitionBuilder: (child, animation) {
-          return FadeTransition(opacity: animation, child: child);
+          final slideOffset = Tween<Offset>(
+            begin: const Offset(0.15, 0.0),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutQuint));
+          return SlideTransition(
+            position: slideOffset,
+            child: FadeTransition(opacity: animation, child: child),
+          );
         },
         child: _FeatureCarouselCard(
           key: ValueKey(_currentIndex),

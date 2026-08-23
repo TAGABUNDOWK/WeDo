@@ -129,6 +129,40 @@ class GroupService {
     await batch.commit();
   }
 
+  Future<void> sendInviteMessage({
+    required String groupId,
+    required String senderId,
+    required String senderName,
+    required String sessionId,
+    required String topic,
+    required String hostName,
+  }) async {
+    final content = '$hostName invited you to $topic';
+    final batch = _db.batch();
+
+    batch.set(_messages(groupId).doc(), {
+      'sender_id': senderId,
+      'senderName': senderName,
+      'type': 'invite',
+      'content': content,
+      'activityId': sessionId,
+      'reactions': {},
+      'read_by': [senderId],
+      'created_at': FieldValue.serverTimestamp(),
+      'createdAtLocal': DateTime.now().toIso8601String(),
+      'edited': false,
+    });
+
+    batch.update(_groups.doc(groupId), {
+      'lastMessage': '$hostName invited you to $topic',
+      'lastMessageSenderId': senderId,
+      'lastMessageAt': FieldValue.serverTimestamp(),
+      'lastMessageReadBy': [senderId],
+    });
+
+    await batch.commit();
+  }
+
   Future<void> sendImageMessage({
     required String groupId,
     required String senderId,
