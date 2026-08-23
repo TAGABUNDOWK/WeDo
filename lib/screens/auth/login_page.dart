@@ -91,18 +91,18 @@ class _LoginPageState extends State<LoginPage> {
   }) {
     return InputDecoration(
       labelText: label,
-      labelStyle: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 13),
+      labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 13),
       hintText: hint,
-      hintStyle: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 14),
+      hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 14),
       prefixIcon: prefixIcon,
       suffixIcon: suffixIcon,
       filled: true,
-      fillColor: const Color(0xFF1A0A2E).withOpacity(0.8),
+      fillColor: const Color(0xFF1A0A2E).withValues(alpha: 0.8),
       contentPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 18),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
         borderSide: BorderSide(
-          color: const Color(0xFFFE4EF0).withOpacity(0.3),
+          color: const Color(0xFFFE4EF0).withValues(alpha: 0.3),
           width: 1,
         ),
       ),
@@ -237,7 +237,7 @@ class _LoginPageState extends State<LoginPage> {
                             style: TextStyle(
                               fontFamily: 'Poppins',
                               fontSize: 14,
-                              color: Colors.white.withOpacity(0.7),
+                              color: Colors.white.withValues(alpha: 0.7),
                               height: 1.4,
                             ),
                           ),
@@ -267,8 +267,9 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                             validator: (v) {
                               if (v == null || v.isEmpty) return 'Enter email';
-                              if (!v.contains('@'))
+                              if (!v.contains('@')) {
                                 return 'Enter a valid email';
+                              }
                               return null;
                             },
                           ),
@@ -321,8 +322,9 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                             ),
                             validator: (v) {
-                              if (v == null || v.isEmpty)
+                              if (v == null || v.isEmpty) {
                                 return 'Enter password';
+                              }
                               if (v.length < 6) return 'Password too short';
                               return null;
                             },
@@ -348,7 +350,7 @@ class _LoginPageState extends State<LoginPage> {
                                       activeColor: const Color(0xFFFE4EF0),
                                       checkColor: Colors.white,
                                       side: BorderSide(
-                                        color: Colors.white.withOpacity(0.5),
+                                        color: Colors.white.withValues(alpha: 0.5),
                                       ),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(4),
@@ -360,7 +362,7 @@ class _LoginPageState extends State<LoginPage> {
                                     'Keep me signed in',
                                     style: TextStyle(
                                       fontSize: 13,
-                                      color: Colors.white.withOpacity(0.8),
+                                      color: Colors.white.withValues(alpha: 0.8),
                                     ),
                                   ),
                                 ],
@@ -406,7 +408,7 @@ class _LoginPageState extends State<LoginPage> {
                                   BoxShadow(
                                     color: const Color(
                                       0xFFFE4EF0,
-                                    ).withOpacity(0.4),
+                                    ).withValues(alpha: 0.4),
                                     offset: const Offset(0, 4),
                                     blurRadius: 16,
                                   ),
@@ -444,7 +446,7 @@ class _LoginPageState extends State<LoginPage> {
                                   'New to WeDo? ',
                                   style: TextStyle(
                                     fontSize: 14,
-                                    color: Colors.white.withOpacity(0.8),
+                                    color: Colors.white.withValues(alpha: 0.8),
                                   ),
                                 ),
                                 GestureDetector(

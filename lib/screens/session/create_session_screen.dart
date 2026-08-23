@@ -229,17 +229,17 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
   }
 
   Widget _buildCreatingState() {
-    return Center(
+    return const Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const CircularProgressIndicator(),
-          const SizedBox(height: 20),
+          CircularProgressIndicator(),
+          SizedBox(height: 20),
           Text(
             'Creating PickFight...',
             style: TextStyle(color: Colors.white70, fontSize: 16),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Text(
             'Fetching cards and generating code',
             style: TextStyle(color: Colors.white54, fontSize: 13),

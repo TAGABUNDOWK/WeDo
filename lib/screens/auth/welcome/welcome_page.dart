@@ -17,7 +17,6 @@ class _WelcomePageState extends State<WelcomePage>
   late final Animation<double> _headingOpacity;
   late final Animation<double> _headingSlide;
   late final Animation<double> _descOpacity;
-  late final Animation<double> _descSlide;
   late final Animation<double> _buttonsOpacity;
 
   @override
@@ -44,13 +43,6 @@ class _WelcomePageState extends State<WelcomePage>
     );
 
     _descOpacity = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(
-        parent: _textController,
-        curve: const Interval(0.2, 0.6, curve: Curves.easeOut),
-      ),
-    );
-
-    _descSlide = Tween<double>(begin: 20, end: 0).animate(
       CurvedAnimation(
         parent: _textController,
         curve: const Interval(0.2, 0.6, curve: Curves.easeOut),

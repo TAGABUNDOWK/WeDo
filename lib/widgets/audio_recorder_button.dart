@@ -57,7 +57,7 @@ class _AudioRecorderButtonState extends State<AudioRecorderButton>
         '${dir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
 
     await _recorder.start(
-      RecordConfig(
+      const RecordConfig(
         encoder: AudioEncoder.aacLc,
         bitRate: 128000,
         sampleRate: 44100,

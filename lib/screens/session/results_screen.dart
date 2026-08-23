@@ -62,7 +62,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
   Widget _buildResults(SessionEntity session) {
     final results = session.aggregatedResults ?? {};
     if (results.isEmpty) {
-      return Center(child: Text('No results available', style: TextStyle(color: Colors.white)));
+      return const Center(child: Text('No results available', style: TextStyle(color: Colors.white)));
     }
 
     final cardTally = results['cardTally'] as Map<String, dynamic>? ?? {};
@@ -80,7 +80,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
           const SizedBox(height: 24),
           _buildSectionTitle('Card Tally'),
           const SizedBox(height: 4),
-          Text(
+          const Text(
             'X marks = how many players eliminated this card',
             style: TextStyle(color: Colors.white54, fontSize: 12),
           ),
@@ -90,7 +90,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
             const SizedBox(height: 24),
             _buildSectionTitle('Leaderboard'),
             const SizedBox(height: 4),
-            Text(
+            const Text(
               'Ranked by decision time (fastest first)',
               style: TextStyle(color: Colors.white54, fontSize: 12),
             ),

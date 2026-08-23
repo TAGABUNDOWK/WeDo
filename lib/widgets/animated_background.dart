@@ -115,8 +115,8 @@ class _CircleAnimation {
 
     final baseX = _basePositions[index][0];
     final baseY = _basePositions[index][1];
-    final driftX = 0.20;
-    final driftY = 0.20;
+    const driftX = 0.20;
+    const driftY = 0.20;
 
     final startX = baseX - driftX / 2;
     final endX = baseX + driftX / 2;
@@ -222,7 +222,6 @@ class _StarAnimation {
   late final double _size;
   late final double _rotation;
 
-  static const _totalStars = 8;
   static const _sizeRanges = [
     [22.0, 32.0], // small
     [36.0, 50.0], // medium

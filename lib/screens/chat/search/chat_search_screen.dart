@@ -142,10 +142,10 @@ class _ChatSearchScreenState extends State<ChatSearchScreen> {
                       child: DropdownButtonFormField<String?>(
                         initialValue: _selectedSenderId,
                         hint: const Text('Any user'),
-                        decoration: InputDecoration(
+                        decoration: const InputDecoration(
                           labelText: 'From',
-                          border: const OutlineInputBorder(),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           isDense: true,
                         ),
                         items: [

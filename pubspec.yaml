@@ -40,10 +40,11 @@ dependencies:
   firebase_storage: ^12.3.0
   image_picker: ^1.1.2
   record: ^7.1.1
-  just_audio: ^0.9.42
+  just_audio: ^0.10.6
   flutter_webrtc: ^1.6.0
   flutter_dotenv: ^5.2.0
   path_provider: ^2.1.0
+  crypto: ^3.0.3
 
 dev_dependencies:
   flutter_test:
@@ -117,3 +118,12 @@ flutter:
           weight: 500
         - asset: fonts/Poppins-SemiBold.ttf
           weight: 600
+    - family: PlusJakartaSans
+      fonts:
+        - asset: fonts/PlusJakartaSans-Regular.ttf
+        - asset: fonts/PlusJakartaSans-Medium.ttf
+          weight: 500
+        - asset: fonts/PlusJakartaSans-SemiBold.ttf
+          weight: 600
+        - asset: fonts/PlusJakartaSans-Bold.ttf
+          weight: 700

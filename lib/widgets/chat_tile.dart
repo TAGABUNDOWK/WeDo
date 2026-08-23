@@ -57,7 +57,7 @@ class ChatTile extends StatelessWidget {
                     ),
                     child: Icon(
                       isGroup ? Icons.group : Icons.person,
-                      color: Color(0xFFFE4EF0),
+                      color: const Color(0xFFFE4EF0),
                     ),
                   ),
                   if (showUnread)

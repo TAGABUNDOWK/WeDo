@@ -252,10 +252,74 @@ class GroupService {
     await batch.commit();
   }
 
+  Future<void> sendEventMessage({
+    required String groupId,
+    required String senderId,
+    required String senderName,
+    required String eventId,
+    required String title,
+  }) async {
+    final batch = _db.batch();
+
+    batch.set(_messages(groupId).doc(), {
+      'sender_id': senderId,
+      'senderName': senderName,
+      'type': 'event',
+      'content': '📅 $title',
+      'refId': eventId,
+      'reactions': {},
+      'read_by': [senderId],
+      'created_at': FieldValue.serverTimestamp(),
+      'createdAtLocal': DateTime.now().toIso8601String(),
+      'edited': false,
+    });
+
+    batch.update(_groups.doc(groupId), {
+      'lastMessage': '📅 $title',
+      'lastMessageSenderId': senderId,
+      'lastMessageAt': FieldValue.serverTimestamp(),
+      'lastMessageReadBy': [senderId],
+    });
+
+    await batch.commit();
+  }
+
   String _formatDuration(int totalSeconds) {
     final minutes = totalSeconds ~/ 60;
     final seconds = totalSeconds % 60;
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> sendPollMessage({
+    required String groupId,
+    required String senderId,
+    required String senderName,
+    required String pollId,
+    required String question,
+  }) async {
+    final batch = _db.batch();
+
+    batch.set(_messages(groupId).doc(), {
+      'sender_id': senderId,
+      'senderName': senderName,
+      'type': 'poll',
+      'content': '📊 $question',
+      'refId': pollId,
+      'reactions': {},
+      'read_by': [senderId],
+      'created_at': FieldValue.serverTimestamp(),
+      'createdAtLocal': DateTime.now().toIso8601String(),
+      'edited': false,
+    });
+
+    batch.update(_groups.doc(groupId), {
+      'lastMessage': '📊 $question',
+      'lastMessageSenderId': senderId,
+      'lastMessageAt': FieldValue.serverTimestamp(),
+      'lastMessageReadBy': [senderId],
+    });
+
+    await batch.commit();
   }
 
   Future<void> sendSystemMessage({
@@ -436,5 +500,19 @@ class GroupService {
 
   Future<void> deleteGroup(String groupId) async {
     await _groups.doc(groupId).delete();
+  }
+
+  Future<void> toggleMute({required String groupId, required String uid}) async {
+    final doc = await _groups.doc(groupId).get();
+    final mutedBy = (doc.data()?['mutedBy'] as List?)?.cast<String>() ?? [];
+    if (mutedBy.contains(uid)) {
+      await _groups.doc(groupId).update({
+        'mutedBy': FieldValue.arrayRemove([uid]),
+      });
+    } else {
+      await _groups.doc(groupId).update({
+        'mutedBy': FieldValue.arrayUnion([uid]),
+      });
+    }
   }
 }

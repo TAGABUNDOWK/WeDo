@@ -289,7 +289,7 @@ class _InvitePickerScreenState extends State<InvitePickerScreen> {
                       ),
                       Text(
                         '${group.memberCount} members',
-                        style: TextStyle(color: Colors.white54, fontSize: 12),
+                        style: const TextStyle(color: Colors.white54, fontSize: 12),
                       ),
                     ],
                   ),
@@ -297,7 +297,7 @@ class _InvitePickerScreenState extends State<InvitePickerScreen> {
                 if (isSelected)
                   const Icon(Icons.check_circle, color: Color(0xFFFE4EF0), size: 22)
                 else
-                  Icon(Icons.radio_button_unchecked, color: Colors.white38, size: 22),
+                  const Icon(Icons.radio_button_unchecked, color: Colors.white38, size: 22),
               ],
             ),
           ),
@@ -444,7 +444,7 @@ class _InvitePickerScreenState extends State<InvitePickerScreen> {
                 if (isSelected)
                   const Icon(Icons.check_circle, color: Color(0xFFFE4EF0), size: 22)
                 else
-                  Icon(Icons.radio_button_unchecked, color: Colors.white38, size: 22),
+                  const Icon(Icons.radio_button_unchecked, color: Colors.white38, size: 22),
               ],
             ),
           ),

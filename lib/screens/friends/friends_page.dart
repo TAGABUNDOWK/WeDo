@@ -21,7 +21,6 @@ class _FriendsPageState extends State<FriendsPage> {
   final _auth = FirebaseAuth.instance;
   final _friendService = FriendService();
   final _userService = UserService();
-  final _bg = const Color(0xFF190831);
 
   String get _uid => _auth.currentUser!.uid;
 

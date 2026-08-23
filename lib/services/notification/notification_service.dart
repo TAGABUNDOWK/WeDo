@@ -88,4 +88,29 @@ class NotificationService {
     }
     await batch.commit();
   }
+
+  Future<void> createPollVoteNotification({
+    required String creatorId,
+    required String voterId,
+    required String voterName,
+    required String pollId,
+    required String question,
+    required bool isSecret,
+  }) async {
+    if (voterId == creatorId) return;
+
+    final notification = NotificationEntity(
+      notificationId: '',
+      type: NotificationType.pollVote,
+      title: 'New vote on your poll',
+      message: isSecret
+          ? 'Someone voted on: $question'
+          : '$voterName voted on: $question',
+      senderId: voterId,
+      relatedId: pollId,
+      createdAt: DateTime.now(),
+    );
+
+    await _userNotifications(creatorId).add(notification.toMap());
+  }
 }

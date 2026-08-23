@@ -109,3 +109,268 @@ exports.onCallCreated = functions.firestore
 
     console.log(`Call notification sent to ${tokens.length} devices, ${results.successCount} succeeded`);
   });
+
+// ──────────────────── Poll Vote Aggregation ────────────────────
+
+async function aggregatePollVotes(pollRef) {
+  const pollSnap = await pollRef.get();
+  if (!pollSnap.exists) return;
+  const pollData = pollSnap.data();
+
+  const votesSnap = await pollRef.collection('votes').get();
+  const results = {};
+  (pollData.options || []).forEach((opt) => { results[opt] = 0; });
+  let totalVoters = 0;
+
+  votesSnap.docs.forEach((voteDoc) => {
+    const voteData = voteDoc.data();
+    const option = voteData.option;
+    if (option && results.hasOwnProperty(option)) {
+      results[option]++;
+      totalVoters++;
+    }
+  });
+
+  results.totalVoters = totalVoters;
+
+  await pollRef.update({ results });
+  console.log(`Aggregated ${totalVoters} votes for poll ${pollRef.id}`);
+}
+
+exports.onGroupPollVoteCreated = functions.firestore
+  .document('group_chats/{groupId}/polls/{pollId}/votes/{voteId}')
+  .onWrite(async (change, context) => {
+    const pollRef = db
+      .collection('group_chats').doc(context.params.groupId)
+      .collection('polls').doc(context.params.pollId);
+    await aggregatePollVotes(pollRef);
+  });
+
+exports.onDirectPollVoteCreated = functions.firestore
+  .document('direct_chats/{chatId}/polls/{pollId}/votes/{voteId}')
+  .onWrite(async (change, context) => {
+    const pollRef = db
+      .collection('direct_chats').doc(context.params.chatId)
+      .collection('polls').doc(context.params.pollId);
+    await aggregatePollVotes(pollRef);
+  });
+
+// ──────────────────── Event & Poll Notifications ────────────────────
+
+async function getChatMemberTokens(members, excludeUid) {
+  const tokens = [];
+  for (const uid of members) {
+    if (uid === excludeUid) continue;
+    const userDoc = await db.collection('users').doc(uid).get();
+    const token = userDoc.data()?.fcm_token;
+    if (token) tokens.push(token);
+  }
+  return tokens;
+}
+
+exports.onGroupEventCreated = functions.firestore
+  .document('group_chats/{groupId}/events/{eventId}')
+  .onCreate(async (snap, context) => {
+    const eventData = snap.data();
+    if (!eventData) return;
+
+    const groupDoc = await db.collection('group_chats').doc(context.params.groupId).get();
+    const members = groupDoc.data()?.members || [];
+    const tokens = await getChatMemberTokens(members, eventData.createdBy);
+    if (tokens.length === 0) return;
+
+    const creatorDoc = await db.collection('users').doc(eventData.createdBy).get();
+    const creatorName = creatorDoc.data()?.display_name || creatorDoc.data()?.displayName || 'Someone';
+
+    const { getMessaging } = require('firebase-admin/messaging');
+    const messaging = getMessaging();
+
+    await messaging.sendEachForMulticast({
+      tokens,
+      data: { eventId: context.params.eventId, groupId: context.params.groupId },
+      notification: {
+        title: 'New Event',
+        body: `${creatorName} created "${eventData.title}"`,
+      },
+      android: { priority: 'normal' },
+    });
+  });
+
+exports.onDirectEventCreated = functions.firestore
+  .document('direct_chats/{chatId}/events/{eventId}')
+  .onCreate(async (snap, context) => {
+    const eventData = snap.data();
+    if (!eventData) return;
+
+    const chatDoc = await db.collection('direct_chats').doc(context.params.chatId).get();
+    const members = chatDoc.data()?.members || [];
+    const tokens = await getChatMemberTokens(members, eventData.createdBy);
+    if (tokens.length === 0) return;
+
+    const creatorDoc = await db.collection('users').doc(eventData.createdBy).get();
+    const creatorName = creatorDoc.data()?.display_name || creatorDoc.data()?.displayName || 'Someone';
+
+    const { getMessaging } = require('firebase-admin/messaging');
+    const messaging = getMessaging();
+
+    await messaging.sendEachForMulticast({
+      tokens,
+      data: { eventId: context.params.eventId, chatId: context.params.chatId },
+      notification: {
+        title: 'New Event',
+        body: `${creatorName} created "${eventData.title}"`,
+      },
+      android: { priority: 'normal' },
+    });
+  });
+
+exports.onGroupPollCreated = functions.firestore
+  .document('group_chats/{groupId}/polls/{pollId}')
+  .onCreate(async (snap, context) => {
+    const pollData = snap.data();
+    if (!pollData) return;
+
+    const groupDoc = await db.collection('group_chats').doc(context.params.groupId).get();
+    const members = groupDoc.data()?.members || [];
+    const tokens = await getChatMemberTokens(members, pollData.createdBy);
+    if (tokens.length === 0) return;
+
+    const creatorDoc = await db.collection('users').doc(pollData.createdBy).get();
+    const creatorName = pollData.anonymous
+      ? 'Someone'
+      : (creatorDoc.data()?.display_name || creatorDoc.data()?.displayName || 'Someone');
+
+    const { getMessaging } = require('firebase-admin/messaging');
+    const messaging = getMessaging();
+
+    await messaging.sendEachForMulticast({
+      tokens,
+      data: { pollId: context.params.pollId, groupId: context.params.groupId },
+      notification: {
+        title: pollData.anonymous ? 'New Secret Vote' : 'New Poll',
+        body: `${creatorName} asks "${pollData.question}"`,
+      },
+      android: { priority: 'normal' },
+    });
+  });
+
+exports.onDirectPollCreated = functions.firestore
+  .document('direct_chats/{chatId}/polls/{pollId}')
+  .onCreate(async (snap, context) => {
+    const pollData = snap.data();
+    if (!pollData) return;
+
+    const chatDoc = await db.collection('direct_chats').doc(context.params.chatId).get();
+    const members = chatDoc.data()?.members || [];
+    const tokens = await getChatMemberTokens(members, pollData.createdBy);
+    if (tokens.length === 0) return;
+
+    const creatorDoc = await db.collection('users').doc(pollData.createdBy).get();
+    const creatorName = pollData.anonymous
+      ? 'Someone'
+      : (creatorDoc.data()?.display_name || creatorDoc.data()?.displayName || 'Someone');
+
+    const { getMessaging } = require('firebase-admin/messaging');
+    const messaging = getMessaging();
+
+    await messaging.sendEachForMulticast({
+      tokens,
+      data: { pollId: context.params.pollId, chatId: context.params.chatId },
+      notification: {
+        title: pollData.anonymous ? 'New Secret Vote' : 'New Poll',
+        body: `${creatorName} asks "${pollData.question}"`,
+      },
+      android: { priority: 'normal' },
+    });
+  });
+
+// ──────────────────── Event Reminder (runs every 5 minutes) ────────────────────
+
+async function sendEventReminders() {
+  const now = new Date();
+  const in15Min = new Date(now.getTime() + 15 * 60 * 1000);
+  const { getMessaging } = require('firebase-admin/messaging');
+  const messaging = getMessaging();
+
+  // Check group chats
+  const groupChatsSnap = await db.collection('group_chats').get();
+  for (const chatDoc of groupChatsSnap.docs) {
+    const eventsSnap = await chatDoc.ref.collection('events')
+      .where('date', '>', now)
+      .where('date', '<=', in15Min)
+      .where('reminderSent', '!=', true)
+      .get();
+
+    for (const eventDoc of eventsSnap.docs) {
+      const eventData = eventDoc.data();
+      await sendReminderForEvent(eventDoc.ref, eventData, chatDoc.id, 'group', messaging);
+    }
+  }
+
+  // Check direct chats
+  const directChatsSnap = await db.collection('direct_chats').get();
+  for (const chatDoc of directChatsSnap.docs) {
+    const eventsSnap = await chatDoc.ref.collection('events')
+      .where('date', '>', now)
+      .where('date', '<=', in15Min)
+      .where('reminderSent', '!=', true)
+      .get();
+
+    for (const eventDoc of eventsSnap.docs) {
+      const eventData = eventDoc.data();
+      await sendReminderForEvent(eventDoc.ref, eventData, chatDoc.id, 'direct', messaging);
+    }
+  }
+}
+
+async function sendReminderForEvent(eventRef, eventData, chatId, chatType, messaging) {
+  const rsvps = eventData.rsvps || {};
+  const yesMaybeUids = Object.entries(rsvps)
+    .filter(([_, response]) => response === 'yes' || response === 'maybe')
+    .map(([uid]) => uid);
+
+  if (yesMaybeUids.length === 0) {
+    await eventRef.update({ reminderSent: true });
+    return;
+  }
+
+  const tokens = [];
+  for (const uid of yesMaybeUids) {
+    const userDoc = await db.collection('users').doc(uid).get();
+    const token = userDoc.data()?.fcm_token;
+    if (token) tokens.push(token);
+  }
+
+  if (tokens.length === 0) {
+    await eventRef.update({ reminderSent: true });
+    return;
+  }
+
+  const eventDate = eventData.date?.toDate?.() || new Date(eventData.date);
+  const diffMin = Math.max(0, Math.round((eventDate - new Date()) / 60000));
+  const timeText = diffMin <= 1 ? 'starting now' : `in ${diffMin} minutes`;
+
+  const chatPath = chatType === 'group' ? `group_chats/${chatId}` : `direct_chats/${chatId}`;
+
+  await messaging.sendEachForMulticast({
+    tokens,
+    data: {
+      eventId: eventRef.id,
+      [chatType === 'group' ? 'groupId' : 'chatId']: chatId,
+    },
+    notification: {
+      title: 'Event Reminder',
+      body: `"${eventData.title}" starts ${timeText}`,
+    },
+    android: { priority: 'high' },
+  });
+
+  await eventRef.update({ reminderSent: true });
+  console.log(`Reminder sent for event ${eventRef.id} to ${tokens.length} devices`);
+}
+
+exports.scheduledEventReminders = functions.pubsub
+  .schedule('every 5 minutes')
+  .onRun(async (context) => {
+    await sendEventReminders();
+  });

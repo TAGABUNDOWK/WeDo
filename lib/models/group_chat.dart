@@ -12,6 +12,7 @@ class GroupChat {
   final DateTime? lastMessageAt;
   final List<String> lastMessageReadBy;
   final DateTime createdAt;
+  final List<String> mutedBy;
 
   const GroupChat({
     required this.id,
@@ -25,6 +26,7 @@ class GroupChat {
     this.lastMessageAt,
     this.lastMessageReadBy = const [],
     required this.createdAt,
+    this.mutedBy = const [],
   });
 
   factory GroupChat.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -41,6 +43,7 @@ class GroupChat {
       lastMessageAt: _parseTimestamp(data['lastMessageAt']),
       lastMessageReadBy: (data['lastMessageReadBy'] as List?)?.cast<String>() ?? const [],
       createdAt: _parseTimestamp(data['createdAt']),
+      mutedBy: (data['mutedBy'] as List?)?.cast<String>() ?? const [],
     );
   }
 
@@ -58,6 +61,7 @@ class GroupChat {
           : FieldValue.serverTimestamp(),
       'lastMessageReadBy': lastMessageReadBy,
       'createdAt': Timestamp.fromDate(createdAt),
+      'mutedBy': mutedBy,
     };
   }
 

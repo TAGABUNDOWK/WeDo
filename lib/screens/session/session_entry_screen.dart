@@ -135,14 +135,14 @@ class _SessionEntryScreenState extends State<SessionEntryScreen> {
         showStars: false,
         child: CustomScrollView(
           slivers: [
-            SliverAppBar(
+            const SliverAppBar(
               backgroundColor: Colors.transparent,
               elevation: 0,
               pinned: true,
               foregroundColor: Colors.white,
               expandedHeight: 100,
               flexibleSpace: FlexibleSpaceBar(
-                title: const Text(
+                title: Text(
                   'PickFight',
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
@@ -152,7 +152,7 @@ class _SessionEntryScreenState extends State<SessionEntryScreen> {
                   ),
                 ),
                 centerTitle: false,
-                titlePadding: const EdgeInsets.only(left: 16, bottom: 12),
+                titlePadding: EdgeInsets.only(left: 16, bottom: 12),
               ),
             ),
             SliverPadding(

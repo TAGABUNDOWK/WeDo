@@ -165,7 +165,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
 
   @override
   Widget build(BuildContext context) {
-    final bg = const Color(0xFFE7ECEF);
+    const bg = Color(0xFFE7ECEF);
     return Scaffold(
       backgroundColor: bg,
       body: SafeArea(
@@ -193,7 +193,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 8),
-                Text(
+                const Text(
                   'We sent a 6-digit code to',
                   style: TextStyle(color: Colors.black54),
                 ),
