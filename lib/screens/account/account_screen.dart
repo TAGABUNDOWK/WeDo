@@ -133,6 +133,10 @@ class _AccountScreenState extends State<AccountScreen> {
                           _buildProfileHeader(),
                           const SizedBox(height: 20),
                           _buildWeDoSlider(),
+                          const SizedBox(height: 16),
+                          _buildTopDecisionsCard(context),
+                          const SizedBox(height: 14),
+                          _buildAchievementsCard(context),
                         ],
                       ),
                     ),
@@ -339,6 +343,296 @@ class _AccountScreenState extends State<AccountScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  double _rs(BuildContext context) {
+    final scale = MediaQuery.of(context).size.width / 390;
+    return scale.clamp(0.85, 1.4);
+  }
+
+  Widget _buildGlassCard({
+    required BuildContext context,
+    required String title,
+    required Widget child,
+  }) {
+    final s = _rs(context);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(16 * s),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.15),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(left: 15 * s),
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 16 * s,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFFFE4EF0),
+                          fontFamily: 'Poppins',
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 32 * s,
+                    height: 32 * s,
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      iconSize: 18 * s,
+                      onPressed: () {},
+                      icon: Image.asset(
+                        'assets/icons/right-up.png',
+                        width: 18 * s,
+                        height: 18 * s,
+                        errorBuilder: (context, error, stackTrace) =>
+                            Icon(Icons.north_east,
+                                color: Colors.white70, size: 18 * s),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 12 * s),
+              child,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRankRow({
+    required BuildContext context,
+    required String iconAsset,
+    required Widget label,
+  }) {
+    final s = _rs(context);
+    return Padding(
+      padding: EdgeInsets.only(bottom: 10 * s),
+      child: Row(
+        children: [
+          Image.asset(
+            iconAsset,
+            width: 26 * s,
+            height: 26 * s,
+            errorBuilder: (context, error, stackTrace) => Icon(
+              Icons.emoji_events,
+              color: const Color(0xFFFE4EF0),
+              size: 26 * s,
+            ),
+          ),
+          SizedBox(width: 10 * s),
+          Expanded(child: label),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopDecisionsCard(BuildContext context) {
+    final s = _rs(context);
+    return _buildGlassCard(
+      context: context,
+      title: 'Top Decisions',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: EdgeInsets.only(left: 40 * s),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildRankRow(
+                  context: context,
+                  iconAsset: 'assets/icons/Trophy-1.png',
+                  label: Text(
+                    'Choose dinner spot fastest',
+                    style: TextStyle(
+                      fontSize: 13.5 * s,
+                      color: Colors.white,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                ),
+                _buildRankRow(
+                  context: context,
+                  iconAsset: 'assets/icons/Trophy-2.png',
+                  label: Text(
+                    'Pick weekend movie',
+                    style: TextStyle(
+                      fontSize: 13.5 * s,
+                      color: Colors.white,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                ),
+                _buildRankRow(
+                  context: context,
+                  iconAsset: 'assets/icons/Trophy-3.png',
+                  label: Text(
+                    'Plan Friday hangout',
+                    style: TextStyle(
+                      fontSize: 13.5 * s,
+                      color: Colors.white,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.only(left: 15 * s, top: 6 * s),
+            child: Text.rich(
+              TextSpan(
+                text: '0',
+                style: TextStyle(
+                  fontSize: 17 * s,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  fontFamily: 'Poppins',
+                ),
+                children: [
+                  TextSpan(
+                    text: '  Daily Decisions',
+                    style: TextStyle(
+                      fontSize: 14.5 * s,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFFFE4EF0),
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAchievementsCard(BuildContext context) {
+    final s = _rs(context);
+    return _buildGlassCard(
+      context: context,
+      title: 'Achievements',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: EdgeInsets.only(left: 40 * s),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildRankRow(
+                  context: context,
+                  iconAsset: 'assets/icons/Achievement-1.png',
+                  label:
+                      _achievementLabel(context, 'Decide ', '100', ' in a day'),
+                ),
+                _buildRankRow(
+                  context: context,
+                  iconAsset: 'assets/icons/Achievement-2.png',
+                  label: _achievementLabel(
+                      context, 'Reach a ', '7', '-day streak'),
+                ),
+                _buildRankRow(
+                  context: context,
+                  iconAsset: 'assets/icons/Achievement-3.png',
+                  label: _achievementLabel(
+                      context, 'Make ', '50', ' group decisions'),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.only(left: 15 * s, top: 6 * s),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '+12 WeDo Exp',
+                  style: TextStyle(
+                    fontSize: 12.5 * s,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFFFE4EF0),
+                    fontFamily: 'Poppins',
+                  ),
+                ),
+                SizedBox(height: 6 * s),
+                _buildProgressBar(context, 0.45),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _achievementLabel(
+      BuildContext context, String before, String value, String after) {
+    final s = _rs(context);
+    return Text.rich(
+      TextSpan(
+        text: before,
+        style: TextStyle(
+          fontSize: 13.5 * s,
+          color: Colors.white,
+          fontFamily: 'Poppins',
+        ),
+        children: [
+          TextSpan(
+            text: value,
+            style: TextStyle(
+              fontSize: 13.5 * s,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFFFE4EF0),
+              fontFamily: 'Poppins',
+            ),
+          ),
+          TextSpan(text: after),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProgressBar(BuildContext context, double fraction) {
+    final s = _rs(context);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        width: 280 * s,
+        height: 20 * s,
+        color: Colors.white.withValues(alpha: 0.12),
+        alignment: Alignment.centerLeft,
+        child: FractionallySizedBox(
+          widthFactor: fraction.clamp(0.0, 1.0),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              color: const Color(0xFFFE4EF0),
+            ),
+          ),
+        ),
       ),
     );
   }
