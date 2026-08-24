@@ -1,12 +1,11 @@
-import 'dart:io';
 import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/auth/user_service.dart';
 import '../../services/friends/friend_service.dart';
+import '../../services/profile/profile_service.dart';
 import '../../models/user_entity.dart';
 import '../../widgets/animated_background.dart';
 
@@ -21,6 +20,7 @@ class _AccountScreenState extends State<AccountScreen> {
   final _auth = FirebaseAuth.instance;
   final _userService = UserService();
   final _friendService = FriendService();
+  final _profileService = ProfileService();
   final _imagePicker = ImagePicker();
   UserEntity? _user;
   bool _loading = true;
@@ -28,6 +28,10 @@ class _AccountScreenState extends State<AccountScreen> {
   bool _wedoDragging = false;
 
   String get _uid => _auth.currentUser?.uid ?? '';
+
+  // Mock gamified status — TODO: replace with UserEntity.wedoExp when available
+  int get _mockExp => 12;
+  int get _mockLevel => (_mockExp ~/ 10) + 1;
 
   @override
   void initState() {
@@ -51,33 +55,58 @@ class _AccountScreenState extends State<AccountScreen> {
     }
   }
 
-  Future<void> _pickAndUploadPhoto() async {
-    final picked = await _imagePicker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 80,
+  Future<void> _showPhotoSourceSheet() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: const Color(0xFF2A1450),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (c) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: Colors.white70),
+              title: const Text('Gallery', style: TextStyle(color: Colors.white, fontFamily: 'Poppins')),
+              onTap: () => Navigator.pop(c, ImageSource.gallery),
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt, color: Colors.white70),
+              title: const Text('Camera', style: TextStyle(color: Colors.white, fontFamily: 'Poppins')),
+              onTap: () => Navigator.pop(c, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.close, color: Colors.white54),
+              title: const Text('Cancel', style: TextStyle(color: Colors.white54, fontFamily: 'Poppins')),
+              onTap: () => Navigator.pop(c),
+            ),
+          ],
+        ),
+      ),
     );
+    if (source != null) await _pickAndUploadPhoto(source);
+  }
+
+  Future<void> _pickAndUploadPhoto([ImageSource source = ImageSource.gallery]) async {
+    final picked = await _imagePicker.pickImage(source: source, imageQuality: 80);
     if (picked == null) return;
 
     setState(() => _loading = true);
-
     try {
-      final file = File(picked.path);
-      final ref = FirebaseStorage.instance.ref('profile_photos/$_uid.jpg');
-      await ref.putFile(file);
-      final downloadUrl = await ref.getDownloadURL();
-
-      await FirebaseFirestore.instance.collection('users').doc(_uid).update({
-        'photo_url': downloadUrl,
-      });
-
+      await _profileService.uploadAvatar(uid: _uid, file: picked);
       await _loadUser();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Avatar updated — will be checked for policy violation')),
+        );
+      }
     } catch (e) {
       if (mounted) {
-        setState(() => _loading = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to update photo: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update photo: $e')));
       }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -150,43 +179,95 @@ class _AccountScreenState extends State<AccountScreen> {
   Widget _buildTopBar() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         GestureDetector(
           onTap: () {},
-          child: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
-            ),
+          behavior: HitTestBehavior.opaque,
+          child: SizedBox(
+            width: 36,
+            height: 36,
             child: Center(
               child: Image.asset(
                 'assets/icons/create.png',
-                width: 22,
-                height: 22,
+                width: 26,
+                height: 26,
+                fit: BoxFit.contain,
                 errorBuilder: (context, error, stackTrace) =>
-                    const Icon(Icons.add, color: Colors.white70, size: 22),
+                    const Icon(Icons.add, color: Colors.white70, size: 26),
               ),
+            ),
+          ),
+        ),
+        Expanded(
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Image.asset(
+                  'assets/icons/energy.png',
+                  width: 25,
+                  height: 25,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const Icon(Icons.bolt, color: Color(0xFFFE4EF0), size: 25),
+                ),
+                const SizedBox(width: 6),
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      const TextSpan(
+                        text: 'Lv. ',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white70,
+                          fontFamily: 'Poppins',
+                        ),
+                      ),
+                      TextSpan(
+                        text: '$_mockLevel',
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFFFE4EF0),
+                          fontFamily: 'Poppins',
+                        ),
+                      ),
+                      TextSpan(
+                        text: ' · $_mockExp EXP',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontFamily: 'Poppins',
+                        ),
+                      ),
+                    ],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
           ),
         ),
         GestureDetector(
           onTap: () {},
-          child: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
-            ),
+          behavior: HitTestBehavior.opaque,
+          child: SizedBox(
+            width: 36,
+            height: 36,
             child: Center(
               child: Image.asset(
                 'assets/icons/menu.png',
-                width: 22,
-                height: 22,
+                width: 30,
+                height: 30,
+                fit: BoxFit.contain,
                 errorBuilder: (context, error, stackTrace) =>
-                    const Icon(Icons.menu, color: Colors.white70, size: 22),
+                    const Icon(Icons.menu, color: Colors.white70, size: 30),
               ),
             ),
           ),
@@ -204,7 +285,7 @@ class _AccountScreenState extends State<AccountScreen> {
         Padding(
           padding: const EdgeInsets.only(top: 8),
           child: GestureDetector(
-            onTap: _pickAndUploadPhoto,
+            onTap: _showPhotoSourceSheet,
             child: Container(
               width: 120,
               height: 120,
