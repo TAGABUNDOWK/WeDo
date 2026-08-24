@@ -46,6 +46,7 @@ class SessionEntity {
   final List<String> participantUids;
   final DateTime createdAt;
   final DateTime expiresAt;
+  final DateTime? deleteAfter;
 
   const SessionEntity({
     required this.id,
@@ -60,6 +61,7 @@ class SessionEntity {
     this.participantUids = const [],
     required this.createdAt,
     required this.expiresAt,
+    this.deleteAfter,
   });
 
   factory SessionEntity.fromMap(String id, Map<String, dynamic> map) {
@@ -79,6 +81,7 @@ class SessionEntity {
       participantUids: (map['participantUids'] as List?)?.cast<String>() ?? const [],
       createdAt: _parseTimestamp(map['createdAt']),
       expiresAt: _parseTimestamp(map['expiresAt']),
+      deleteAfter: map['deleteAfter'] != null ? _parseTimestamp(map['deleteAfter']) : null,
     );
   }
 
@@ -95,6 +98,7 @@ class SessionEntity {
       'participantUids': participantUids,
       'createdAt': Timestamp.fromDate(createdAt),
       'expiresAt': Timestamp.fromDate(expiresAt),
+      if (deleteAfter != null) 'deleteAfter': Timestamp.fromDate(deleteAfter!),
     };
   }
 
@@ -111,6 +115,7 @@ class SessionEntity {
     List<String>? participantUids,
     DateTime? createdAt,
     DateTime? expiresAt,
+    DateTime? deleteAfter,
     bool clearSpeedShieldWinnerId = false,
     bool clearAggregatedResults = false,
     bool clearInvitedUserIds = false,
@@ -133,6 +138,7 @@ class SessionEntity {
           clearParticipantUids ? const [] : (participantUids ?? this.participantUids),
       createdAt: createdAt ?? this.createdAt,
       expiresAt: expiresAt ?? this.expiresAt,
+      deleteAfter: deleteAfter ?? this.deleteAfter,
     );
   }
 
@@ -151,7 +157,8 @@ class SessionEntity {
         'speedShieldWinnerId: $speedShieldWinnerId, '
         'aggregatedResults: $aggregatedResults, '
         'invitedUserIds: $invitedUserIds, '
-        'participantUids: $participantUids)';
+        'participantUids: $participantUids, '
+        'deleteAfter: $deleteAfter)';
   }
 
   @override
