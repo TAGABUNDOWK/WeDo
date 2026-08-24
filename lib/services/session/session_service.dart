@@ -80,6 +80,7 @@ class SessionService {
       final code = await _generateUniqueCode();
       final now = DateTime.now();
       final expiresAt = now.add(const Duration(hours: 24));
+      final deleteAfter = now.add(const Duration(days: 30));
 
       final sessionData = {
         'sessionId': code,
@@ -89,6 +90,7 @@ class SessionService {
         'cards': cards,
         'createdAt': Timestamp.fromDate(now),
         'expiresAt': Timestamp.fromDate(expiresAt),
+        'deleteAfter': Timestamp.fromDate(deleteAfter),
       };
 
       await _sessions.doc(code).set(sessionData);

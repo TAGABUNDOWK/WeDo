@@ -23,13 +23,13 @@ exports.cleanupUserData = functions.auth.user().onDelete((user) =>
   cleanupUserDataByUid(user.uid)
 );
 
-// ──────────────────── Session Cleanup (runs every 6 hours) ────────────────────
+// ──────────────────── Session Cleanup (runs every 2 days) ────────────────────
 
 async function cleanupExpiredSessions() {
   const now = new Date();
   const sessionsRef = db.collection('sessions');
   const expiredSnap = await sessionsRef
-    .where('expiresAt', '<=', now)
+    .where('deleteAfter', '<=', now)
     .limit(100)
     .get();
 
@@ -41,7 +41,7 @@ async function cleanupExpiredSessions() {
     // Delete all participants subcollection docs
     const participantsSnap = await sessionDoc.ref.collection('participants').get();
     participantsSnap.docs.forEach((pDoc) => batch.delete(pDoc.ref));
-    // Delete the session document itself
+    // Delete the session document itself (safety net — TTL should also handle this)
     batch.delete(sessionDoc.ref);
   }
 
@@ -50,7 +50,8 @@ async function cleanupExpiredSessions() {
 }
 
 exports.scheduledSessionCleanup = functions.pubsub
-  .schedule('every 6 hours')
+  .schedule('0 0 */2 * *')
+  .timeZone('Asia/Manila')
   .onRun(async (context) => {
     await cleanupExpiredSessions();
   });
