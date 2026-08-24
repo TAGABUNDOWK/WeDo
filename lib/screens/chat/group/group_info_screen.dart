@@ -8,6 +8,7 @@ import '../../../services/friends/friend_service.dart';
 import '../../../services/direct/direct_service.dart';
 import '../image_viewer_screen.dart';
 import '../../../utils/constants.dart';
+import '../../../widgets/invite_card.dart';
 
 const _fontFamily = 'PlusJakartaSans';
 
@@ -452,57 +453,14 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
   }
 
   void _showInviteLink() {
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF211635),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: AppColors.glassBorder, width: 0.5),
-        ),
-        title: const Text(
-          'Invite to Group',
-          style: TextStyle(
-            fontFamily: _fontFamily,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Share this Group ID with friends to invite them:',
-              style: TextStyle(fontFamily: _fontFamily, color: AppColors.textSecondary, fontSize: 13),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.midnightBg,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.glassBorder),
-              ),
-              child: Text(
-                widget.groupId,
-                style: const TextStyle(
-                  fontFamily: _fontFamily,
-                  color: AppColors.lavenderAccent,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close', style: TextStyle(fontFamily: _fontFamily, color: AppColors.textSecondary)),
-          ),
-        ],
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => InviteCardBottomSheet(
+        groupId: widget.groupId,
+        groupName: _group?.name ?? 'Group',
+        members: _members,
       ),
     );
   }

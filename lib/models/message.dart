@@ -70,6 +70,7 @@ class ChatMessage {
   final Map<String, dynamic> reactions;
   final bool edited;
   final DateTime createdAt;
+  final Map<String, dynamic>? groupInviteData;
 
   const ChatMessage({
     required this.id,
@@ -88,6 +89,7 @@ class ChatMessage {
     required this.reactions,
     required this.edited,
     required this.createdAt,
+    this.groupInviteData,
   });
 
   factory ChatMessage.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -122,6 +124,9 @@ class ChatMessage {
     final edited = data['edited'] as bool? ?? false;
     final createdAt = _parseTimestamp(
         data['createdAt'] ?? data['created_at']);
+    final groupInviteData = data['groupInviteData'] != null
+        ? Map<String, dynamic>.from(data['groupInviteData'] as Map)
+        : null;
 
     return ChatMessage(
       id: doc.id,
@@ -140,6 +145,7 @@ class ChatMessage {
       reactions: reactions,
       edited: edited,
       createdAt: createdAt,
+      groupInviteData: groupInviteData,
     );
   }
 
@@ -160,6 +166,7 @@ class ChatMessage {
       'reactions': reactions,
       'edited': edited,
       'createdAt': Timestamp.fromDate(createdAt),
+      if (groupInviteData != null) 'groupInviteData': groupInviteData,
     };
   }
 
