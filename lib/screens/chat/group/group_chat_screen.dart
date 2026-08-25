@@ -4,12 +4,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../models/call.dart';
 import '../../../models/event.dart';
+import '../../../models/chat_theme.dart';
 import '../../../models/message.dart';
 import '../../../models/poll.dart';
 import '../../../services/group/group_service.dart';
 import '../../../services/event/event_service.dart';
 import '../../../services/poll/poll_service.dart';
 import '../../../services/call/call_service.dart';
+import '../../../services/theme/chat_theme_resolver.dart';
 import '../../../utils/time_format.dart';
 import '../../../widgets/message_bubble.dart';
 import '../../../widgets/invite_message_card.dart';
@@ -45,6 +47,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   bool _isUploading = false;
   final Map<String, ChatEvent> _events = {};
   final Map<String, ChatPoll> _polls = {};
+  AppChatTheme _chatTheme = ChatThemeResolver.defaultTheme;
 
   @override
   void initState() {
@@ -58,11 +61,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   Future<void> _loadGroupInfo() async {
     final group = await _groupService.getGroup(widget.groupId);
     final nicknames = await _groupService.getMemberNicknames(widget.groupId);
+    final theme = await ChatThemeResolver().resolve(widget.groupId, 'group_chats');
     if (group != null && mounted) {
       setState(() {
         _groupName = group.name;
         _nicknames = nicknames;
         _members = List<String>.from(group.members);
+        _chatTheme = theme;
       });
     }
   }
@@ -198,7 +203,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     if (!mounted) return;
 
     final callStream = _callService.getCallStream(callId);
-    final call = await callStream.firstWhere((c) => c != null);
+    final call = await callStream.firstWhere(
+      (c) => c != null,
+      orElse: () => null,
+    );
 
     if (!mounted || call == null) return;
 
@@ -290,8 +298,11 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final t = _chatTheme;
     return Scaffold(
+      backgroundColor: t.background,
       appBar: AppBar(
+        backgroundColor: t.appBarBackground,
         title: StreamBuilder<dynamic>(
           stream: _groupService.getGroupStream(widget.groupId),
           builder: (context, snapshot) {
@@ -299,9 +310,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
             if (group != null) {
               _groupName = group.name;
             }
-            return Text(_groupName);
+            return Text(
+              _groupName,
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+            );
           },
         ),
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
             icon: const Icon(Icons.phone),
@@ -349,162 +364,172 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           if (_isUploading)
             const LinearProgressIndicator(backgroundColor: Colors.transparent),
           Expanded(
-            child: StreamBuilder<List<ChatMessage>>(
-              stream: _groupService.getMessagesStream(widget.groupId),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final messages = snapshot.data ?? [];
-                if (messages.isEmpty) {
-                  return const Center(child: Text('No messages yet'));
-                }
-
-                return ListView.builder(
-                  controller: _scrollCtrl,
-                  padding: const EdgeInsets.all(16),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    final msg = messages[index];
-                    final isMe = msg.senderId == _currentUser?.uid;
-                    final isSystem = msg.type == MessageType.system;
-
-                    if (isSystem) {
-                      return MessageBubble(
-                        content: msg.content,
-                        isMe: false,
-                        senderName: msg.senderName.isNotEmpty ? msg.senderName : null,
-                        time: formatChatTime(msg.createdAt),
-                        isSystem: true,
-                      );
-                    }
-
-                    if (msg.type == MessageType.event && msg.refId != null) {
-                      _loadEventPollData(msg);
-                      final evt = _events[msg.refId];
-                      return MessageBubble(
-                        content: msg.content,
-                        isMe: isMe,
-                        senderName: _getDisplayName(msg.senderId, msg.senderName),
-                        time: formatChatTime(msg.createdAt),
-                        event: evt,
-                        currentUid: _currentUser?.uid,
-                        onEventTap: evt != null
-                            ? () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => EventDetailScreen(
-                                      eventId: evt.id,
-                                      groupId: widget.groupId,
-                                    ),
-                                  ),
-                                );
-                              }
-                            : null,
-                      );
-                    }
-
-                    if (msg.type == MessageType.poll && msg.refId != null) {
-                      _loadEventPollData(msg);
-                      return MessageBubble(
-                        content: msg.content,
-                        isMe: isMe,
-                        senderName: isMe ? null : _getDisplayName(msg.senderId, msg.senderName),
-                        time: formatChatTime(msg.createdAt),
-                        poll: _polls[msg.refId],
-                        currentUid: _currentUser?.uid,
-                      );
-                    }
-
-                    final displayName = _getDisplayName(
-                      msg.senderId,
-                      msg.senderName,
+            child: Container(
+              color: t.background,
+              child: StreamBuilder<List<ChatMessage>>(
+                stream: _groupService.getMessagesStream(widget.groupId),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final messages = snapshot.data ?? [];
+                  if (messages.isEmpty) {
+                    return Center(
+                      child: Text(
+                        'No messages yet',
+                        style: TextStyle(color: t.textSecondary),
+                      ),
                     );
+                  }
 
-                    if (msg.type == MessageType.invite && msg.activityId != null) {
-                      return InviteMessageCard(
-                        sessionId: msg.activityId!,
-                        content: msg.content,
-                        isMe: isMe,
-                        senderName: isMe ? null : displayName,
-                        time: formatChatTime(msg.createdAt),
+                  return ListView.builder(
+                    controller: _scrollCtrl,
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                    itemCount: messages.length,
+                    itemBuilder: (context, index) {
+                      final msg = messages[index];
+                      final isMe = msg.senderId == _currentUser?.uid;
+                      final isSystem = msg.type == MessageType.system;
+
+                      if (isSystem) {
+                        return MessageBubble(
+                          content: msg.content,
+                          isMe: false,
+                          senderName: msg.senderName.isNotEmpty ? msg.senderName : null,
+                          time: formatChatTime(msg.createdAt),
+                          isSystem: true,
+                          theme: t,
+                        );
+                      }
+
+                      if (msg.type == MessageType.event && msg.refId != null) {
+                        _loadEventPollData(msg);
+                        final evt = _events[msg.refId];
+                        return MessageBubble(
+                          content: msg.content,
+                          isMe: isMe,
+                          senderName: _getDisplayName(msg.senderId, msg.senderName),
+                          time: formatChatTime(msg.createdAt),
+                          event: evt,
+                          currentUid: _currentUser?.uid,
+                          theme: t,
+                          onEventTap: evt != null
+                              ? () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => EventDetailScreen(
+                                        eventId: evt.id,
+                                        groupId: widget.groupId,
+                                      ),
+                                    ),
+                                  );
+                                }
+                              : null,
+                        );
+                      }
+
+                      if (msg.type == MessageType.poll && msg.refId != null) {
+                        _loadEventPollData(msg);
+                        return MessageBubble(
+                          content: msg.content,
+                          isMe: isMe,
+                          senderName: isMe ? null : _getDisplayName(msg.senderId, msg.senderName),
+                          time: formatChatTime(msg.createdAt),
+                          poll: _polls[msg.refId],
+                          currentUid: _currentUser?.uid,
+                          theme: t,
+                        );
+                      }
+
+                      final displayName = _getDisplayName(
+                        msg.senderId,
+                        msg.senderName,
                       );
-                    }
 
-                    if (msg.type == MessageType.image && msg.imageUrl != null) {
-                      return MessageBubble(
-                        content: msg.content,
-                        imageUrl: msg.imageUrl,
-                        isMe: isMe,
-                        senderName: isMe ? null : displayName,
-                        time: formatChatTime(msg.createdAt),
-                      );
-                    }
-
-                    if (msg.type == MessageType.audio && msg.audioUrl != null) {
-                      return MessageBubble(
-                        content: msg.content,
-                        audioUrl: msg.audioUrl,
-                        durationSeconds: msg.durationSeconds,
-                        isMe: isMe,
-                        senderName: isMe ? null : displayName,
-                        time: formatChatTime(msg.createdAt),
-                      );
-                    }
-
-                    if (msg.type == MessageType.call) {
-                      return CallMessageBubble(
-                        callType: msg.callType ?? 'audio',
-                        callStatus: msg.callStatus ?? 'active',
-                        durationSeconds: msg.durationSeconds,
-                        time: formatChatTime(msg.createdAt),
-                        isMe: isMe,
-                        senderId: msg.senderId,
-                        senderName: isMe ? 'You' : displayName,
-                        currentUserId: _currentUser!.uid,
-                        groupId: widget.groupId,
-                        members: _members,
-                      );
-                    }
-
-                    if (msg.type == MessageType.text) {
-                      final groupLinkMatch = RegExp(r'wedo://group/([^\s]+)').firstMatch(msg.content);
-                      if (groupLinkMatch != null) {
-                        return GroupInviteMessageCard(
-                          groupId: groupLinkMatch.group(1)!,
+                      if (msg.type == MessageType.invite && msg.activityId != null) {
+                        return InviteMessageCard(
+                          sessionId: msg.activityId!,
+                          content: msg.content,
                           isMe: isMe,
                           senderName: isMe ? null : displayName,
                           time: formatChatTime(msg.createdAt),
-                          groupInviteData: msg.groupInviteData,
                         );
                       }
-                    }
 
-                    return MessageBubble(
-                      content: msg.content,
-                      isMe: isMe,
-                      senderName: isMe ? null : displayName,
-                      time: formatChatTime(msg.createdAt),
-                    );
-                  },
-                );
-              },
+                      if (msg.type == MessageType.image && msg.imageUrl != null) {
+                        return MessageBubble(
+                          content: msg.content,
+                          imageUrl: msg.imageUrl,
+                          isMe: isMe,
+                          senderName: isMe ? null : displayName,
+                          time: formatChatTime(msg.createdAt),
+                          theme: t,
+                        );
+                      }
+
+                      if (msg.type == MessageType.audio && msg.audioUrl != null) {
+                        return MessageBubble(
+                          content: msg.content,
+                          audioUrl: msg.audioUrl,
+                          durationSeconds: msg.durationSeconds,
+                          isMe: isMe,
+                          senderName: isMe ? null : displayName,
+                          time: formatChatTime(msg.createdAt),
+                          theme: t,
+                        );
+                      }
+
+                      if (msg.type == MessageType.call) {
+                        return CallMessageBubble(
+                          callType: msg.callType ?? 'audio',
+                          callStatus: msg.callStatus ?? 'active',
+                          durationSeconds: msg.durationSeconds,
+                          time: formatChatTime(msg.createdAt),
+                          isMe: isMe,
+                          senderId: msg.senderId,
+                          senderName: isMe ? 'You' : displayName,
+                          currentUserId: _currentUser!.uid,
+                          groupId: widget.groupId,
+                          members: _members,
+                          theme: t,
+                        );
+                      }
+
+                      if (msg.type == MessageType.text) {
+                        final groupLinkMatch = RegExp(r'wedo://group/([^\s]+)').firstMatch(msg.content);
+                        if (groupLinkMatch != null) {
+                          return GroupInviteMessageCard(
+                            groupId: groupLinkMatch.group(1)!,
+                            isMe: isMe,
+                            senderName: isMe ? null : displayName,
+                            time: formatChatTime(msg.createdAt),
+                            groupInviteData: msg.groupInviteData,
+                          );
+                        }
+                      }
+
+                      return MessageBubble(
+                        content: msg.content,
+                        isMe: isMe,
+                        senderName: isMe ? null : displayName,
+                        time: formatChatTime(msg.createdAt),
+                        theme: t,
+                      );
+                    },
+                  );
+                },
+              ),
             ),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, -2)),
-              ],
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            color: t.composerBackground,
             child: SafeArea(
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.add_circle_outline, color: Colors.grey),
+                    icon: Icon(Icons.add_circle_outline, color: t.textSecondary),
                     onPressed: _showComposerMenu,
                   ),
                   AudioRecorderButton(onRecordingComplete: _onAudioRecorded),
@@ -512,22 +537,35 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                   Expanded(
                     child: TextField(
                       controller: _messageCtrl,
+                      textCapitalization: TextCapitalization.sentences,
                       decoration: InputDecoration(
-                        hintText: 'Type a message...',
+                        hintText: 'Message',
+                        hintStyle: TextStyle(color: t.textSecondary),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(24),
                           borderSide: BorderSide.none,
                         ),
                         filled: true,
-                        fillColor: Colors.grey[100],
+                        fillColor: t.inputBackground,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    onPressed: _sendMessage,
-                    icon: const Icon(Icons.send),
+                  const SizedBox(width: 6),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: t.accent,
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      onPressed: _sendMessage,
+                      icon: const Icon(Icons.send, color: Colors.white, size: 20),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 40,
+                        minHeight: 40,
+                      ),
+                    ),
                   ),
                 ],
               ),

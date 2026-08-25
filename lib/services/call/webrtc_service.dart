@@ -31,6 +31,43 @@ class WebRTCService {
   bool _isAudioOnly = false;
   Function(String fromUid, String candidateJson)? onIceCandidateGenerated;
 
+  RTCSessionDescription _applyBitrateCap(
+    RTCSessionDescription desc, {
+    int videoKbps = 256,
+    int audioKbps = 32,
+  }) {
+    var sdp = desc.sdp ?? '';
+    final lines = sdp.split('\n');
+    final result = <String>[];
+    var inVideo = false;
+    var inAudio = false;
+
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      result.add(line);
+
+      if (line.startsWith('m=video')) {
+        inVideo = true;
+        inAudio = false;
+      } else if (line.startsWith('m=audio')) {
+        inAudio = true;
+        inVideo = false;
+      } else if (line.startsWith('m=')) {
+        inVideo = false;
+        inAudio = false;
+      }
+
+      // Add b=AS after the last fmtp line in each media section
+      if (inVideo && line.startsWith('a=fmtp:') && i + 1 < lines.length && !lines[i + 1].startsWith('b=')) {
+        result.add('b=AS:$videoKbps');
+      } else if (inAudio && line.startsWith('a=fmtp:') && i + 1 < lines.length && !lines[i + 1].startsWith('b=')) {
+        result.add('b=AS:$audioKbps');
+      }
+    }
+
+    return RTCSessionDescription(result.join('\n'), desc.type);
+  }
+
   Future<void> initialize({bool audioOnly = false}) async {
     _isAudioOnly = audioOnly;
 
@@ -40,9 +77,9 @@ class WebRTCService {
           ? false
           : {
               'mandatory': {
-                'minWidth': '640',
-                'minHeight': '480',
-                'minFrameRate': '30',
+                'minWidth': '320',
+                'minHeight': '240',
+                'minFrameRate': '15',
               },
               'facingMode': 'user',
             },
@@ -155,11 +192,14 @@ class WebRTCService {
       'offerToReceiveVideo': !_isAudioOnly,
     });
 
-    await pc.setLocalDescription(offer);
+    final cappedOffer = _isAudioOnly
+        ? offer
+        : _applyBitrateCap(offer);
+    await pc.setLocalDescription(cappedOffer);
 
     final sdp = jsonEncode({
-      'type': offer.type,
-      'sdp': offer.sdp,
+      'type': cappedOffer.type,
+      'sdp': cappedOffer.sdp,
     });
 
     await _callService.sendOffer(
@@ -194,11 +234,14 @@ class WebRTCService {
       'offerToReceiveVideo': !_isAudioOnly,
     });
 
-    await pc.setLocalDescription(answer);
+    final cappedAnswer = _isAudioOnly
+        ? answer
+        : _applyBitrateCap(answer);
+    await pc.setLocalDescription(cappedAnswer);
 
     final answerJson = jsonEncode({
-      'type': answer.type,
-      'sdp': answer.sdp,
+      'type': cappedAnswer.type,
+      'sdp': cappedAnswer.sdp,
     });
 
     await _callService.sendAnswer(
@@ -269,6 +312,10 @@ class WebRTCService {
     if (videoTrack != null) {
       await Helper.switchCamera(videoTrack);
     }
+  }
+
+  Future<void> setSpeakerOn(bool enabled) async {
+    await Helper.setSpeakerphoneOn(enabled);
   }
 
   Future<void> dispose() async {

@@ -39,7 +39,7 @@ class GroupService {
     });
   }
 
-  Future<void> createGroup({
+  Future<String> createGroup({
     required String name,
     required String createdBy,
     required String displayName,
@@ -68,6 +68,7 @@ class GroupService {
     });
 
     await batch.commit();
+    return groupRef.id;
   }
 
   Future<void> sendMessage({
@@ -461,6 +462,19 @@ class GroupService {
     required String photoUrl,
   }) async {
     await _groups.doc(groupId).update({'photoUrl': photoUrl});
+  }
+
+  Future<String> uploadGroupPhoto({
+    required String groupId,
+    required File imageFile,
+  }) async {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final ref = FirebaseStorage.instance
+        .ref('group_photos/$groupId/$timestamp.jpg');
+    await ref.putFile(imageFile);
+    final url = await ref.getDownloadURL();
+    await _groups.doc(groupId).update({'photoUrl': url});
+    return url;
   }
 
   Future<({String uid, String name})?> findUserByEmail(String email) async {
