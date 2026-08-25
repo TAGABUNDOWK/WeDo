@@ -38,11 +38,27 @@ class ProfileService {
 
     await _db.collection('users').doc(uid).update({
       'photo_url': url,
+      'avatar_asset': FieldValue.delete(),
       'photo_updated_at': FieldValue.serverTimestamp(),
       'moderation_status': 'pending',
     });
 
     return url;
+  }
+
+  /// Selects a bundled preset avatar (e.g. assets/icons/Avatar-3.png).
+  /// Clears any uploaded photo so the preset takes priority.
+  Future<void> setPresetAvatar({required String uid, required String asset}) async {
+    final authUid = _auth.currentUser?.uid;
+    if (authUid == null || authUid != uid) {
+      throw Exception('Not authenticated or uid mismatch');
+    }
+    await _db.collection('users').doc(uid).update({
+      'avatar_asset': asset,
+      'photo_url': FieldValue.delete(),
+      'moderation_status': FieldValue.delete(),
+      'photo_updated_at': FieldValue.serverTimestamp(),
+    });
   }
 
   Future<void> removeAvatar(String uid) async {
@@ -53,7 +69,21 @@ class ProfileService {
     } catch (_) {}
     await _db.collection('users').doc(uid).update({
       'photo_url': FieldValue.delete(),
+      'avatar_asset': FieldValue.delete(),
       'moderation_status': FieldValue.delete(),
+      'photo_updated_at': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Selects a bundled frame/border (e.g. assets/icons/Frame-3.png).
+  /// Overlays on avatar — additive, does not clear photo/avatar.
+  Future<void> setFrameAsset({required String uid, required String asset}) async {
+    final authUid = _auth.currentUser?.uid;
+    if (authUid == null || authUid != uid) {
+      throw Exception('Not authenticated or uid mismatch');
+    }
+    await _db.collection('users').doc(uid).update({
+      'frame_asset': asset,
       'photo_updated_at': FieldValue.serverTimestamp(),
     });
   }

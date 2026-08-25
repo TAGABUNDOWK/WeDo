@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import '../../services/friends/friend_service.dart';
 import '../../services/profile/profile_service.dart';
 import '../../models/user_entity.dart';
 import '../../widgets/animated_background.dart';
+import '../../widgets/arc_avatar_picker.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -16,7 +18,14 @@ class AccountScreen extends StatefulWidget {
   State<AccountScreen> createState() => _AccountScreenState();
 }
 
-class _AccountScreenState extends State<AccountScreen> {
+class _AccountScreenState extends State<AccountScreen>
+    with TickerProviderStateMixin {
+  static final List<String> _avatars =
+      List.generate(9, (i) => 'assets/icons/Avatar-${i + 1}.png');
+  // 10 frames — Frame-6..10 are duplicates of 1..5, replace after design is done
+  static final List<String> _frames =
+      List.generate(10, (i) => 'assets/icons/Frame-${i + 1}.png');
+
   final _auth = FirebaseAuth.instance;
   final _userService = UserService();
   final _friendService = FriendService();
@@ -26,6 +35,10 @@ class _AccountScreenState extends State<AccountScreen> {
   bool _loading = true;
   double _wedoThumbRatio = 0.5;
   bool _wedoDragging = false;
+  late final AnimationController _arcRevealCtrl;
+  late final AnimationController _frameRevealCtrl;
+  bool _isAutoHiding = false;
+  bool _isFrameAutoHiding = false;
 
   String get _uid => _auth.currentUser?.uid ?? '';
 
@@ -36,7 +49,106 @@ class _AccountScreenState extends State<AccountScreen> {
   @override
   void initState() {
     super.initState();
+    _arcRevealCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 550),
+      value: 0,
+    );
+    _frameRevealCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 550),
+      value: 0,
+    );
     _loadUser();
+  }
+
+  @override
+  void dispose() {
+    _arcRevealCtrl.dispose();
+    _frameRevealCtrl.dispose();
+    super.dispose();
+  }
+
+  void _closeArcImmediately() {
+    if (_arcRevealCtrl.isDismissed) return;
+    _isAutoHiding = true;
+    setState(() => _wedoThumbRatio = 0.5);
+    _frameRevealCtrl.reverse();
+    _arcRevealCtrl
+        .animateTo(0.0,
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic)
+        .whenComplete(() {
+      if (mounted) setState(() => _isAutoHiding = false);
+    });
+  }
+
+  void _closeFrameImmediately() {
+    if (_frameRevealCtrl.isDismissed) return;
+    _isFrameAutoHiding = true;
+    setState(() => _wedoThumbRatio = 0.5);
+    _arcRevealCtrl.reverse();
+    _frameRevealCtrl
+        .animateTo(0.0,
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic)
+        .whenComplete(() {
+      if (mounted) setState(() => _isFrameAutoHiding = false);
+    });
+  }
+
+  void _showBothArcs() {
+    _arcRevealCtrl.forward();
+    _frameRevealCtrl.forward();
+  }
+
+  void _hideBothArcs() {
+    _arcRevealCtrl.reverse();
+    _frameRevealCtrl.reverse();
+    setState(() => _wedoThumbRatio = 0.5);
+  }
+
+  void _syncArcReveal() {
+    if (_wedoThumbRatio < 0.45) {
+      _arcRevealCtrl.forward();
+      _frameRevealCtrl.reverse();
+    } else if (_wedoThumbRatio > 0.55) {
+      _frameRevealCtrl.forward();
+      _arcRevealCtrl.reverse();
+    } else {
+      _arcRevealCtrl.reverse();
+      _frameRevealCtrl.reverse();
+    }
+  }
+
+  Future<void> _selectPresetAvatar(String asset) async {
+    if (_user == null || asset == _user!.avatarAsset) return;
+    setState(() => _user = _user!.copyWith(avatarAsset: asset));
+    try {
+      await _profileService.setPresetAvatar(uid: _uid, asset: asset);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update avatar: $e')),
+        );
+      }
+      await _loadUser();
+    }
+  }
+
+  Future<void> _selectFrame(String asset) async {
+    if (_user == null || asset == _user!.frameAsset) return;
+    setState(() => _user = _user!.copyWith(frameAsset: asset));
+    try {
+      await _profileService.setFrameAsset(uid: _uid, asset: asset);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update frame: $e')),
+        );
+      }
+      await _loadUser();
+    }
   }
 
   Future<void> _loadUser() async {
@@ -110,13 +222,22 @@ class _AccountScreenState extends State<AccountScreen> {
     }
   }
 
+  void _closeIfBothVisible() {
+    if (!_arcRevealCtrl.isDismissed && !_frameRevealCtrl.isDismissed) {
+      _hideBothArcs();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: AnimatedBackground(
-        showStars: false,
-        child: Stack(
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: _closeIfBothVisible,
+        child: AnimatedBackground(
+          showStars: false,
+          child: Stack(
           clipBehavior: Clip.none,
           children: [
             Positioned(
@@ -160,20 +281,72 @@ class _AccountScreenState extends State<AccountScreen> {
                           _buildTopBar(),
                           const SizedBox(height: 24),
                           _buildProfileHeader(),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 12),
                           _buildWeDoSlider(),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 10),
                           _buildTopDecisionsCard(context),
-                          const SizedBox(height: 14),
+                          const SizedBox(height: 12),
                           _buildAchievementsCard(context),
                         ],
                       ),
                     ),
                   ),
+            Positioned.fill(
+              child: AnimatedBuilder(
+                animation: Listenable.merge([_arcRevealCtrl, _frameRevealCtrl]),
+                builder: (context, _) {
+                  final blurValue = math.max(
+                      _arcRevealCtrl.value, _frameRevealCtrl.value);
+                  if (blurValue <= 0.01) return const SizedBox.shrink();
+                  return BackdropFilter(
+                    filter: ImageFilter.blur(
+                      sigmaX: 5 * blurValue,
+                      sigmaY: 5 * blurValue,
+                    ),
+                    child: Container(
+                      color: Colors.black.withValues(alpha: 0.3 * blurValue),
+                    ),
+                  );
+                },
+              ),
+            ),
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: 190,
+              child: RepaintBoundary(
+                child: ArcAvatarPicker(
+                  avatars: _avatars,
+                  reveal: _arcRevealCtrl,
+                  onAvatarSelected: _selectPresetAvatar,
+                  onCloseRequested: _closeArcImmediately,
+                  side: ArcSide.left,
+                  initialIndex: 4,
+                ),
+              ),
+            ),
+            Positioned(
+              right: 0,
+              top: 0,
+              bottom: 0,
+              width: 215,
+              child: RepaintBoundary(
+                child: ArcAvatarPicker(
+                  avatars: _frames,
+                  reveal: _frameRevealCtrl,
+                  onAvatarSelected: _selectFrame,
+                  onCloseRequested: _closeFrameImmediately,
+                  side: ArcSide.right,
+                  initialIndex: 4,
+                ),
+              ),
+            ),
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildTopBar() {
@@ -222,7 +395,7 @@ class _AccountScreenState extends State<AccountScreen> {
                         style: TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w500,
-                          color: Colors.white70,
+                          color: Colors.white,
                           fontFamily: 'Poppins',
                         ),
                       ),
@@ -237,10 +410,10 @@ class _AccountScreenState extends State<AccountScreen> {
                       ),
                       TextSpan(
                         text: ' · $_mockExp EXP',
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w500,
-                          color: Colors.white.withValues(alpha: 0.7),
+                          color: Colors.white,
                           fontFamily: 'Poppins',
                         ),
                       ),
@@ -283,35 +456,51 @@ class _AccountScreenState extends State<AccountScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(top: 8),
+          padding: const EdgeInsets.only(top: 0),
           child: GestureDetector(
             onTap: _showPhotoSourceSheet,
-            child: Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFFE4EF0).withValues(alpha: 0.4),
-                    blurRadius: 20,
-                    spreadRadius: 2,
+            child: Transform.translate(
+              offset: const Offset(0, -6),
+              child: SizedBox(
+              width: 148,
+              height: 148,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFFE4EF0).withValues(alpha: 0.4),
+                          blurRadius: 20,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                    child: ClipOval(
+                      child: _buildAvatarImage(hasPhoto: hasPhoto),
+                    ),
                   ),
+                  if (_user!.frameAsset != null &&
+                      _user!.frameAsset!.isNotEmpty)
+                    Positioned.fill(
+                      child: Transform.scale(
+                        scale: _user!.frameAsset!.contains('Frame-4') ? 1.2 : 1.0,
+                        child: Image.asset(
+                          _user!.frameAsset!,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const SizedBox.shrink(),
+                        ),
+                      ),
+                    ),
                 ],
               ),
-              child: ClipOval(
-                child: hasPhoto
-                    ? Image.network(
-                        _user!.photoUrl!,
-                        fit: BoxFit.cover,
-                        width: 80,
-                        height: 80,
-                        errorBuilder: (context, error, stackTrace) =>
-                            _buildDefaultAvatar(),
-                      )
-                    : _buildDefaultAvatar(),
-              ),
             ),
+          ),
           ),
         ),
         const SizedBox(width: 16),
@@ -347,6 +536,29 @@ class _AccountScreenState extends State<AccountScreen> {
         ),
       ],
     );
+  }
+
+  Widget _buildAvatarImage({required bool hasPhoto}) {
+    final presetAsset = _user!.avatarAsset;
+    if (presetAsset != null && presetAsset.isNotEmpty) {
+      return Image.asset(
+        presetAsset,
+        fit: BoxFit.cover,
+        width: 120,
+        height: 120,
+        errorBuilder: (context, error, stackTrace) => _buildDefaultAvatar(),
+      );
+    }
+    if (hasPhoto) {
+      return Image.network(
+        _user!.photoUrl!,
+        fit: BoxFit.cover,
+        width: 120,
+        height: 120,
+        errorBuilder: (context, error, stackTrace) => _buildDefaultAvatar(),
+      );
+    }
+    return _buildDefaultAvatar();
   }
 
   Widget _buildDefaultAvatar() {
@@ -719,8 +931,8 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Widget _buildWeDoSlider() {
-    const double trackHeight = 76;
-    const double thumbSize = 60;
+    const double trackHeight = 64;
+    const double thumbSize = 52;
     const double horizontalPadding = 4;
 
     return LayoutBuilder(
@@ -743,6 +955,7 @@ class _AccountScreenState extends State<AccountScreen> {
               final ratio = details.localPosition.dx / trackWidth;
               _wedoThumbRatio = ratio.clamp(0.0, 1.0);
             });
+            _syncArcReveal();
           },
           onHorizontalDragEnd: (_) {
             setState(() {
@@ -755,9 +968,11 @@ class _AccountScreenState extends State<AccountScreen> {
                 _wedoThumbRatio = 0.5;
               }
             });
+            _syncArcReveal();
           },
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
+            duration: Duration(
+                milliseconds: (_isAutoHiding || _isFrameAutoHiding) ? 220 : 300),
             curve: Curves.easeInOut,
             height: trackHeight,
             decoration: BoxDecoration(
@@ -797,8 +1012,8 @@ class _AccountScreenState extends State<AccountScreen> {
                       opacity: isLeft ? 1.0 : 0.5,
                       child: Image.asset(
                         'assets/icons/Avatar-4.png',
-                        width: 50,
-                        height: 50,
+                        width: 42,
+                        height: 42,
                         errorBuilder: (context, error, stackTrace) =>
                             const Icon(
                               Icons.person,
@@ -819,8 +1034,8 @@ class _AccountScreenState extends State<AccountScreen> {
                       opacity: isRight ? 1.0 : 0.5,
                       child: Image.asset(
                         'assets/icons/Frame-3.png',
-                        width: 50,
-                        height: 50,
+                        width: 42,
+                        height: 42,
                         errorBuilder: (context, error, stackTrace) =>
                             const Icon(
                               Icons.crop_square,
@@ -834,24 +1049,34 @@ class _AccountScreenState extends State<AccountScreen> {
                 AnimatedPositioned(
                   duration: _wedoDragging
                       ? Duration.zero
-                      : const Duration(milliseconds: 300),
+                      : Duration(
+                          milliseconds: (_isAutoHiding || _isFrameAutoHiding) ? 220 : 300),
                   curve: Curves.easeOutBack,
                   top: (trackHeight - thumbSize) / 2,
                   left: thumbLeft,
-                  child: SizedBox(
-                    width: thumbSize,
-                    height: thumbSize,
-                    child: Center(
-                      child: Image.asset(
-                        'assets/images/WeDo-Logo.png',
-                        width: 58,
-                        height: 58,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const Icon(
-                              Icons.bolt,
-                              color: Colors.white,
-                              size: 22,
-                            ),
+                  child: GestureDetector(
+                    onLongPressStart: (_) => _showBothArcs(),
+                    onTap: () {
+                      if (!_arcRevealCtrl.isDismissed &&
+                          !_frameRevealCtrl.isDismissed) {
+                        _hideBothArcs();
+                      }
+                    },
+                    child: SizedBox(
+                      width: thumbSize,
+                      height: thumbSize,
+                      child: Center(
+                        child: Image.asset(
+                          'assets/images/WeDo-Logo.png',
+                          width: 50,
+                          height: 50,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Icon(
+                            Icons.bolt,
+                            color: Colors.white,
+                            size: 22,
+                          ),
+                        ),
                       ),
                     ),
                   ),
