@@ -457,7 +457,7 @@ class _CenterLogoButtonState extends State<_CenterLogoButton>
                         child: Transform.translate(
                           offset: Offset(0, 30 * (1 - _menuScale.value)),
                           child: _PopupCircle(
-                            icon: 'assets/icons/create.png',
+                            icon: 'assets/icons/pickfight.png',
                             onTap: () => _onChoiceTap(() {
                               Navigator.of(context).push(
                                 MaterialPageRoute(
@@ -488,7 +488,7 @@ class _CenterLogoButtonState extends State<_CenterLogoButton>
                         child: Transform.translate(
                           offset: Offset(0, 30 * (1 - _menuScale.value)),
                           child: _PopupCircle(
-                            icon: 'assets/icons/connect.png',
+                            icon: 'assets/icons/spin the wheel.png',
                             onTap: () => _onChoiceTap(() {
                               Navigator.of(context).push(
                                 MaterialPageRoute(
