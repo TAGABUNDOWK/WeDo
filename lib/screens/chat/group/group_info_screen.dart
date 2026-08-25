@@ -118,7 +118,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
           }
 
   Future<void> _changeGroupPhoto() async {
-    final ctrl = TextEditingController(text: _group?.photoUrl ?? '');
+    final ctrl = TextEditingController();
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -171,14 +171,14 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
       ),
     );
 
-            if (result != null && result.isNotEmpty && mounted) {
-              await _groupService.updateGroupPhoto(
-                groupId: widget.groupId,
-                photoUrl: result,
-              );
-              _loadData();
-            }
-          }
+    if (result != null && result.isNotEmpty && mounted) {
+      await _groupService.updateGroupPhoto(
+        groupId: widget.groupId,
+        photoUrl: result,
+      );
+      _loadData();
+    }
+  }
 
   Future<void> _changeNickname(String memberUid) async {
     final currentName = _getMemberName(memberUid);

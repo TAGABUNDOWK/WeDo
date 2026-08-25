@@ -67,7 +67,10 @@ class CallService {
         .where('status', isEqualTo: 'active')
         .get();
 
-    if (activeParticipants.docs.isEmpty || uid == 'caller') {
+    final callDoc = await _calls.doc(callId).get();
+    final createdBy = callDoc.data()?['createdBy'] as String?;
+
+    if (activeParticipants.docs.isEmpty || uid == createdBy) {
       await endCall(callId);
     }
   }
@@ -170,5 +173,15 @@ class CallService {
     }
     await batch.commit();
     await _calls.doc(callId).delete();
+  }
+
+  Future<void> cleanupCallData(String callId) async {
+    await deleteCallSignals(callId);
+    final participants = await _participants(callId).get();
+    final batch = _db.batch();
+    for (final doc in participants.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
   }
 }

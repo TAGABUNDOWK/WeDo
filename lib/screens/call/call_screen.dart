@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../models/call.dart';
 import '../../services/call/call_service.dart';
 import '../../services/call/webrtc_service.dart';
@@ -32,7 +33,7 @@ class CallScreen extends StatefulWidget {
   State<CallScreen> createState() => _CallScreenState();
 }
 
-class _CallScreenState extends State<CallScreen> {
+class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
   final CallService _callService = CallService();
   final WebRTCService _webrtcService = WebRTCService();
   final _currentUser = FirebaseAuth.instance.currentUser;
@@ -44,6 +45,8 @@ class _CallScreenState extends State<CallScreen> {
   int _callDuration = 0;
   StreamSubscription? _callSub;
   StreamSubscription? _signalsSub;
+  StreamSubscription? _groupCallSub;
+  final Set<String> _processedSignals = {};
 
   RTCVideoRenderer? _localRenderer;
   RTCVideoRenderer? _remoteRenderer;
@@ -51,11 +54,15 @@ class _CallScreenState extends State<CallScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initializeCall();
   }
 
   Future<void> _initializeCall() async {
     final audioOnly = widget.callType == CallType.audio;
+
+    // Keep screen on during call
+    WakelockPlus.enable();
 
     // Initialize WebRTC and get local media
     await _webrtcService.initialize(audioOnly: audioOnly);
@@ -111,6 +118,9 @@ class _CallScreenState extends State<CallScreen> {
         .getSignalsForUser(widget.callId, _currentUser.uid)
         .listen((snapshot) {
       for (final doc in snapshot.docs) {
+        if (_processedSignals.contains(doc.id)) continue;
+        _processedSignals.add(doc.id);
+
         final data = doc.data();
         final fromUid = data['fromUid'] as String;
         final type = data['type'] as String;
@@ -138,14 +148,36 @@ class _CallScreenState extends State<CallScreen> {
       }
     });
 
-    // Create offers for all other members
-    for (final memberUid in widget.members) {
-      if (memberUid != _currentUser.uid) {
-        await _webrtcService.createOffer(
-          callId: widget.callId,
-          fromUid: _currentUser.uid,
-          toUid: memberUid,
-        );
+    // Listen for new participants joining (for group calls)
+    if (widget.isGroup) {
+      _groupCallSub = _callService.getCallStream(widget.callId).listen((call) {
+        if (call == null || call.status != CallStatus.active) return;
+        // When call is active, create offers for members who have joined
+        // but don't have a peer connection yet
+        for (final memberUid in widget.members) {
+          if (memberUid != _currentUser!.uid &&
+              !_webrtcService.peerConnections
+                  .containsKey('${_currentUser!.uid}_$memberUid')) {
+            _webrtcService.createOffer(
+              callId: widget.callId,
+              fromUid: _currentUser!.uid,
+              toUid: memberUid,
+            );
+          }
+        }
+      });
+    }
+
+    // Create offers for all other members (for 1:1 calls)
+    if (!widget.isGroup) {
+      for (final memberUid in widget.members) {
+        if (memberUid != _currentUser!.uid) {
+          await _webrtcService.createOffer(
+            callId: widget.callId,
+            fromUid: _currentUser!.uid,
+            toUid: memberUid,
+          );
+        }
       }
     }
 
@@ -159,7 +191,10 @@ class _CallScreenState extends State<CallScreen> {
     _callTimer?.cancel();
     _callSub?.cancel();
     _signalsSub?.cancel();
+    _groupCallSub?.cancel();
+    WakelockPlus.disable();
     _callService.leaveCall(widget.callId, _currentUser!.uid);
+    _callService.cleanupCallData(widget.callId);
     _webrtcService.dispose();
 
     _sendCallMessage();
@@ -208,6 +243,7 @@ class _CallScreenState extends State<CallScreen> {
 
   void _toggleSpeaker() {
     setState(() => _isSpeakerOn = !_isSpeakerOn);
+    _webrtcService.setSpeakerOn(_isSpeakerOn);
   }
 
   void _switchCamera() {
@@ -222,13 +258,22 @@ class _CallScreenState extends State<CallScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    WakelockPlus.disable();
     _callTimer?.cancel();
     _callSub?.cancel();
     _signalsSub?.cancel();
+    _groupCallSub?.cancel();
     _localRenderer?.dispose();
     _remoteRenderer?.dispose();
     _webrtcService.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Keep audio alive in background - do not toggle video off
+    // WebRTC peer connections continue running in background
   }
 
   @override
@@ -237,14 +282,16 @@ class _CallScreenState extends State<CallScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF1A0A2E),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: isVideo ? _buildVideoView() : _buildAudioView(),
-            ),
-            _buildControls(),
-          ],
+      body: SizedBox.expand(
+        child: SafeArea(
+          child: isVideo
+              ? Column(
+                  children: [
+                    Expanded(child: _buildVideoView()),
+                    _buildControls(),
+                  ],
+                )
+              : _buildAudioView(),
         ),
       ),
     );
@@ -256,11 +303,20 @@ class _CallScreenState extends State<CallScreen> {
 
     return Stack(
       children: [
+        // Remote video - fills entire area, centered
         if (hasRemoteStream)
-          Center(
-            child: RTCVideoView(
-              _remoteRenderer!,
-              objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+          Positioned.fill(
+            child: FittedBox(
+              fit: BoxFit.cover,
+              clipBehavior: Clip.hardEdge,
+              child: SizedBox(
+                width: 320,
+                height: 240,
+                child: RTCVideoView(
+                  _remoteRenderer!,
+                  objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                ),
+              ),
             ),
           )
         else
@@ -288,29 +344,37 @@ class _CallScreenState extends State<CallScreen> {
               ],
             ),
           ),
+        // Local video PIP - centered top area
         if (hasLocalStream)
           Positioned(
             top: 16,
-            right: 16,
-            width: 120,
-            height: 160,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: RTCVideoView(
-                _localRenderer!,
-                mirror: true,
-                objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: SizedBox(
+                width: 120,
+                height: 160,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: RTCVideoView(
+                    _localRenderer!,
+                    mirror: true,
+                    objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                  ),
+                ),
               ),
             ),
           ),
+        // Name and duration overlay - centered at top
         Positioned(
-          top: 16,
-          left: 16,
+          top: hasLocalStream ? 180 : 16,
+          left: 0,
+          right: 0,
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 widget.callName,
+                textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 20,
@@ -320,6 +384,7 @@ class _CallScreenState extends State<CallScreen> {
               const SizedBox(height: 4),
               Text(
                 _formatDuration(_callDuration),
+                textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.white70, fontSize: 14),
               ),
             ],
@@ -369,6 +434,32 @@ class _CallScreenState extends State<CallScreen> {
               style: const TextStyle(color: Colors.white54, fontSize: 14),
             ),
           ],
+          const SizedBox(height: 48),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildControlButton(
+                icon: _isMuted ? Icons.mic_off : Icons.mic,
+                label: _isMuted ? 'Unmute' : 'Mute',
+                onTap: _toggleMute,
+                isActive: !_isMuted,
+              ),
+              _buildControlButton(
+                icon: _isSpeakerOn ? Icons.volume_up : Icons.volume_down,
+                label: _isSpeakerOn ? 'Speaker' : 'Earpiece',
+                onTap: _toggleSpeaker,
+                isActive: true,
+              ),
+              _buildControlButton(
+                icon: Icons.call_end,
+                label: 'End',
+                onTap: _endCall,
+                isActive: true,
+                backgroundColor: Colors.red,
+                iconColor: Colors.white,
+              ),
+            ],
+          ),
         ],
       ),
     );
