@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'dart:io';
 import '../../../models/group_chat.dart';
 import '../../../models/user_entity.dart';
@@ -157,7 +158,29 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     final picked = await picker.pickImage(source: source, imageQuality: 80);
     if (picked == null || !mounted) return;
 
-    final file = File(picked.path);
+    final cropped = await ImageCropper().cropImage(
+      sourcePath: picked.path,
+      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+      uiSettings: [
+        AndroidUiSettings(
+          toolbarTitle: 'Crop Photo',
+          toolbarColor: const Color(0xFF211635),
+          toolbarWidgetColor: Colors.white,
+          activeControlsWidgetColor: AppColors.lavenderAccent,
+          initAspectRatio: CropAspectRatioPreset.square,
+          lockAspectRatio: true,
+        ),
+        IOSUiSettings(
+          title: 'Crop Photo',
+          cropStyle: CropStyle.circle,
+          aspectRatioLockEnabled: true,
+        ),
+      ],
+    );
+
+    if (cropped == null || !mounted) return;
+
+    final file = File(cropped.path);
     showDialog(
       context: context,
       barrierDismissible: false,
