@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/session_entity.dart';
 import '../../services/session/session_service.dart';
+import '../../services/session/session_refresh_notifier.dart';
 import '../../widgets/animated_background.dart';
 import 'all_sessions_screen.dart';
 import 'create_session_screen.dart';
@@ -26,11 +28,15 @@ class _SessionEntryScreenState extends State<SessionEntryScreen> {
   bool _isLoadingSessions = true;
   String? _error;
   List<SessionEntity> _recentSessions = const [];
+  late final StreamSubscription<void> _refreshSub;
 
   @override
   void initState() {
     super.initState();
     _loadSessions();
+    _refreshSub = SessionRefreshNotifier.instance.onRefresh.listen((_) {
+      if (mounted) _loadSessions();
+    });
   }
 
   Future<void> _loadSessions() async {
@@ -57,6 +63,7 @@ class _SessionEntryScreenState extends State<SessionEntryScreen> {
 
   @override
   void dispose() {
+    _refreshSub.cancel();
     _codeController.dispose();
     _codeFocusNode.dispose();
     super.dispose();
