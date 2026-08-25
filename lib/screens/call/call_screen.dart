@@ -43,12 +43,15 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
   bool _isMuted = false;
   bool _isVideoOff = false;
   bool _isSpeakerOn = false;
+  bool _callEnded = false;
   Timer? _callTimer;
   int _callDuration = 0;
   StreamSubscription? _callSub;
   StreamSubscription? _signalsSub;
   StreamSubscription? _groupCallSub;
   final Set<String> _processedSignals = {};
+  final Set<String> _pendingOfferPeers = {};
+  Timer? _groupCallDebounce;
 
   RTCVideoRenderer? _localRenderer;
   RTCVideoRenderer? _remoteRenderer;
@@ -63,19 +66,15 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
   Future<void> _initializeCall() async {
     final audioOnly = widget.callType == CallType.audio;
 
-    // Keep screen on during call
     WakelockPlus.enable();
 
-    // Initialize WebRTC and get local media
     await _webrtcService.initialize(audioOnly: audioOnly);
 
-    // Initialize renderers
     _localRenderer = RTCVideoRenderer();
     _remoteRenderer = RTCVideoRenderer();
     await _localRenderer!.initialize();
     await _remoteRenderer!.initialize();
 
-    // Listen for local stream
     _webrtcService.onLocalStream.listen((stream) {
       if (mounted) {
         setState(() {
@@ -84,7 +83,6 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
       }
     });
 
-    // Listen for remote stream
     _webrtcService.onRemoteStream.listen((stream) {
       if (mounted) {
         setState(() {
@@ -93,29 +91,35 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
       }
     });
 
-    // Set up ICE candidate callback
     _webrtcService.onIceCandidateGenerated = (peerId, candidateJson) {
-      final toUid = peerId;
       _callService.sendIceCandidate(
         callId: widget.callId,
         fromUid: _currentUser!.uid,
-        toUid: toUid,
+        toUid: peerId,
         candidate: candidateJson,
       );
     };
 
-    // Join the call
-    await _callService.joinCall(widget.callId, _currentUser!.uid);
+    _webrtcService.onConnectionState.listen((event) {
+      final (peerId, state) = event;
+      debugPrint('Connection state with $peerId: $state');
 
-    // Listen for call status changes
-    _callSub = _callService.getCallStream(widget.callId).listen((call) {
-      if (call == null || call.status == CallStatus.ended) {
-        _endCall();
-        return;
+      if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
+          state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+        if (!widget.isGroup) {
+          _endCall();
+        }
       }
     });
 
-    // Listen for signaling messages
+    await _callService.joinCall(widget.callId, _currentUser!.uid);
+
+    _callSub = _callService.getCallStream(widget.callId).listen((call) {
+      if (!_callEnded && (call == null || call.status == CallStatus.ended)) {
+        _endCall();
+      }
+    });
+
     _signalsSub = _callService
         .getSignalsForUser(widget.callId, _currentUser.uid)
         .listen((snapshot) {
@@ -150,59 +154,76 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
       }
     });
 
-    // Listen for new participants joining (for group calls)
     if (widget.isGroup) {
       _groupCallSub = _callService.getCallStream(widget.callId).listen((call) {
         if (call == null || call.status != CallStatus.active) return;
-        // When call is active, create offers for members who have joined
-        // but don't have a peer connection yet
-        for (final memberUid in widget.members) {
-          if (memberUid != _currentUser!.uid &&
-              !_webrtcService.peerConnections
-                  .containsKey('${_currentUser!.uid}_$memberUid')) {
-            _webrtcService.createOffer(
-              callId: widget.callId,
-              fromUid: _currentUser!.uid,
-              toUid: memberUid,
-            );
-          }
-        }
+        _groupCallDebounce?.cancel();
+        _groupCallDebounce = Timer(const Duration(milliseconds: 500), () {
+          _createGroupOffers();
+        });
       });
     }
 
-    // Only the call creator should create offers.
-    // The callee waits for the incoming offer and responds with an answer.
-    if (widget.createdBy == _currentUser!.uid) {
-      if (!widget.isGroup) {
-        for (final memberUid in widget.members) {
-          if (memberUid != _currentUser!.uid) {
-            await _webrtcService.createOffer(
-              callId: widget.callId,
-              fromUid: _currentUser!.uid,
-              toUid: memberUid,
-            );
-          }
+    if (widget.createdBy == _currentUser.uid && !widget.isGroup) {
+      for (final memberUid in widget.members) {
+        if (memberUid != _currentUser.uid) {
+          await _webrtcService.createOffer(
+            callId: widget.callId,
+            fromUid: _currentUser.uid,
+            toUid: memberUid,
+          );
         }
       }
     }
 
-    // Start call duration timer
     _callTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) setState(() => _callDuration++);
     });
   }
 
-  void _endCall() {
+  void _createGroupOffers() {
+    if (_currentUser == null) return;
+    for (final memberUid in widget.members) {
+      if (memberUid == _currentUser.uid) continue;
+      if (_pendingOfferPeers.contains(memberUid)) continue;
+
+      final key = WebRTCService.pcKeyForTest(_currentUser.uid, memberUid);
+      if (_webrtcService.peerConnections.containsKey(key)) continue;
+
+      _pendingOfferPeers.add(memberUid);
+      _webrtcService
+          .createOffer(
+        callId: widget.callId,
+        fromUid: _currentUser.uid,
+        toUid: memberUid,
+      )
+          .then((_) {
+        _pendingOfferPeers.remove(memberUid);
+      }).catchError((_) {
+        _pendingOfferPeers.remove(memberUid);
+      });
+    }
+  }
+
+  Future<void> _endCall() async {
+    if (_callEnded) return;
+    _callEnded = true;
+
     _callTimer?.cancel();
     _callSub?.cancel();
     _signalsSub?.cancel();
     _groupCallSub?.cancel();
+    _groupCallDebounce?.cancel();
     WakelockPlus.disable();
-    _callService.leaveCall(widget.callId, _currentUser!.uid);
-    _callService.cleanupCallData(widget.callId);
-    _webrtcService.dispose();
 
     _sendCallMessage();
+
+    await _callService.leaveCall(widget.callId, _currentUser!.uid);
+    _webrtcService.dispose();
+
+    Future.delayed(const Duration(seconds: 2), () {
+      _callService.cleanupCallData(widget.callId);
+    });
 
     if (mounted) {
       Navigator.of(context).pop();
@@ -219,7 +240,8 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
       GroupService().sendCallMessage(
         groupId: widget.groupId!,
         senderId: _currentUser.uid,
-        senderName: _currentUser.displayName ?? _currentUser.email ?? 'Unknown',
+        senderName:
+            _currentUser.displayName ?? _currentUser.email ?? 'Unknown',
         callType: callTypeStr,
         callStatus: 'active',
         durationSeconds: duration,
@@ -228,7 +250,8 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
       DirectService().sendCallMessage(
         chatId: widget.chatId!,
         senderId: _currentUser.uid,
-        senderName: _currentUser.displayName ?? _currentUser.email ?? 'Unknown',
+        senderName:
+            _currentUser.displayName ?? _currentUser.email ?? 'Unknown',
         callType: callTypeStr,
         callStatus: 'active',
         durationSeconds: duration,
@@ -256,19 +279,25 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
   }
 
   String _formatDuration(int totalSeconds) {
-    final minutes = totalSeconds ~/ 60;
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
     final seconds = totalSeconds % 60;
+    if (hours > 0) {
+      return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    }
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    WakelockPlus.disable();
     _callTimer?.cancel();
     _callSub?.cancel();
     _signalsSub?.cancel();
     _groupCallSub?.cancel();
+    _groupCallDebounce?.cancel();
+    _localRenderer?.srcObject = null;
+    _remoteRenderer?.srcObject = null;
     _localRenderer?.dispose();
     _remoteRenderer?.dispose();
     _webrtcService.dispose();
@@ -277,8 +306,9 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Keep audio alive in background - do not toggle video off
-    // WebRTC peer connections continue running in background
+    if (state == AppLifecycleState.resumed && _callEnded) {
+      if (mounted) Navigator.of(context).pop();
+    }
   }
 
   @override
@@ -308,7 +338,6 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
 
     return Stack(
       children: [
-        // Remote video - fills entire area, centered
         if (hasRemoteStream)
           Positioned.fill(
             child: FittedBox(
@@ -319,7 +348,8 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
                 height: 240,
                 child: RTCVideoView(
                   _remoteRenderer!,
-                  objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                  objectFit:
+                      RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
                 ),
               ),
             ),
@@ -332,12 +362,14 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
               children: [
                 CircleAvatar(
                   radius: 60,
-                  backgroundColor: const Color(0xFFFE4EF0).withValues(alpha: 0.2),
+                  backgroundColor: const Color(0xFFFE4EF0)
+                      .withValues(alpha: 0.2),
                   child: Text(
                     widget.callName.isNotEmpty
                         ? widget.callName[0].toUpperCase()
                         : '?',
-                    style: const TextStyle(fontSize: 40, color: Colors.white),
+                    style:
+                        const TextStyle(fontSize: 40, color: Colors.white),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -349,7 +381,6 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
               ],
             ),
           ),
-        // Local video PIP - centered top area
         if (hasLocalStream)
           Positioned(
             top: 16,
@@ -364,13 +395,13 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
                   child: RTCVideoView(
                     _localRenderer!,
                     mirror: true,
-                    objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                    objectFit:
+                        RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
                   ),
                 ),
               ),
             ),
           ),
-        // Name and duration overlay - centered at top
         Positioned(
           top: hasLocalStream ? 180 : 16,
           left: 0,
@@ -390,7 +421,8 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
               Text(
                 _formatDuration(_callDuration),
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white70, fontSize: 14),
+                style:
+                    const TextStyle(color: Colors.white70, fontSize: 14),
               ),
             ],
           ),
@@ -407,7 +439,8 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
         children: [
           CircleAvatar(
             radius: 70,
-            backgroundColor: const Color(0xFFFE4EF0).withValues(alpha: 0.2),
+            backgroundColor:
+                const Color(0xFFFE4EF0).withValues(alpha: 0.2),
             child: Text(
               widget.callName.isNotEmpty
                   ? widget.callName[0].toUpperCase()
@@ -436,7 +469,8 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
             Text(
               '${widget.members.length} participants',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white54, fontSize: 14),
+              style:
+                  const TextStyle(color: Colors.white54, fontSize: 14),
             ),
           ],
           const SizedBox(height: 48),
@@ -450,7 +484,9 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
                 isActive: !_isMuted,
               ),
               _buildControlButton(
-                icon: _isSpeakerOn ? Icons.volume_up : Icons.volume_down,
+                icon: _isSpeakerOn
+                    ? Icons.volume_up
+                    : Icons.volume_down,
                 label: _isSpeakerOn ? 'Speaker' : 'Earpiece',
                 onTap: _toggleSpeaker,
                 isActive: true,
@@ -490,14 +526,17 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
               isActive: true,
             ),
             _buildControlButton(
-              icon: _isVideoOff ? Icons.videocam_off : Icons.videocam,
+              icon:
+                  _isVideoOff ? Icons.videocam_off : Icons.videocam,
               label: _isVideoOff ? 'Camera On' : 'Camera Off',
               onTap: _toggleVideo,
               isActive: !_isVideoOff,
             ),
           ],
           _buildControlButton(
-            icon: _isSpeakerOn ? Icons.volume_up : Icons.volume_down,
+            icon: _isSpeakerOn
+                ? Icons.volume_up
+                : Icons.volume_down,
             label: _isSpeakerOn ? 'Speaker' : 'Earpiece',
             onTap: _toggleSpeaker,
             isActive: true,
@@ -540,14 +579,16 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
             ),
             child: Icon(
               icon,
-              color: iconColor ?? (isActive ? Colors.white : Colors.white70),
+              color:
+                  iconColor ?? (isActive ? Colors.white : Colors.white70),
               size: 28,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             label,
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
+            style:
+                const TextStyle(color: Colors.white70, fontSize: 12),
           ),
         ],
       ),

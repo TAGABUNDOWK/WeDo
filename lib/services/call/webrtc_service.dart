@@ -10,18 +10,20 @@ class WebRTCService {
 
   final Map<String, RTCPeerConnection> _peerConnections = {};
   final Map<String, MediaStream> _remoteStreams = {};
+  final Map<String, List<RTCIceCandidate>> _pendingCandidates = {};
   MediaStream? _localStream;
 
   final StreamController<MediaStream> _localStreamController =
       StreamController<MediaStream>.broadcast();
   final StreamController<MediaStream> _remoteStreamController =
       StreamController<MediaStream>.broadcast();
-  final StreamController<RTCPeerConnectionState> _connectionStateController =
-      StreamController<RTCPeerConnectionState>.broadcast();
+  final StreamController<(String peerId, RTCPeerConnectionState state)>
+      _connectionStateController =
+      StreamController<(String peerId, RTCPeerConnectionState state)>.broadcast();
 
   Stream<MediaStream> get onLocalStream => _localStreamController.stream;
   Stream<MediaStream> get onRemoteStream => _remoteStreamController.stream;
-  Stream<RTCPeerConnectionState> get onConnectionState =>
+  Stream<(String peerId, RTCPeerConnectionState state)> get onConnectionState =>
       _connectionStateController.stream;
 
   Map<String, RTCPeerConnection> get peerConnections => _peerConnections;
@@ -29,7 +31,15 @@ class WebRTCService {
   MediaStream? get localStream => _localStream;
 
   bool _isAudioOnly = false;
-  Function(String fromUid, String candidateJson)? onIceCandidateGenerated;
+  Function(String peerId, String candidateJson)? onIceCandidateGenerated;
+
+  /// Normalized key: always alphabetical order so A_B == B_A lookup works.
+  static String _pcKey(String uid1, String uid2) {
+    return uid1.compareTo(uid2) < 0 ? '${uid1}_$uid2' : '${uid2}_$uid1';
+  }
+
+  /// Public accessor for normalized key (used by CallScreen group call logic).
+  static String pcKeyForTest(String uid1, String uid2) => _pcKey(uid1, uid2);
 
   RTCSessionDescription _applyBitrateCap(
     RTCSessionDescription desc, {
@@ -57,10 +67,15 @@ class WebRTCService {
         inAudio = false;
       }
 
-      // Add b=AS after the last fmtp line in each media section
-      if (inVideo && line.startsWith('a=fmtp:') && i + 1 < lines.length && !lines[i + 1].startsWith('b=')) {
+      if (inVideo &&
+          line.startsWith('a=fmtp:') &&
+          i + 1 < lines.length &&
+          !lines[i + 1].startsWith('b=')) {
         result.add('b=AS:$videoKbps');
-      } else if (inAudio && line.startsWith('a=fmtp:') && i + 1 < lines.length && !lines[i + 1].startsWith('b=')) {
+      } else if (inAudio &&
+          line.startsWith('a=fmtp:') &&
+          i + 1 < lines.length &&
+          !lines[i + 1].startsWith('b=')) {
         result.add('b=AS:$audioKbps');
       }
     }
@@ -70,6 +85,14 @@ class WebRTCService {
 
   Future<void> initialize({bool audioOnly = false}) async {
     _isAudioOnly = audioOnly;
+
+    final turnUser = dotenv.env['TURN_USERNAME'] ?? '';
+    final turnPass = dotenv.env['TURN_CREDENTIAL'] ?? '';
+    if (turnUser.isEmpty || turnPass.isEmpty) {
+      debugPrint(
+        'WARNING: TURN credentials are empty. Calls may fail behind strict firewalls.',
+      );
+    }
 
     final mediaConstraints = {
       'audio': true,
@@ -91,7 +114,6 @@ class WebRTCService {
     } catch (e) {
       debugPrint('Error getting user media with video: $e');
 
-      // If video failed and we weren't already audio-only, fall back to audio only
       if (!audioOnly) {
         debugPrint('Falling back to audio-only mode');
         _isAudioOnly = true;
@@ -100,7 +122,8 @@ class WebRTCService {
             'audio': true,
             'video': false,
           };
-          _localStream = await navigator.mediaDevices.getUserMedia(audioConstraints);
+          _localStream =
+              await navigator.mediaDevices.getUserMedia(audioConstraints);
           _localStreamController.add(_localStream!);
         } catch (audioError) {
           debugPrint('Error getting audio-only media: $audioError');
@@ -110,33 +133,39 @@ class WebRTCService {
   }
 
   Future<RTCPeerConnection?> _createPeerConnection(String peerId) async {
-    final config = {
-      'iceServers': [
-        {'urls': 'stun:stun.relay.metered.ca:80'},
+    final turnUser = dotenv.env['TURN_USERNAME'] ?? '';
+    final turnPass = dotenv.env['TURN_CREDENTIAL'] ?? '';
+
+    final iceServers = <Map<String, dynamic>>[
+      {'urls': 'stun:stun.relay.metered.ca:80'},
+    ];
+
+    if (turnUser.isNotEmpty && turnPass.isNotEmpty) {
+      iceServers.addAll([
         {
           'urls': 'turn:standard.relay.metered.ca:80',
-          'username': dotenv.env['TURN_USERNAME'] ?? '',
-          'credential': dotenv.env['TURN_CREDENTIAL'] ?? '',
+          'username': turnUser,
+          'credential': turnPass,
         },
         {
           'urls': 'turn:standard.relay.metered.ca:80?transport=tcp',
-          'username': dotenv.env['TURN_USERNAME'] ?? '',
-          'credential': dotenv.env['TURN_CREDENTIAL'] ?? '',
+          'username': turnUser,
+          'credential': turnPass,
         },
         {
           'urls': 'turn:standard.relay.metered.ca:443',
-          'username': dotenv.env['TURN_USERNAME'] ?? '',
-          'credential': dotenv.env['TURN_CREDENTIAL'] ?? '',
+          'username': turnUser,
+          'credential': turnPass,
         },
         {
           'urls': 'turns:standard.relay.metered.ca:443?transport=tcp',
-          'username': dotenv.env['TURN_USERNAME'] ?? '',
-          'credential': dotenv.env['TURN_CREDENTIAL'] ?? '',
+          'username': turnUser,
+          'credential': turnPass,
         },
-      ],
-    };
+      ]);
+    }
 
-    debugPrint('TURN Username loaded: ${dotenv.env['TURN_USERNAME']?.isNotEmpty == true ? "YES" : "EMPTY"}');
+    final config = {'iceServers': iceServers};
 
     try {
       final pc = await createPeerConnection(config);
@@ -153,7 +182,6 @@ class WebRTCService {
           'sdpMid': candidate.sdpMid,
           'sdpMLineIndex': candidate.sdpMLineIndex,
         });
-        debugPrint('ICE candidate generated for $peerId: $candidateJson');
         onIceCandidateGenerated?.call(peerId, candidateJson);
       };
 
@@ -166,8 +194,13 @@ class WebRTCService {
       };
 
       pc.onConnectionState = (RTCPeerConnectionState state) {
-        _connectionStateController.add(state);
+        _connectionStateController.add((peerId, state));
         debugPrint('Peer connection state with $peerId: $state');
+
+        if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
+            state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+          _handlePeerDisconnect(peerId);
+        }
       };
 
       return pc;
@@ -177,12 +210,42 @@ class WebRTCService {
     }
   }
 
+  void _handlePeerDisconnect(String peerId) {
+    _remoteStreams.remove(peerId);
+    debugPrint('Remote stream removed for disconnected peer: $peerId');
+  }
+
+  Future<void> _disposePeerConnection(String key) async {
+    final pc = _peerConnections.remove(key);
+    if (pc != null) {
+      try {
+        await pc.close();
+      } catch (_) {}
+    }
+    _pendingCandidates.remove(key);
+  }
+
+  Future<void> _flushPendingCandidates(String key, RTCPeerConnection pc) async {
+    final candidates = _pendingCandidates.remove(key);
+    if (candidates == null || candidates.isEmpty) return;
+    debugPrint('Flushing ${candidates.length} buffered ICE candidates for $key');
+    for (final c in candidates) {
+      try {
+        await pc.addCandidate(c);
+      } catch (e) {
+        debugPrint('Error adding buffered ICE candidate: $e');
+      }
+    }
+  }
+
   Future<void> createOffer({
     required String callId,
     required String fromUid,
     required String toUid,
   }) async {
-    final key = '${fromUid}_$toUid';
+    final key = _pcKey(fromUid, toUid);
+    await _disposePeerConnection(key);
+
     final pc = await _createPeerConnection(toUid);
     if (pc == null) return;
     _peerConnections[key] = pc;
@@ -192,9 +255,7 @@ class WebRTCService {
       'offerToReceiveVideo': !_isAudioOnly,
     });
 
-    final cappedOffer = _isAudioOnly
-        ? offer
-        : _applyBitrateCap(offer);
+    final cappedOffer = _isAudioOnly ? offer : _applyBitrateCap(offer);
     await pc.setLocalDescription(cappedOffer);
 
     final sdp = jsonEncode({
@@ -216,7 +277,9 @@ class WebRTCService {
     required String toUid,
     required String sdpJson,
   }) async {
-    final key = '${fromUid}_$toUid';
+    final key = _pcKey(fromUid, toUid);
+    await _disposePeerConnection(key);
+
     final pc = await _createPeerConnection(fromUid);
     if (pc == null) return;
     _peerConnections[key] = pc;
@@ -229,14 +292,14 @@ class WebRTCService {
 
     await pc.setRemoteDescription(offer);
 
+    await _flushPendingCandidates(key, pc);
+
     final answer = await pc.createAnswer({
       'offerToReceiveAudio': true,
       'offerToReceiveVideo': !_isAudioOnly,
     });
 
-    final cappedAnswer = _isAudioOnly
-        ? answer
-        : _applyBitrateCap(answer);
+    final cappedAnswer = _isAudioOnly ? answer : _applyBitrateCap(answer);
     await pc.setLocalDescription(cappedAnswer);
 
     final answerJson = jsonEncode({
@@ -257,7 +320,7 @@ class WebRTCService {
     required String toUid,
     required String sdpJson,
   }) async {
-    final key = '${toUid}_$fromUid';
+    final key = _pcKey(fromUid, toUid);
     final pc = _peerConnections[key];
     if (pc == null) {
       debugPrint('No peer connection found for $key');
@@ -271,6 +334,8 @@ class WebRTCService {
     );
 
     await pc.setRemoteDescription(answer);
+
+    await _flushPendingCandidates(key, pc);
   }
 
   Future<void> handleIceCandidate({
@@ -278,10 +343,7 @@ class WebRTCService {
     required String toUid,
     required String candidateJson,
   }) async {
-    final key = '${toUid}_$fromUid';
-    final pc = _peerConnections[key];
-    if (pc == null) return;
-
+    final key = _pcKey(fromUid, toUid);
     final data = jsonDecode(candidateJson);
     final candidate = RTCIceCandidate(
       data['candidate'] as String,
@@ -289,7 +351,19 @@ class WebRTCService {
       data['sdpMLineIndex'] as int?,
     );
 
-    await pc.addCandidate(candidate);
+    final pc = _peerConnections[key];
+    if (pc == null) {
+      debugPrint('PC not ready, buffering ICE candidate for $key');
+      _pendingCandidates.putIfAbsent(key, () => []).add(candidate);
+      return;
+    }
+
+    try {
+      await pc.addCandidate(candidate);
+    } catch (e) {
+      debugPrint('Error adding ICE candidate, buffering: $e');
+      _pendingCandidates.putIfAbsent(key, () => []).add(candidate);
+    }
   }
 
   Future<void> toggleAudio() async {
@@ -319,10 +393,9 @@ class WebRTCService {
   }
 
   Future<void> dispose() async {
-    for (final pc in _peerConnections.values) {
-      await pc.close();
+    for (final key in _peerConnections.keys.toList()) {
+      await _disposePeerConnection(key);
     }
-    _peerConnections.clear();
 
     if (_localStream != null) {
       for (final track in _localStream!.getTracks()) {
@@ -333,6 +406,7 @@ class WebRTCService {
     }
 
     _remoteStreams.clear();
+    _pendingCandidates.clear();
     await _localStreamController.close();
     await _remoteStreamController.close();
     await _connectionStateController.close();

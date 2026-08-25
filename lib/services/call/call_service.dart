@@ -6,6 +6,9 @@ import '../../utils/constants.dart';
 class CallService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
+  final Map<String, List<Map<String, dynamic>>> _iceBuffer = {};
+  Timer? _iceFlushTimer;
+
   CollectionReference<Map<String, dynamic>> get _calls =>
       _db.collection(AppConstants.callsCollection);
 
@@ -39,6 +42,10 @@ class CallService {
   }
 
   Future<void> joinCall(String callId, String uid) async {
+    final doc = await _calls.doc(callId).get();
+    final status = doc.data()?['status'] as String?;
+    if (status == 'ended' || status == 'missed') return;
+
     await _calls.doc(callId).update({
       'status': CallStatus.active.value,
       'startedAt': FieldValue.serverTimestamp(),
@@ -136,13 +143,56 @@ class CallService {
     required String toUid,
     required String candidate,
   }) async {
-    await _signals(callId).add({
+    final bufferKey = '${callId}_${fromUid}_$toUid';
+    _iceBuffer.putIfAbsent(bufferKey, () => []).add({
       'fromUid': fromUid,
       'toUid': toUid,
       'type': 'candidate',
       'candidate': candidate,
-      'createdAt': FieldValue.serverTimestamp(),
     });
+
+    if ((_iceBuffer[bufferKey]?.length ?? 0) >= 5) {
+      _flushIceBuffer(bufferKey, callId);
+    } else {
+      _iceFlushTimer?.cancel();
+      _iceFlushTimer = Timer(const Duration(milliseconds: 500), () {
+        _flushAllIceBuffers(callId);
+      });
+    }
+  }
+
+  void _flushIceBuffer(String bufferKey, String callId) {
+    final candidates = _iceBuffer.remove(bufferKey);
+    if (candidates == null || candidates.isEmpty) return;
+
+    final batch = _db.batch();
+    for (final data in candidates) {
+      final ref = _signals(callId).doc();
+      batch.set(ref, {
+        ...data,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+    batch.commit();
+  }
+
+  void _flushAllIceBuffers(String callId) {
+    final keys = _iceBuffer.keys.toList();
+    for (final key in keys) {
+      _flushIceBuffer(key, callId);
+    }
+  }
+
+  Future<void> markSignalProcessed(
+    String callId,
+    String signalId,
+    String uid,
+  ) async {
+    try {
+      await _signals(callId).doc(signalId).update({
+        'processedBy': FieldValue.arrayUnion([uid]),
+      });
+    } catch (_) {}
   }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> getSignalsForUser(
@@ -156,6 +206,7 @@ class CallService {
   }
 
   Future<void> deleteCallSignals(String callId) async {
+    _flushAllIceBuffers(callId);
     final signals = await _signals(callId).get();
     final batch = _db.batch();
     for (final doc in signals.docs) {
@@ -183,5 +234,10 @@ class CallService {
       batch.delete(doc.reference);
     }
     await batch.commit();
+  }
+
+  void dispose() {
+    _iceFlushTimer?.cancel();
+    _iceBuffer.clear();
   }
 }

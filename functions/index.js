@@ -168,6 +168,38 @@ exports.onCallCreated = functions.firestore
     console.log(`Call notification sent to ${tokens.length} devices, ${results.successCount} succeeded`);
   });
 
+// ──────────────────── Call Timeout (auto-end unanswered calls after 60s) ────────────────────
+
+async function timeoutUnansweredCalls() {
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - 60 * 1000);
+
+  const staleCalls = await db.collection('calls')
+    .where('status', '==', 'ringing')
+    .where('createdAt', '<=', cutoff)
+    .limit(50)
+    .get();
+
+  if (staleCalls.empty) return;
+
+  const batch = db.batch();
+  for (const doc of staleCalls.docs) {
+    batch.update(doc.ref, {
+      status: 'ended',
+      endedAt: new Date(),
+    });
+  }
+  await batch.commit();
+  console.log(`Timed out ${staleCalls.size} unanswered calls`);
+}
+
+exports.scheduledCallTimeout = functions.pubsub
+  .schedule('every 1 minutes')
+  .timeZone('Asia/Manila')
+  .onRun(async (context) => {
+    await timeoutUnansweredCalls();
+  });
+
 // ──────────────────── Poll Vote Aggregation ────────────────────
 
 async function aggregatePollVotes(pollRef) {
