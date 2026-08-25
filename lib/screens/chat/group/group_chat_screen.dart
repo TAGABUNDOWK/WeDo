@@ -356,9 +356,28 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
             if (group != null) {
               _groupName = group.name;
             }
-            return Text(
-              _groupName,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+            final photoUrl = group?.photoUrl;
+            return Row(
+              children: [
+                CircleAvatar(
+                  radius: 14,
+                  backgroundColor: Colors.white.withValues(alpha: 0.2),
+                  backgroundImage: photoUrl != null && photoUrl.isNotEmpty
+                      ? NetworkImage(photoUrl)
+                      : null,
+                  child: photoUrl == null || photoUrl.isEmpty
+                      ? const Icon(Icons.group, color: Colors.white, size: 16)
+                      : null,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _groupName,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             );
           },
         ),

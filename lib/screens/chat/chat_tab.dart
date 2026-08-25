@@ -272,6 +272,7 @@ class _ChatTabState extends State<ChatTab> {
                                 hasUnread: hasUnread,
                                 lastSenderId: chat.lastMessageSenderId,
                                 currentUserId: currentUser.uid,
+                                avatarUrl: user?.photoUrl,
                                 onTap: () => _openDirectChat(chat.id, otherUid),
                               );
                             },

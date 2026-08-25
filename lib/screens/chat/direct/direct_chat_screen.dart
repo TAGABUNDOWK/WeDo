@@ -49,6 +49,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   final _currentUser = FirebaseAuth.instance.currentUser;
   final _imagePicker = ImagePicker();
   String _otherName = '';
+  String? _otherPhotoUrl;
   Map<String, String> _nicknames = {};
   bool _isUploading = false;
   final Map<String, ChatEvent> _events = {};
@@ -75,6 +76,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     if (mounted) {
       setState(() {
         _otherName = user?.displayName ?? widget.otherUid;
+        _otherPhotoUrl = user?.photoUrl;
         _nicknames = nicknames;
         _chatTheme = theme;
       });
@@ -349,9 +351,27 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       backgroundColor: t.background,
       appBar: AppBar(
         backgroundColor: t.appBarBackground,
-        title: Text(
-          _getDisplayName(),
-          style: TextStyle(color: t.isDark ? Colors.white : Colors.white, fontWeight: FontWeight.w600),
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 14,
+              backgroundColor: Colors.white.withValues(alpha: 0.2),
+              backgroundImage: _otherPhotoUrl != null && _otherPhotoUrl!.isNotEmpty
+                  ? NetworkImage(_otherPhotoUrl!)
+                  : null,
+              child: _otherPhotoUrl == null || _otherPhotoUrl!.isEmpty
+                  ? const Icon(Icons.person, color: Colors.white, size: 16)
+                  : null,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _getDisplayName(),
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
         ),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
