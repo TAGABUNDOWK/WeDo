@@ -56,6 +56,63 @@ exports.scheduledSessionCleanup = functions.pubsub
     await cleanupExpiredSessions();
   });
 
+// ──────────────────── Session Cancelled Notification (sends FCM when session is cancelled) ────────────────────
+
+exports.onSessionCancelled = functions.firestore
+  .document('sessions/{sessionId}')
+  .onUpdate(async (change, context) => {
+    const before = change.before.data();
+    const after = change.after.data();
+
+    // Only trigger on status changing TO 'cancelled'
+    if (before.status === after.status) return;
+    if (after.status !== 'cancelled') return;
+
+    const sessionId = context.params.sessionId;
+    const hostId = after.hostId;
+    const topic = after.topic || 'PickFight';
+    const invitedUserIds = after.invitedUserIds || [];
+    const participantUids = after.participantUids || [];
+
+    // Combine invited + participant UIDs (excluding host)
+    const recipientUids = [...new Set([...invitedUserIds, ...participantUids])]
+      .filter(uid => uid !== hostId);
+
+    if (recipientUids.length === 0) return;
+
+    // Get host name for notification
+    const hostDoc = await db.collection('users').doc(hostId).get();
+    const hostName = hostDoc.data()?.display_name || hostDoc.data()?.displayName || 'Host';
+
+    // Gather FCM tokens
+    const tokens = [];
+    for (const uid of recipientUids) {
+      const userDoc = await db.collection('users').doc(uid).get();
+      const token = userDoc.data()?.fcm_token;
+      if (token) tokens.push(token);
+    }
+
+    if (tokens.length === 0) return;
+
+    const { getMessaging } = require('firebase-admin/messaging');
+    const messaging = getMessaging();
+
+    const results = await messaging.sendEachForMulticast({
+      tokens,
+      data: {
+        sessionId,
+        type: 'session_cancelled',
+      },
+      notification: {
+        title: 'PickFight Cancelled',
+        body: `${hostName} cancelled the PickFight: "${topic}"`,
+      },
+      android: { priority: 'high' },
+    });
+
+    console.log(`Session cancel notification sent to ${tokens.length} devices, ${results.successCount} succeeded`);
+  });
+
 // ──────────────────── Call Notification (sends FCM when a call is created) ────────────────────
 
 exports.onCallCreated = functions.firestore

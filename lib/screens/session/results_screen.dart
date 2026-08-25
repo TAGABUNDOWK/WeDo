@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/session_entity.dart';
 import '../../services/session/session_service.dart';
+import '../../services/session/session_refresh_notifier.dart';
 
 class ResultsScreen extends StatefulWidget {
   final String sessionId;
@@ -11,10 +12,28 @@ class ResultsScreen extends StatefulWidget {
   State<ResultsScreen> createState() => _ResultsScreenState();
 }
 
-class _ResultsScreenState extends State<ResultsScreen> {
+class _ResultsScreenState extends State<ResultsScreen> with TickerProviderStateMixin {
   final _service = SessionService();
   final _bg = const Color(0xFF190831);
   static const _accent = Color(0xFFFFD700);
+  static const _shieldBlue = Color(0xFF2196F3);
+
+  late final AnimationController _shieldPulseController;
+
+  @override
+  void initState() {
+    super.initState();
+    _shieldPulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _shieldPulseController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -72,6 +91,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
     final winnerCardEmoji = results['winnerCardEmoji'] as String? ?? '';
     final totalParticipants = results['totalParticipants'] as int? ?? 0;
     final standings = results['standings'] as Map<String, dynamic>? ?? {};
+    final speedShieldCardId = results['speedShieldWinnerCardId'] as String? ?? '';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -82,7 +102,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
           const SizedBox(height: 28),
           _buildSectionHeader('Card Tally', 'X marks = how many players eliminated this card'),
           const SizedBox(height: 12),
-          _buildCardTally(cardTally, winnerCardId),
+          _buildCardTally(cardTally, winnerCardId, speedShieldCardId),
           if (standings.isNotEmpty) ...[
             const SizedBox(height: 28),
             _buildSectionHeader('Leaderboard', 'Ranked by decision time (fastest first)'),
@@ -172,7 +192,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
     );
   }
 
-  Widget _buildCardTally(Map<String, dynamic> cardTally, String winnerCardId) {
+  Widget _buildCardTally(Map<String, dynamic> cardTally, String winnerCardId, String speedShieldCardId) {
     if (cardTally.isEmpty) return const SizedBox.shrink();
 
     final sorted = cardTally.entries.toList()
@@ -183,30 +203,37 @@ class _ResultsScreenState extends State<ResultsScreen> {
             .compareTo(aData['eliminationCount'] as int);
       });
 
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 10,
-        crossAxisSpacing: 10,
-        childAspectRatio: 1.5,
-      ),
-      itemCount: sorted.length,
-      itemBuilder: (context, index) {
-        final entry = sorted[index];
-        final cardId = entry.key;
-        final data = entry.value as Map<String, dynamic>;
-        final title = data['title'] as String? ?? '';
-        final emoji = data['emoji'] as String? ?? '';
-        final eliminations = data['eliminationCount'] as int? ?? 0;
-        final isWinner = cardId == winnerCardId;
+    return AnimatedBuilder(
+      animation: _shieldPulseController,
+      builder: (context, _) {
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            mainAxisSpacing: 10,
+            crossAxisSpacing: 10,
+            childAspectRatio: 1.5,
+          ),
+          itemCount: sorted.length,
+          itemBuilder: (context, index) {
+            final entry = sorted[index];
+            final cardId = entry.key;
+            final data = entry.value as Map<String, dynamic>;
+            final title = data['title'] as String? ?? '';
+            final emoji = data['emoji'] as String? ?? '';
+            final eliminations = data['eliminationCount'] as int? ?? 0;
+            final isWinner = cardId == winnerCardId;
+            final isSpeedShield = cardId == speedShieldCardId;
 
-        return _buildCardTile(
-          title: title,
-          emoji: emoji,
-          eliminations: eliminations,
-          isWinner: isWinner,
+            return _buildCardTile(
+              title: title,
+              emoji: emoji,
+              eliminations: eliminations,
+              isWinner: isWinner,
+              isSpeedShield: isSpeedShield,
+            );
+          },
         );
       },
     );
@@ -217,18 +244,29 @@ class _ResultsScreenState extends State<ResultsScreen> {
     required String emoji,
     required int eliminations,
     required bool isWinner,
+    required bool isSpeedShield,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: isWinner
-            ? _accent.withValues(alpha: 0.12)
-            : Colors.black.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(16),
-        border: isWinner
-            ? Border.all(color: _accent, width: 2)
-            : Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1),
-        boxShadow: isWinner
+    final isBoth = isWinner && isSpeedShield;
+    final showBluePulse = isSpeedShield;
+    final pulseAlpha = 0.15 + (_shieldPulseController.value * 0.30);
+
+    final borderColor = showBluePulse
+        ? _shieldBlue
+        : isWinner
+            ? _accent
+            : Colors.white.withValues(alpha: 0.08);
+
+    final borderWidth = (showBluePulse || isWinner) ? 2.0 : 1.0;
+
+    final boxShadow = showBluePulse
+        ? [
+            BoxShadow(
+              color: _shieldBlue.withValues(alpha: pulseAlpha),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ]
+        : isWinner
             ? [
                 BoxShadow(
                   color: _accent.withValues(alpha: 0.15),
@@ -236,17 +274,36 @@ class _ResultsScreenState extends State<ResultsScreen> {
                   offset: const Offset(0, 4),
                 ),
               ]
-            : null,
+            : null;
+
+    final bgColor = showBluePulse
+        ? _shieldBlue.withValues(alpha: 0.08)
+        : isWinner
+            ? _accent.withValues(alpha: 0.12)
+            : Colors.black.withValues(alpha: 0.35);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor, width: borderWidth),
+        boxShadow: boxShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              if (isWinner)
+              if (isBoth)
+                const Padding(
+                  padding: EdgeInsets.only(right: 2),
+                  child: Icon(Icons.emoji_events, color: _accent, size: 14),
+                ),
+              if (showBluePulse)
                 const Padding(
                   padding: EdgeInsets.only(right: 4),
-                  child: Icon(Icons.emoji_events, color: _accent, size: 16),
+                  child: Icon(Icons.shield, color: _shieldBlue, size: 14),
                 ),
               if (emoji.isNotEmpty)
                 Text(emoji, style: const TextStyle(fontSize: 16)),
@@ -258,15 +315,37 @@ class _ResultsScreenState extends State<ResultsScreen> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 12,
-                    fontWeight: isWinner ? FontWeight.w700 : FontWeight.w600,
-                    color: isWinner ? _accent : Colors.white,
+                    fontWeight: (isWinner || isSpeedShield) ? FontWeight.w700 : FontWeight.w600,
+                    color: showBluePulse
+                        ? _shieldBlue
+                        : isWinner
+                            ? _accent
+                            : Colors.white,
                   ),
                 ),
               ),
             ],
           ),
           const Spacer(),
-          if (isWinner)
+          if (isBoth)
+            const Text(
+              'Shielded Winner',
+              style: TextStyle(
+                color: _shieldBlue,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            )
+          else if (isSpeedShield)
+            const Text(
+              'Shielded',
+              style: TextStyle(
+                color: _shieldBlue,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            )
+          else if (isWinner)
             const Text(
               'Safe',
               style: TextStyle(
@@ -435,6 +514,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
   Widget _buildBackButton() {
     return GestureDetector(
       onTap: () {
+        SessionRefreshNotifier.instance.notifyRefresh();
         Navigator.of(context).popUntil((route) => route.isFirst);
       },
       child: Container(

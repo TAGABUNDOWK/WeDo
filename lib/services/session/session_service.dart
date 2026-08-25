@@ -244,10 +244,16 @@ class SessionService {
     }
   }
 
-  /// Removes a participant from the session's participants subcollection.
+  /// Removes a participant from the session's participants subcollection
+  /// and cleans up the participantUids array on the session document.
   Future<void> removeParticipant(String sessionId, String userId) async {
     try {
-      await _participants(sessionId).doc(userId).delete();
+      final batch = _db.batch();
+      batch.delete(_participants(sessionId).doc(userId));
+      batch.update(_sessions.doc(sessionId), {
+        'participantUids': FieldValue.arrayRemove([userId]),
+      });
+      await batch.commit();
     } on FirebaseException catch (e) {
       throw SessionException('Failed to leave session: ${e.message}');
     }
@@ -409,6 +415,13 @@ class SessionService {
         orderedStandings[entry.key] = entry.value;
       }
 
+      // ── Speed Shield: first player to finish gets their card protected ──
+      String speedShieldWinnerCardId = '';
+      if (sortedEntries.isNotEmpty) {
+        final fastest = sortedEntries.first.value;
+        speedShieldWinnerCardId = fastest['chosenWinnerCardId'] as String? ?? '';
+      }
+
       await _sessions.doc(sessionId).update({
         'status': SessionStatus.completed.value,
         'aggregatedResults': {
@@ -418,6 +431,7 @@ class SessionService {
           'winnerCardEmoji': winnerCardEmoji,
           'totalParticipants': finished.length,
           'standings': orderedStandings,
+          'speedShieldWinnerCardId': speedShieldWinnerCardId,
         },
       });
     } on FirebaseException catch (e) {
