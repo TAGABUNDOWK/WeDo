@@ -1,13 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../models/call.dart';
-import '../../services/call/call_service.dart';
-import '../../services/call/webrtc_service.dart';
-import '../../services/direct/direct_service.dart';
-import '../../services/group/group_service.dart';
+import '../../services/call/call_manager.dart';
 
 class CallScreen extends StatefulWidget {
   final String callId;
@@ -35,247 +31,41 @@ class CallScreen extends StatefulWidget {
   State<CallScreen> createState() => _CallScreenState();
 }
 
-class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
-  final CallService _callService = CallService();
-  final WebRTCService _webrtcService = WebRTCService();
-  final _currentUser = FirebaseAuth.instance.currentUser;
-
-  bool _isMuted = false;
-  bool _isVideoOff = false;
-  bool _isSpeakerOn = false;
-  bool _callEnded = false;
-  Timer? _callTimer;
-  int _callDuration = 0;
-  StreamSubscription? _callSub;
-  StreamSubscription? _signalsSub;
-  StreamSubscription? _groupCallSub;
-  final Set<String> _processedSignals = {};
-  final Set<String> _pendingOfferPeers = {};
-  Timer? _groupCallDebounce;
-
-  RTCVideoRenderer? _localRenderer;
-  RTCVideoRenderer? _remoteRenderer;
+class _CallScreenState extends State<CallScreen> {
+  final CallManager _callManager = CallManager();
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _initializeCall();
+    _callManager.addListener(_onCallUpdate);
   }
 
-  Future<void> _initializeCall() async {
-    final audioOnly = widget.callType == CallType.audio;
-
-    WakelockPlus.enable();
-
-    await _webrtcService.initialize(audioOnly: audioOnly);
-
-    _localRenderer = RTCVideoRenderer();
-    _remoteRenderer = RTCVideoRenderer();
-    await _localRenderer!.initialize();
-    await _remoteRenderer!.initialize();
-
-    _webrtcService.onLocalStream.listen((stream) {
-      if (mounted) {
-        setState(() {
-          _localRenderer!.srcObject = stream;
-        });
-      }
-    });
-
-    _webrtcService.onRemoteStream.listen((stream) {
-      if (mounted) {
-        setState(() {
-          _remoteRenderer!.srcObject = stream;
-        });
-      }
-    });
-
-    _webrtcService.onIceCandidateGenerated = (peerId, candidateJson) {
-      _callService.sendIceCandidate(
-        callId: widget.callId,
-        fromUid: _currentUser!.uid,
-        toUid: peerId,
-        candidate: candidateJson,
-      );
-    };
-
-    _webrtcService.onConnectionState.listen((event) {
-      final (peerId, state) = event;
-      debugPrint('Connection state with $peerId: $state');
-
-      if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
-          state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
-        if (!widget.isGroup) {
-          _endCall();
-        }
-      }
-    });
-
-    await _callService.joinCall(widget.callId, _currentUser!.uid);
-
-    _callSub = _callService.getCallStream(widget.callId).listen((call) {
-      if (!_callEnded && (call == null || call.status == CallStatus.ended)) {
-        _endCall();
-      }
-    });
-
-    _signalsSub = _callService
-        .getSignalsForUser(widget.callId, _currentUser.uid)
-        .listen((snapshot) {
-      for (final doc in snapshot.docs) {
-        if (_processedSignals.contains(doc.id)) continue;
-        _processedSignals.add(doc.id);
-
-        final data = doc.data();
-        final fromUid = data['fromUid'] as String;
-        final type = data['type'] as String;
-
-        if (type == 'offer') {
-          _webrtcService.handleOffer(
-            callId: widget.callId,
-            fromUid: fromUid,
-            toUid: _currentUser.uid,
-            sdpJson: data['sdp'] as String,
-          );
-        } else if (type == 'answer') {
-          _webrtcService.handleAnswer(
-            fromUid: fromUid,
-            toUid: _currentUser.uid,
-            sdpJson: data['sdp'] as String,
-          );
-        } else if (type == 'candidate') {
-          _webrtcService.handleIceCandidate(
-            fromUid: fromUid,
-            toUid: _currentUser.uid,
-            candidateJson: data['candidate'] as String,
-          );
-        }
-      }
-    });
-
-    if (widget.isGroup) {
-      _groupCallSub = _callService.getCallStream(widget.callId).listen((call) {
-        if (call == null || call.status != CallStatus.active) return;
-        _groupCallDebounce?.cancel();
-        _groupCallDebounce = Timer(const Duration(milliseconds: 500), () {
-          _createGroupOffers();
-        });
-      });
-    }
-
-    if (widget.createdBy == _currentUser.uid && !widget.isGroup) {
-      for (final memberUid in widget.members) {
-        if (memberUid != _currentUser.uid) {
-          await _webrtcService.createOffer(
-            callId: widget.callId,
-            fromUid: _currentUser.uid,
-            toUid: memberUid,
-          );
-        }
-      }
-    }
-
-    _callTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) setState(() => _callDuration++);
-    });
+  @override
+  void dispose() {
+    _callManager.removeListener(_onCallUpdate);
+    super.dispose();
   }
 
-  void _createGroupOffers() {
-    if (_currentUser == null) return;
-    for (final memberUid in widget.members) {
-      if (memberUid == _currentUser.uid) continue;
-      if (_pendingOfferPeers.contains(memberUid)) continue;
+  void _onCallUpdate() {
+    if (!mounted) return;
 
-      final key = WebRTCService.pcKeyForTest(_currentUser.uid, memberUid);
-      if (_webrtcService.peerConnections.containsKey(key)) continue;
-
-      _pendingOfferPeers.add(memberUid);
-      _webrtcService
-          .createOffer(
-        callId: widget.callId,
-        fromUid: _currentUser.uid,
-        toUid: memberUid,
-      )
-          .then((_) {
-        _pendingOfferPeers.remove(memberUid);
-      }).catchError((_) {
-        _pendingOfferPeers.remove(memberUid);
-      });
+    if (_callManager.activeCall == null) {
+      Navigator.of(context).pop();
+      return;
     }
+
+    setState(() {});
+  }
+
+  void _minimizeCall() {
+    if (mounted) Navigator.of(context).pop();
   }
 
   Future<void> _endCall() async {
-    if (_callEnded) return;
-    _callEnded = true;
-
-    _callTimer?.cancel();
-    _callSub?.cancel();
-    _signalsSub?.cancel();
-    _groupCallSub?.cancel();
-    _groupCallDebounce?.cancel();
-    WakelockPlus.disable();
-
-    _sendCallMessage();
-
-    await _callService.leaveCall(widget.callId, _currentUser!.uid);
-    _webrtcService.dispose();
-
-    Future.delayed(const Duration(seconds: 2), () {
-      _callService.cleanupCallData(widget.callId);
-    });
-
+    await _callManager.endActiveCall();
     if (mounted) {
       Navigator.of(context).pop();
     }
-  }
-
-  void _sendCallMessage() {
-    if (_currentUser == null) return;
-
-    final callTypeStr = widget.callType == CallType.video ? 'video' : 'audio';
-    final duration = _callDuration;
-
-    if (widget.isGroup && widget.groupId != null) {
-      GroupService().sendCallMessage(
-        groupId: widget.groupId!,
-        senderId: _currentUser.uid,
-        senderName:
-            _currentUser.displayName ?? _currentUser.email ?? 'Unknown',
-        callType: callTypeStr,
-        callStatus: 'active',
-        durationSeconds: duration,
-      );
-    } else if (widget.chatId != null) {
-      DirectService().sendCallMessage(
-        chatId: widget.chatId!,
-        senderId: _currentUser.uid,
-        senderName:
-            _currentUser.displayName ?? _currentUser.email ?? 'Unknown',
-        callType: callTypeStr,
-        callStatus: 'active',
-        durationSeconds: duration,
-      );
-    }
-  }
-
-  void _toggleMute() {
-    setState(() => _isMuted = !_isMuted);
-    _webrtcService.toggleAudio();
-  }
-
-  void _toggleVideo() {
-    setState(() => _isVideoOff = !_isVideoOff);
-    _webrtcService.toggleVideo();
-  }
-
-  void _toggleSpeaker() {
-    setState(() => _isSpeakerOn = !_isSpeakerOn);
-    _webrtcService.setSpeakerOn(_isSpeakerOn);
-  }
-
-  void _switchCamera() {
-    _webrtcService.switchCamera();
   }
 
   String _formatDuration(int totalSeconds) {
@@ -289,52 +79,37 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
   }
 
   @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _callTimer?.cancel();
-    _callSub?.cancel();
-    _signalsSub?.cancel();
-    _groupCallSub?.cancel();
-    _groupCallDebounce?.cancel();
-    _localRenderer?.srcObject = null;
-    _remoteRenderer?.srcObject = null;
-    _localRenderer?.dispose();
-    _remoteRenderer?.dispose();
-    _webrtcService.dispose();
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _callEnded) {
-      if (mounted) Navigator.of(context).pop();
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
     final isVideo = widget.callType == CallType.video;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF1A0A2E),
-      body: SizedBox.expand(
-        child: SafeArea(
-          child: isVideo
-              ? Column(
-                  children: [
-                    Expanded(child: _buildVideoView()),
-                    _buildControls(),
-                  ],
-                )
-              : _buildAudioView(),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _minimizeCall();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFF1A0A2E),
+        body: SizedBox.expand(
+          child: SafeArea(
+            child: isVideo
+                ? Column(
+                    children: [
+                      Expanded(child: _buildVideoView()),
+                      _buildControls(),
+                    ],
+                  )
+                : _buildAudioView(),
+          ),
         ),
       ),
     );
   }
 
   Widget _buildVideoView() {
-    final hasRemoteStream = _remoteRenderer?.srcObject != null;
-    final hasLocalStream = _localRenderer?.srcObject != null;
+    final localRenderer = _callManager.localRenderer;
+    final remoteRenderer = _callManager.remoteRenderer;
+    final hasRemoteStream = remoteRenderer?.srcObject != null;
+    final hasLocalStream = localRenderer?.srcObject != null;
 
     return Stack(
       children: [
@@ -347,7 +122,7 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
                 width: 320,
                 height: 240,
                 child: RTCVideoView(
-                  _remoteRenderer!,
+                  remoteRenderer!,
                   objectFit:
                       RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
                 ),
@@ -393,7 +168,7 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: RTCVideoView(
-                    _localRenderer!,
+                    localRenderer!,
                     mirror: true,
                     objectFit:
                         RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
@@ -419,7 +194,7 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
               ),
               const SizedBox(height: 4),
               Text(
-                _formatDuration(_callDuration),
+                _formatDuration(_callManager.callDuration),
                 textAlign: TextAlign.center,
                 style:
                     const TextStyle(color: Colors.white70, fontSize: 14),
@@ -460,7 +235,7 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
           ),
           const SizedBox(height: 8),
           Text(
-            _formatDuration(_callDuration),
+            _formatDuration(_callManager.callDuration),
             textAlign: TextAlign.center,
             style: const TextStyle(color: Colors.white70, fontSize: 16),
           ),
@@ -478,17 +253,23 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _buildControlButton(
-                icon: _isMuted ? Icons.mic_off : Icons.mic,
-                label: _isMuted ? 'Unmute' : 'Mute',
-                onTap: _toggleMute,
-                isActive: !_isMuted,
+                icon: _callManager.isMuted ? Icons.mic_off : Icons.mic,
+                label: _callManager.isMuted ? 'Unmute' : 'Mute',
+                onTap: _callManager.toggleMute,
+                isActive: !_callManager.isMuted,
               ),
               _buildControlButton(
-                icon: _isSpeakerOn
+                icon: _callManager.isSpeakerOn
                     ? Icons.volume_up
                     : Icons.volume_down,
-                label: _isSpeakerOn ? 'Speaker' : 'Earpiece',
-                onTap: _toggleSpeaker,
+                label: _callManager.isSpeakerOn ? 'Speaker' : 'Earpiece',
+                onTap: _callManager.toggleSpeaker,
+                isActive: true,
+              ),
+              _buildControlButton(
+                icon: Icons.keyboard_arrow_down,
+                label: 'Minimize',
+                onTap: _minimizeCall,
                 isActive: true,
               ),
               _buildControlButton(
@@ -513,32 +294,38 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           _buildControlButton(
-            icon: _isMuted ? Icons.mic_off : Icons.mic,
-            label: _isMuted ? 'Unmute' : 'Mute',
-            onTap: _toggleMute,
-            isActive: !_isMuted,
+            icon: _callManager.isMuted ? Icons.mic_off : Icons.mic,
+            label: _callManager.isMuted ? 'Unmute' : 'Mute',
+            onTap: _callManager.toggleMute,
+            isActive: !_callManager.isMuted,
           ),
           if (widget.callType == CallType.video) ...[
             _buildControlButton(
               icon: Icons.cameraswitch,
               label: 'Switch',
-              onTap: _switchCamera,
+              onTap: _callManager.switchCamera,
               isActive: true,
             ),
             _buildControlButton(
               icon:
-                  _isVideoOff ? Icons.videocam_off : Icons.videocam,
-              label: _isVideoOff ? 'Camera On' : 'Camera Off',
-              onTap: _toggleVideo,
-              isActive: !_isVideoOff,
+                  _callManager.isVideoOff ? Icons.videocam_off : Icons.videocam,
+              label: _callManager.isVideoOff ? 'Camera On' : 'Camera Off',
+              onTap: _callManager.toggleVideo,
+              isActive: !_callManager.isVideoOff,
             ),
           ],
           _buildControlButton(
-            icon: _isSpeakerOn
+            icon: _callManager.isSpeakerOn
                 ? Icons.volume_up
                 : Icons.volume_down,
-            label: _isSpeakerOn ? 'Speaker' : 'Earpiece',
-            onTap: _toggleSpeaker,
+            label: _callManager.isSpeakerOn ? 'Speaker' : 'Earpiece',
+            onTap: _callManager.toggleSpeaker,
+            isActive: true,
+          ),
+          _buildControlButton(
+            icon: Icons.keyboard_arrow_down,
+            label: 'Minimize',
+            onTap: _minimizeCall,
             isActive: true,
           ),
           _buildControlButton(

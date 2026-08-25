@@ -485,68 +485,107 @@ class CallMessageBubble extends StatefulWidget {
 class _CallMessageBubbleState extends State<CallMessageBubble> {
   bool _isCalling = false;
 
+  String _formatDuration(int totalSeconds) {
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final isMissed = widget.callStatus == 'missed';
+    final isDeclined = widget.callStatus == 'declined';
+    final isCancelled = widget.callStatus == 'cancelled';
     final isVideo = widget.callType == 'video';
     final icon = isVideo ? Icons.videocam : Icons.call;
     final accent = widget.theme?.accent ?? _accent;
     final txtSec = widget.theme?.textSecondary ?? _textSecondary;
 
+    final hasStatus = isMissed || isDeclined || isCancelled;
+    final callLabel = isVideo ? 'Video Call' : 'Voice Call';
+    final statusLabel = isMissed
+        ? 'Missed'
+        : isDeclined
+            ? 'Declined'
+            : isCancelled
+                ? 'Cancelled'
+                : '';
+
+    final durationText = !hasStatus &&
+            widget.durationSeconds != null &&
+            widget.durationSeconds! > 0
+        ? _formatDuration(widget.durationSeconds!)
+        : null;
+
     return Center(
       child: GestureDetector(
-        onTap: isMissed && !_isCalling ? () => _callBack() : null,
+        onTap: (isMissed || isDeclined) && !_isCalling ? () => _callBack() : null,
         child: Container(
           margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 40),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: isMissed
+            color: hasStatus
                 ? const Color(0xFFFFF0F0)
                 : const Color(0xFFF0FFF4),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Row(
+          child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                icon,
-                color: isMissed ? const Color(0xFFE53935) : accent,
-                size: 16,
-              ),
-              const SizedBox(width: 8),
-              Column(
+              Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  Icon(
+                    icon,
+                    color: hasStatus ? const Color(0xFFE53935) : accent,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
                   Text(
-                    isMissed
-                        ? (isVideo ? 'Missed video call' : 'Missed audio call')
-                        : (isVideo ? 'Video call' : 'Audio call'),
+                    hasStatus ? '$statusLabel $callLabel' : callLabel,
                     style: TextStyle(
-                      color: isMissed ? const Color(0xFFE53935) : accent,
+                      color: hasStatus ? const Color(0xFFE53935) : accent,
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  if (!isMissed &&
-                      widget.durationSeconds != null &&
-                      widget.durationSeconds! > 0)
+                  if (durationText != null) ...[
                     Text(
-                      _formatDuration(widget.durationSeconds!),
+                      ' \u2022 $durationText',
                       style: TextStyle(
                         color: txtSec,
-                        fontSize: 11,
+                        fontSize: 13,
                       ),
                     ),
+                  ],
+                  if ((isMissed || isDeclined) && !_isCalling) ...[
+                    const SizedBox(width: 6),
+                    Icon(
+                      Icons.call,
+                      color: accent,
+                      size: 13,
+                    ),
+                  ],
+                  if (_isCalling) ...[
+                    const SizedBox(width: 6),
+                    SizedBox(
+                      width: 13,
+                      height: 13,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: accent,
+                      ),
+                    ),
+                  ],
                 ],
               ),
-              if (isMissed) ...[
-                const SizedBox(width: 8),
-                Icon(
-                  _isCalling ? Icons.hourglass_top : Icons.call,
-                  color: accent,
-                  size: 14,
+              Text(
+                widget.time,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: txtSec,
                 ),
-              ],
+              ),
             ],
           ),
         ),
@@ -597,11 +636,5 @@ class _CallMessageBubbleState extends State<CallMessageBubble> {
     } finally {
       if (mounted) setState(() => _isCalling = false);
     }
-  }
-
-  String _formatDuration(int totalSeconds) {
-    final minutes = totalSeconds ~/ 60;
-    final seconds = totalSeconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 }

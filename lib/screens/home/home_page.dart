@@ -9,6 +9,7 @@ import '../session/create_session_screen.dart';
 import '../../features/spin_wheel/screens/wheel_screen.dart';
 import '../chat/chat_tab.dart';
 import '../../widgets/animated_background.dart';
+import '../../widgets/mini_call_banner.dart';
 import '../../services/auth/user_service.dart';
 
 class HomePage extends StatefulWidget {
@@ -19,7 +20,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  int _currentIndex = 0;
+  int _currentIndex = 1;
 
   static const _tabs = [
     _HomeTab(),
@@ -61,7 +62,14 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
             SafeArea(
-              child: IndexedStack(index: _currentIndex, children: _tabs),
+              child: Column(
+                children: [
+                  const MiniCallBanner(),
+                  Expanded(
+                    child: IndexedStack(index: _currentIndex, children: _tabs),
+                  ),
+                ],
+              ),
             ),
             Positioned(
               left: 16,

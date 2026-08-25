@@ -243,8 +243,11 @@ class DirectService {
     final batch = _db.batch();
 
     final callText = callType == 'video' ? 'Video call' : 'Audio call';
-    final statusText = callStatus == 'missed' ? 'Missed' : '';
-    final displayText = callStatus == 'missed'
+    final statusPrefixes = ['missed', 'declined', 'cancelled'];
+    final statusText = statusPrefixes.contains(callStatus)
+        ? '${callStatus[0].toUpperCase()}${callStatus.substring(1)}'
+        : '';
+    final displayText = statusText.isNotEmpty
         ? '$statusText $callText'
         : '$callText · ${_formatDuration(durationSeconds)}';
 
@@ -399,6 +402,28 @@ class DirectService {
     return {};
   }
 
+  Future<bool> isMuted(String chatId) async {
+    final doc = await _chats.doc(chatId).get();
+    if (!doc.exists) return false;
+    final mutedBy = (doc.data()?['mutedBy'] as List?)?.cast<String>() ?? [];
+    final uid = getCurrentUid();
+    return uid != null && mutedBy.contains(uid);
+  }
+
+  Future<void> toggleMute({required String chatId, required String uid}) async {
+    final doc = await _chats.doc(chatId).get();
+    final mutedBy = (doc.data()?['mutedBy'] as List?)?.cast<String>() ?? [];
+    if (mutedBy.contains(uid)) {
+      await _chats.doc(chatId).update({
+        'mutedBy': FieldValue.arrayRemove([uid]),
+      });
+    } else {
+      await _chats.doc(chatId).update({
+        'mutedBy': FieldValue.arrayUnion([uid]),
+      });
+    }
+  }
+
   Stream<List<ChatMessage>> getMessagesStream(String chatId) {
     return _messages(chatId)
         .orderBy('created_at', descending: false)
@@ -428,5 +453,14 @@ class DirectService {
         .orderBy('created_at', descending: false)
         .get();
     return snap.docs.map(ChatMessage.fromFirestore).toList();
+  }
+
+  Future<int> getUnreadCount(String chatId, String uid) async {
+    final snap = await _messages(chatId)
+        .where('read_by', arrayContains: uid)
+        .get();
+    final totalDocs = await _messages(chatId).count().get();
+    final total = totalDocs.count ?? 0;
+    return total - snap.docs.length;
   }
 }

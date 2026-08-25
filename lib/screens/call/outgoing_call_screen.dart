@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../models/call.dart';
+import '../../services/call/call_manager.dart';
 import '../../services/call/call_service.dart';
 import '../../services/direct/direct_service.dart';
 import '../../services/group/group_service.dart';
@@ -25,6 +26,7 @@ class OutgoingCallScreen extends StatefulWidget {
 class _OutgoingCallScreenState extends State<OutgoingCallScreen>
     with SingleTickerProviderStateMixin {
   final CallService _callService = CallService();
+  final CallManager _callManager = CallManager();
   final AudioPlayer _ringtonePlayer = AudioPlayer();
   final _currentUser = FirebaseAuth.instance.currentUser;
   StreamSubscription? _callSub;
@@ -70,24 +72,43 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
       if (call.status == CallStatus.active) {
         _callWasActive = true;
         _ringtonePlayer.stop();
-        if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => CallScreen(
-                callId: call.id,
-                callName: widget.callName,
-                callType: call.type,
-                members: call.members,
-                createdBy: call.createdBy,
-                isGroup: call.groupId != null,
-                chatId: call.chatId,
-                groupId: call.groupId,
-              ),
-            ),
-          );
-        }
+        _startCallInManager(call);
       }
     });
+  }
+
+  void _startCallInManager(Call call) async {
+    await _callManager.startNewCall(
+      callData: ActiveCallData(
+        callId: call.id,
+        callName: widget.callName,
+        callType: call.type,
+        members: call.members,
+        createdBy: call.createdBy,
+        isGroup: call.groupId != null,
+        chatId: call.chatId,
+        groupId: call.groupId,
+        startedAt: DateTime.now(),
+      ),
+      audioOnly: call.type == CallType.audio,
+    );
+
+    if (mounted) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => CallScreen(
+            callId: call.id,
+            callName: widget.callName,
+            callType: call.type,
+            members: call.members,
+            createdBy: call.createdBy,
+            isGroup: call.groupId != null,
+            chatId: call.chatId,
+            groupId: call.groupId,
+          ),
+        ),
+      );
+    }
   }
 
   void _sendMissedCallMessage() {

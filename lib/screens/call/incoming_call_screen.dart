@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../models/call.dart';
+import '../../services/call/call_manager.dart';
 import '../../services/call/call_service.dart';
 import '../../services/direct/direct_service.dart';
 import '../../services/group/group_service.dart';
@@ -25,6 +26,7 @@ class IncomingCallScreen extends StatefulWidget {
 class _IncomingCallScreenState extends State<IncomingCallScreen>
     with SingleTickerProviderStateMixin {
   final AudioPlayer _ringtonePlayer = AudioPlayer();
+  final CallManager _callManager = CallManager();
   StreamSubscription? _callSub;
 
   late AnimationController _pulseController;
@@ -75,22 +77,38 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
   void _acceptCall() async {
     _ringtonePlayer.stop();
     if (!mounted) return;
-    Navigator.of(context).pop();
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => CallScreen(
-          callId: widget.call.id,
-          callName: widget.callerName,
-          callType: widget.call.type,
-          members: widget.call.members,
-          createdBy: widget.call.createdBy,
-          isGroup: widget.call.groupId != null,
-          chatId: widget.call.chatId,
-          groupId: widget.call.groupId,
-        ),
+
+    await _callManager.startNewCall(
+      callData: ActiveCallData(
+        callId: widget.call.id,
+        callName: widget.callerName,
+        callType: widget.call.type,
+        members: widget.call.members,
+        createdBy: widget.call.createdBy,
+        isGroup: widget.call.groupId != null,
+        chatId: widget.call.chatId,
+        groupId: widget.call.groupId,
+        startedAt: DateTime.now(),
       ),
+      audioOnly: widget.call.type == CallType.audio,
     );
+
+    if (mounted) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => CallScreen(
+            callId: widget.call.id,
+            callName: widget.callerName,
+            callType: widget.call.type,
+            members: widget.call.members,
+            createdBy: widget.call.createdBy,
+            isGroup: widget.call.groupId != null,
+            chatId: widget.call.chatId,
+            groupId: widget.call.groupId,
+          ),
+        ),
+      );
+    }
   }
 
   void _declineCall() {

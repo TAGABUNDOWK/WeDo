@@ -243,8 +243,11 @@ class GroupService {
     final batch = _db.batch();
 
     final callText = callType == 'video' ? 'Video call' : 'Audio call';
-    final statusText = callStatus == 'missed' ? 'Missed' : '';
-    final displayText = callStatus == 'missed'
+    final statusPrefixes = ['missed', 'declined', 'cancelled'];
+    final statusText = statusPrefixes.contains(callStatus)
+        ? '${callStatus[0].toUpperCase()}${callStatus.substring(1)}'
+        : '';
+    final displayText = statusText.isNotEmpty
         ? '$statusText $callText'
         : '$callText · ${_formatDuration(durationSeconds)}';
 
@@ -401,6 +404,15 @@ class GroupService {
         .orderBy('created_at', descending: false)
         .get();
     return snap.docs.map(ChatMessage.fromFirestore).toList();
+  }
+
+  Future<int> getUnreadCount(String groupId, String uid) async {
+    final readSnap = await _messages(groupId)
+        .where('read_by', arrayContains: uid)
+        .get();
+    final totalDocs = await _messages(groupId).count().get();
+    final total = totalDocs.count ?? 0;
+    return total - readSnap.docs.length;
   }
 
   Future<List<Map<String, dynamic>>> getGroupMembersWithNames(

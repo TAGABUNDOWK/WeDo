@@ -8,6 +8,7 @@ class ChatTile extends StatelessWidget {
   final int memberCount;
   final bool isGroup;
   final bool hasUnread;
+  final int unreadCount;
   final String? lastSenderId;
   final String? currentUserId;
   final String? avatarUrl;
@@ -22,6 +23,7 @@ class ChatTile extends StatelessWidget {
     required this.memberCount,
     this.isGroup = true,
     this.hasUnread = false,
+    this.unreadCount = 0,
     this.lastSenderId,
     this.currentUserId,
     this.avatarUrl,
@@ -69,7 +71,30 @@ class ChatTile extends StatelessWidget {
                             )
                           : null,
                     ),
-                    if (showUnread)
+                    if (showUnread && unreadCount > 0)
+                      Positioned(
+                        top: 0,
+                        right: 0,
+                        child: Container(
+                          constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFFE4EF0),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Text(
+                              unreadCount > 99 ? '99+' : '$unreadCount',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      )
+                    else if (showUnread)
                       Positioned(
                         top: 0,
                         right: 0,
@@ -146,7 +171,27 @@ class ChatTile extends StatelessWidget {
                               ),
                             ),
                           ),
-                          if (showUnread) ...[
+                          if (showUnread && unreadCount > 0) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+                              padding: const EdgeInsets.symmetric(horizontal: 5),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFFE4EF0),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Center(
+                                child: Text(
+                                  unreadCount > 99 ? '99+' : '$unreadCount',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ] else if (showUnread) ...[
                             const SizedBox(width: 6),
                             Container(
                               width: 10,
