@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 import '../../../models/group_chat.dart';
 import '../../../models/message.dart';
 import '../../../models/user_entity.dart';
@@ -118,66 +120,53 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
           }
 
   Future<void> _changeGroupPhoto() async {
-    final ctrl = TextEditingController();
-    final result = await showDialog<String>(
+    final source = await showModalBottomSheet<ImageSource>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF211635),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: AppColors.glassBorder, width: 0.5),
-        ),
-        title: const Text(
-          'Change Group Photo',
-          style: TextStyle(
-            fontFamily: _fontFamily,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Camera'),
+                onTap: () => Navigator.pop(ctx, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Gallery'),
+                onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+              ),
+            ],
           ),
         ),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          style: const TextStyle(fontFamily: _fontFamily, color: AppColors.textPrimary),
-          decoration: InputDecoration(
-            hintText: 'Paste image URL',
-            hintStyle: const TextStyle(color: AppColors.textSecondary),
-            filled: true,
-            fillColor: AppColors.midnightBg,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.glassBorder),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.glassBorder),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.lavenderAccent),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel', style: TextStyle(fontFamily: _fontFamily, color: AppColors.textSecondary)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Save', style: TextStyle(fontFamily: _fontFamily, color: AppColors.lavenderAccent, fontWeight: FontWeight.w600)),
-          ),
-        ],
       ),
     );
 
-    if (result != null && result.isNotEmpty && mounted) {
-      await _groupService.updateGroupPhoto(
+    if (source == null || !mounted) return;
+
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: source, imageQuality: 80);
+    if (picked == null || !mounted) return;
+
+    final file = File(picked.path);
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      await _groupService.uploadGroupPhoto(
         groupId: widget.groupId,
-        photoUrl: result,
+        imageFile: file,
       );
-      _loadData();
+    } finally {
+      if (mounted) Navigator.pop(context);
     }
+
+    _loadData();
   }
 
   Future<void> _changeNickname(String memberUid) async {

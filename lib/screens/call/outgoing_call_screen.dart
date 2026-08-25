@@ -78,6 +78,7 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
                 callName: widget.callName,
                 callType: call.type,
                 members: call.members,
+                createdBy: call.createdBy,
                 isGroup: call.groupId != null,
                 chatId: call.chatId,
                 groupId: call.groupId,
