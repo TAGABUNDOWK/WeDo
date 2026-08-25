@@ -74,11 +74,6 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
 
   void _acceptCall() async {
     _ringtonePlayer.stop();
-    final callService = CallService();
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser != null) {
-      await callService.joinCall(widget.call.id, currentUser.uid);
-    }
     if (!mounted) return;
     Navigator.of(context).pop();
     Navigator.push(
@@ -89,6 +84,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
           callName: widget.callerName,
           callType: widget.call.type,
           members: widget.call.members,
+          createdBy: widget.call.createdBy,
           isGroup: widget.call.groupId != null,
           chatId: widget.call.chatId,
           groupId: widget.call.groupId,

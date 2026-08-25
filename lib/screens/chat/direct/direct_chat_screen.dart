@@ -653,11 +653,50 @@ class _DirectChatInfoScreenState extends State<_DirectChatInfoScreen> {
     }
   }
 
+  Future<void> _changeOtherNickname() async {
+    final otherNickname = _nicknames[widget.otherUid] ?? '';
+    final ctrl = TextEditingController(text: otherNickname);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Change Nickname'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'Nickname for them',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && mounted) {
+      await _directService.updateNickname(
+        chatId: widget.chatId,
+        uid: widget.otherUid,
+        nickname: result,
+      );
+      _loadData();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final name = _otherUser?.displayName ?? widget.otherUid;
     final currentUid = _directService.getCurrentUid();
     final myNickname = currentUid != null ? _nicknames[currentUid] : null;
+    final otherNickname = _nicknames[widget.otherUid];
 
     return Scaffold(
       appBar: AppBar(title: const Text('Chat Info')),
@@ -702,6 +741,13 @@ class _DirectChatInfoScreenState extends State<_DirectChatInfoScreen> {
                   subtitle: Text(myNickname ?? 'Tap to set'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: _changeNickname,
+                ),
+                ListTile(
+                  leading: const Icon(Icons.person_outline, color: Colors.blue),
+                  title: Text(name),
+                  subtitle: Text(otherNickname ?? 'Tap to set'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _changeOtherNickname,
                 ),
                 const Divider(),
                 const Padding(

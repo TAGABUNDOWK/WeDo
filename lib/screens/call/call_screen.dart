@@ -14,6 +14,7 @@ class CallScreen extends StatefulWidget {
   final String callName;
   final CallType callType;
   final List<String> members;
+  final String createdBy;
   final bool isGroup;
   final String? chatId;
   final String? groupId;
@@ -24,6 +25,7 @@ class CallScreen extends StatefulWidget {
     required this.callName,
     required this.callType,
     required this.members,
+    required this.createdBy,
     this.isGroup = false,
     this.chatId,
     this.groupId,
@@ -168,15 +170,18 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
       });
     }
 
-    // Create offers for all other members (for 1:1 calls)
-    if (!widget.isGroup) {
-      for (final memberUid in widget.members) {
-        if (memberUid != _currentUser!.uid) {
-          await _webrtcService.createOffer(
-            callId: widget.callId,
-            fromUid: _currentUser!.uid,
-            toUid: memberUid,
-          );
+    // Only the call creator should create offers.
+    // The callee waits for the incoming offer and responds with an answer.
+    if (widget.createdBy == _currentUser!.uid) {
+      if (!widget.isGroup) {
+        for (final memberUid in widget.members) {
+          if (memberUid != _currentUser!.uid) {
+            await _webrtcService.createOffer(
+              callId: widget.callId,
+              fromUid: _currentUser!.uid,
+              toUid: memberUid,
+            );
+          }
         }
       }
     }
