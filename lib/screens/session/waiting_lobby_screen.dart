@@ -60,7 +60,7 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
     if (confirmed == true && mounted) {
       try {
         if (widget.isHost) {
-          await _service.deleteSession(widget.sessionId, _currentUser!.uid);
+          await _service.cancelSession(widget.sessionId, _currentUser!.uid);
         } else {
           await _service.removeParticipant(widget.sessionId, _currentUser!.uid);
         }
