@@ -19,6 +19,7 @@ import '../../../widgets/invite_message_card.dart';
 import '../../../widgets/group_invite_message_card.dart';
 import '../../../widgets/composer_option.dart';
 import '../../../widgets/audio_recorder_button.dart';
+import '../../../widgets/chat_background_painter.dart';
 import '../../call/outgoing_call_screen.dart';
 import '../event/create_event_screen.dart';
 import '../event/event_detail_screen.dart';
@@ -389,9 +390,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           Expanded(
             child: Stack(
               children: [
-                Container(
-                  color: t.background,
-                  child: StreamBuilder<List<ChatMessage>>(
+                Container(color: t.background),
+                ChatBackground(
+                  style: t.backgroundStyle,
+                  color: t.accent,
+                  opacity: t.backgroundOpacity,
+                ),
+                StreamBuilder<List<ChatMessage>>(
                     stream: _groupService.getMessagesStream(widget.groupId),
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
@@ -523,7 +528,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             isMe: isMe,
                             senderId: msg.senderId,
                             senderName: isMe ? 'You' : displayName,
-                            currentUserId: _currentUser!.uid,
+                            currentUserId: _currentUser?.uid ?? '',
                             groupId: widget.groupId,
                             members: _members,
                             theme: t,
@@ -564,7 +569,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                     },
                   );
                 },
-              ),
               ),
               if (_newMessageCount > 0)
                 Positioned(

@@ -19,6 +19,7 @@ import '../../../widgets/invite_message_card.dart';
 import '../../../widgets/group_invite_message_card.dart';
 import '../../../widgets/composer_option.dart';
 import '../../../widgets/audio_recorder_button.dart';
+import '../../../widgets/chat_background_painter.dart';
 import '../../call/outgoing_call_screen.dart';
 import '../event/create_event_screen.dart';
 import '../event/event_detail_screen.dart';
@@ -388,9 +389,13 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
           Expanded(
             child: Stack(
               children: [
-                Container(
-                  color: t.background,
-                  child: StreamBuilder<List<ChatMessage>>(
+                Container(color: t.background),
+                ChatBackground(
+                  style: t.backgroundStyle,
+                  color: t.accent,
+                  opacity: t.backgroundOpacity,
+                ),
+                StreamBuilder<List<ChatMessage>>(
                     stream: _directService.getMessagesStream(widget.chatId),
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
@@ -517,9 +522,10 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                             isMe: isMe,
                             senderId: msg.senderId,
                             senderName: _otherName,
-                            currentUserId: _currentUser!.uid,
+                            currentUserId: _currentUser?.uid ?? '',
                             chatId: widget.chatId,
-                            members: [_currentUser.uid, widget.otherUid],
+                            members: [_currentUser?.uid ?? '', widget.otherUid],
+                            theme: t,
                           );
                         }
 
@@ -557,7 +563,6 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                     },
                   );
                 },
-              ),
               ),
               if (_newMessageCount > 0)
                 Positioned(
