@@ -78,7 +78,7 @@ class GroupService {
   }) async {
     final batch = _db.batch();
 
-    batch.set(_messages(groupId).doc(), {
+    final msgData = <String, dynamic>{
       'sender_id': senderId,
       'senderName': senderName,
       'type': 'text',
@@ -88,7 +88,27 @@ class GroupService {
       'created_at': FieldValue.serverTimestamp(),
       'createdAtLocal': DateTime.now().toIso8601String(),
       'edited': false,
-    });
+    };
+
+    final groupLinkMatch = RegExp(r'wedo://group/([^\s]+)').firstMatch(text);
+    if (groupLinkMatch != null) {
+      final inviteGroupId = groupLinkMatch.group(1)!;
+      try {
+        final groupDoc = await _groups.doc(inviteGroupId).get();
+        if (groupDoc.exists) {
+          final gData = groupDoc.data();
+          msgData['groupInviteData'] = {
+            'groupId': inviteGroupId,
+            'groupName': gData?['name'] ?? 'Group',
+            'memberCount': gData?['memberCount'] ?? 0,
+            'senderId': senderId,
+            'senderName': senderName,
+          };
+        }
+      } catch (_) {}
+    }
+
+    batch.set(_messages(groupId).doc(), msgData);
 
     batch.update(_groups.doc(groupId), {
       'lastMessage': text,

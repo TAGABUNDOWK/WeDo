@@ -14,6 +14,7 @@ import '../../../services/call/call_service.dart';
 import '../../../utils/time_format.dart';
 import '../../../widgets/message_bubble.dart';
 import '../../../widgets/invite_message_card.dart';
+import '../../../widgets/group_invite_message_card.dart';
 import '../../../widgets/composer_option.dart';
 import '../../../widgets/audio_recorder_button.dart';
 import '../../call/outgoing_call_screen.dart';
@@ -462,6 +463,19 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                         chatId: widget.chatId,
                         members: [_currentUser.uid, widget.otherUid],
                       );
+                    }
+
+                    if (msg.type == MessageType.text) {
+                      final groupLinkMatch = RegExp(r'wedo://group/([^\s]+)').firstMatch(msg.content);
+                      if (groupLinkMatch != null) {
+                        return GroupInviteMessageCard(
+                          groupId: groupLinkMatch.group(1)!,
+                          isMe: isMe,
+                          senderName: null,
+                          time: formatChatTime(msg.createdAt),
+                          groupInviteData: msg.groupInviteData,
+                        );
+                      }
                     }
 
                     return MessageBubble(
