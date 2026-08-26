@@ -1122,6 +1122,8 @@ class _NotificationItem extends StatelessWidget {
         return Icons.person_add;
       case NotificationType.friendRequestAccepted:
         return Icons.check_circle;
+      case NotificationType.pollVote:
+        return Icons.how_to_vote;
     }
   }
 
@@ -1131,6 +1133,8 @@ class _NotificationItem extends StatelessWidget {
         return const Color(0xFFFE4EF0);
       case NotificationType.friendRequestAccepted:
         return const Color(0xFF4CAF50);
+      case NotificationType.pollVote:
+        return const Color(0xFFE91E63);
     }
   }
 
