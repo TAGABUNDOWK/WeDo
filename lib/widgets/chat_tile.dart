@@ -57,6 +57,7 @@ class ChatTile extends StatelessWidget {
                 Stack(
                   children: [
                     CircleAvatar(
+                      key: ValueKey(avatarUrl),
                       radius: 26,
                       backgroundColor: const Color(0xFFFE4EF0).withValues(alpha: 0.2),
                       backgroundImage:

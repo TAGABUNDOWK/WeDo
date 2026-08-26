@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../models/call.dart';
 import '../../../models/event.dart';
 import '../../../models/chat_theme.dart';
+import '../../../models/group_chat.dart';
 import '../../../models/message.dart';
 import '../../../models/poll.dart';
 import '../../../services/group/group_service.dart';
@@ -43,8 +44,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   final _currentUser = FirebaseAuth.instance.currentUser;
   final _imagePicker = ImagePicker();
   String _groupName = '';
+  String? _groupPhotoUrl;
   Map<String, String> _nicknames = {};
   List<String> _members = [];
+  late Stream<GroupChat?> _groupStream;
   bool _isUploading = false;
   final Map<String, ChatEvent> _events = {};
   final Map<String, ChatPoll> _polls = {};
@@ -56,6 +59,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   @override
   void initState() {
     super.initState();
+    _groupStream = _groupService.getGroupStream(widget.groupId);
     _loadGroupInfo();
     if (_currentUser != null) {
       _groupService.markMessagesAsRead(widget.groupId, _currentUser.uid);
@@ -70,6 +74,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     if (group != null && mounted) {
       setState(() {
         _groupName = group.name;
+        _groupPhotoUrl = group.photoUrl;
         _nicknames = nicknames;
         _members = List<String>.from(group.members);
         _chatTheme = theme;
@@ -349,17 +354,15 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       backgroundColor: t.background,
       appBar: AppBar(
         backgroundColor: t.appBarBackground,
-        title: StreamBuilder<dynamic>(
-          stream: _groupService.getGroupStream(widget.groupId),
+        title: StreamBuilder<GroupChat?>(
+          stream: _groupStream,
           builder: (context, snapshot) {
             final group = snapshot.data;
-            if (group != null) {
-              _groupName = group.name;
-            }
-            final photoUrl = group?.photoUrl;
+            final photoUrl = group?.photoUrl ?? _groupPhotoUrl;
             return Row(
               children: [
                 CircleAvatar(
+                  key: ValueKey(photoUrl),
                   radius: 14,
                   backgroundColor: Colors.white.withValues(alpha: 0.2),
                   backgroundImage: photoUrl != null && photoUrl.isNotEmpty
@@ -372,7 +375,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    _groupName,
+                    group?.name ?? _groupName,
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                     overflow: TextOverflow.ellipsis,
                   ),

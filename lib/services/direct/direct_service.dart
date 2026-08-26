@@ -161,7 +161,10 @@ class DirectService {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final ref = FirebaseStorage.instance
         .ref('chat_images/direct/$chatId/$timestamp.jpg');
-    await ref.putFile(imageFile);
+    await ref.putFile(
+      imageFile,
+      SettableMetadata(contentType: 'image/jpeg'),
+    );
     final url = await ref.getDownloadURL();
 
     final batch = _db.batch();

@@ -45,15 +45,19 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
   }
 
   Future<void> _loadData() async {
-    final group = await _groupService.getGroup(widget.groupId);
-    final members = await _groupService.getGroupMembersWithNames(
-      widget.groupId,
-    );
-    if (mounted) {
-      setState(() {
-        _group = group;
-        _members = members;
-      });
+    try {
+      final group = await _groupService.getGroup(widget.groupId);
+      final members = await _groupService.getGroupMembersWithNames(
+        widget.groupId,
+      );
+      if (mounted) {
+        setState(() {
+          _group = group;
+          _members = members;
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to load group data: $e');
     }
   }
 
@@ -128,6 +132,15 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
           }
 
   Future<void> _changeGroupPhoto() async {
+    if (_currentUser == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('You must be signed in to change the photo')),
+        );
+      }
+      return;
+    }
+
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
       builder: (ctx) => SafeArea(
@@ -192,11 +205,16 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
         groupId: widget.groupId,
         imageFile: file,
       );
-    } finally {
       if (mounted) Navigator.pop(context);
+      await _loadData();
+    } catch (e) {
+      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update photo: $e')),
+        );
+      }
     }
-
-    _loadData();
   }
 
   Future<void> _changeNickname(String memberUid) async {
@@ -751,6 +769,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                             ],
                           ),
                           child: CircleAvatar(
+                            key: ValueKey(group.photoUrl),
                             radius: 55,
                             backgroundColor: const Color(0xFF211635),
                             backgroundImage:

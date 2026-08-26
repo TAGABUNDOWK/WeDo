@@ -165,7 +165,10 @@ class GroupService {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final ref = FirebaseStorage.instance
         .ref('chat_images/$groupId/$timestamp.jpg');
-    await ref.putFile(imageFile);
+    await ref.putFile(
+      imageFile,
+      SettableMetadata(contentType: 'image/jpeg'),
+    );
     final url = await ref.getDownloadURL();
 
     final batch = _db.batch();
@@ -483,9 +486,16 @@ class GroupService {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final ref = FirebaseStorage.instance
         .ref('group_photos/$groupId/$timestamp.jpg');
-    await ref.putFile(imageFile);
+    await ref.putFile(
+      imageFile,
+      SettableMetadata(contentType: 'image/jpeg'),
+    );
     final url = await ref.getDownloadURL();
-    await _groups.doc(groupId).update({'photoUrl': url});
+    try {
+      await _groups.doc(groupId).update({'photoUrl': url});
+    } catch (e) {
+      throw Exception('Photo uploaded but failed to save to group: $e');
+    }
     return url;
   }
 
