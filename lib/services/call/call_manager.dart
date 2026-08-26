@@ -1,9 +1,12 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import '../../main.dart' show navigatorKey;
 import '../../models/call.dart';
+import '../../screens/call/call_screen.dart';
+import '../../screens/call/outgoing_call_screen.dart';
 import '../direct/direct_service.dart';
 import '../group/group_service.dart';
 import 'call_service.dart';
@@ -41,7 +44,9 @@ class CallManager extends ChangeNotifier {
   final CallService _callService = CallService();
   webrtc.WebRTCService? _webrtcService;
   ActiveCallData? _activeCall;
+  ActiveCallData? _outgoingCall;
   StreamSubscription? _callSub;
+  StreamSubscription? _outgoingCallSub;
   StreamSubscription? _signalsSub;
   StreamSubscription? _groupCallSub;
   Timer? _groupCallDebounce;
@@ -58,7 +63,9 @@ class CallManager extends ChangeNotifier {
   RTCVideoRenderer? _remoteRenderer;
 
   ActiveCallData? get activeCall => _activeCall;
+  ActiveCallData? get outgoingCall => _outgoingCall;
   bool get hasActiveCall => _activeCall != null;
+  bool get hasOutgoingCall => _outgoingCall != null;
   webrtc.WebRTCService? get webrtcService => _webrtcService;
   int get callDuration => _callDuration;
   bool get isMuted => _isMuted;
@@ -69,9 +76,140 @@ class CallManager extends ChangeNotifier {
 
   StreamController<MediaStream>? _localStreamController;
   StreamController<MediaStream>? _remoteStreamController;
+  OverlayEntry? _callOverlay;
 
   Stream<MediaStream>? get onLocalStream => _localStreamController?.stream;
   Stream<MediaStream>? get onRemoteStream => _remoteStreamController?.stream;
+
+  bool get hasAnyCall => _activeCall != null || _outgoingCall != null;
+
+  void trackOutgoingCall({
+    required String callId,
+    required String callName,
+    required CallType callType,
+    required List<String> members,
+    required String createdBy,
+    required bool isGroup,
+    String? chatId,
+    String? groupId,
+  }) {
+    _outgoingCall = ActiveCallData(
+      callId: callId,
+      callName: callName,
+      callType: callType,
+      members: members,
+      createdBy: createdBy,
+      isGroup: isGroup,
+      chatId: chatId,
+      groupId: groupId,
+      startedAt: DateTime.now(),
+    );
+    notifyListeners();
+
+    _outgoingCallSub?.cancel();
+    _outgoingCallSub = _callService.getCallStream(callId).listen((call) {
+      if (call == null || call.status == CallStatus.ended) {
+        cancelOutgoingCall();
+      } else if (call.status == CallStatus.active) {
+        final outgoing = _outgoingCall;
+        if (outgoing != null) {
+          cancelOutgoingCall();
+          startNewCall(
+            callData: ActiveCallData(
+              callId: outgoing.callId,
+              callName: outgoing.callName,
+              callType: outgoing.callType,
+              members: outgoing.members,
+              createdBy: outgoing.createdBy,
+              isGroup: outgoing.isGroup,
+              chatId: outgoing.chatId,
+              groupId: outgoing.groupId,
+              startedAt: DateTime.now(),
+            ),
+            audioOnly: outgoing.callType == CallType.audio,
+          );
+        }
+      }
+    });
+  }
+
+  void cancelOutgoingCall() {
+    _outgoingCallSub?.cancel();
+    _outgoingCallSub = null;
+    _outgoingCall = null;
+    removeCallOverlay();
+    notifyListeners();
+  }
+
+  void showCallOverlay() {
+    if (_callOverlay != null) return;
+    if (_activeCall == null && _outgoingCall == null) return;
+    final overlay = navigatorKey.currentState?.overlay;
+    if (overlay == null) return;
+
+    _callOverlay = OverlayEntry(
+      builder: (_) => _CallOverlayBanner(
+        onReturnToCall: _returnToCallFromOverlay,
+        onEndCall: _activeCall != null ? endActiveCall : _cancelOutgoingFromOverlay,
+      ),
+    );
+    overlay.insert(_callOverlay!);
+  }
+
+  void removeCallOverlay() {
+    _callOverlay?.remove();
+    _callOverlay = null;
+  }
+
+  void _returnToCallFromOverlay() {
+    final active = _activeCall;
+    final outgoing = _outgoingCall;
+
+    removeCallOverlay();
+
+    if (active != null) {
+      navigatorKey.currentState?.push(
+        MaterialPageRoute(
+          builder: (_) => CallScreen(
+            callId: active.callId,
+            callName: active.callName,
+            callType: active.callType,
+            members: active.members,
+            createdBy: active.createdBy,
+            isGroup: active.isGroup,
+            chatId: active.chatId,
+            groupId: active.groupId,
+          ),
+        ),
+      );
+    } else if (outgoing != null) {
+      navigatorKey.currentState?.push(
+        MaterialPageRoute(
+          builder: (_) => OutgoingCallScreen(
+            call: Call(
+              id: outgoing.callId,
+              type: outgoing.callType,
+              status: CallStatus.ringing,
+              createdBy: outgoing.createdBy,
+              members: outgoing.members,
+              createdAt: outgoing.startedAt,
+              chatId: outgoing.chatId,
+              groupId: outgoing.groupId,
+            ),
+            callName: outgoing.callName,
+          ),
+        ),
+      );
+    }
+  }
+
+  void _cancelOutgoingFromOverlay() {
+    final outgoing = _outgoingCall;
+    if (outgoing != null) {
+      _callService.endCall(outgoing.callId);
+    }
+    cancelOutgoingCall();
+  }
 
   Future<void> startNewCall({
     required ActiveCallData callData,
@@ -262,6 +400,8 @@ class CallManager extends ChangeNotifier {
   Future<void> endActiveCall() async {
     if (_activeCall == null) return;
 
+    removeCallOverlay();
+
     final callId = _activeCall!.callId;
 
     _callTimer?.cancel();
@@ -328,5 +468,237 @@ class CallManager extends ChangeNotifier {
 
   void switchCamera() {
     _webrtcService?.switchCamera();
+  }
+}
+
+class _CallOverlayBanner extends StatefulWidget {
+  final VoidCallback onReturnToCall;
+  final VoidCallback onEndCall;
+
+  const _CallOverlayBanner({
+    required this.onReturnToCall,
+    required this.onEndCall,
+  });
+
+  @override
+  State<_CallOverlayBanner> createState() => _CallOverlayBannerState();
+}
+
+class _CallOverlayBannerState extends State<_CallOverlayBanner> {
+  final _callManager = CallManager();
+
+  @override
+  void initState() {
+    super.initState();
+    _callManager.addListener(_onCallUpdate);
+  }
+
+  @override
+  void dispose() {
+    _callManager.removeListener(_onCallUpdate);
+    super.dispose();
+  }
+
+  void _onCallUpdate() {
+    if (mounted) setState(() {});
+  }
+
+  String _formatDuration(int totalSeconds) {
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    final seconds = totalSeconds % 60;
+    if (hours > 0) {
+      return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    }
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildControlButton({
+    required IconData icon,
+    required bool isActive,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: isActive
+              ? Colors.white.withValues(alpha: 0.15)
+              : const Color(0xFFFE4EF0).withValues(alpha: 0.3),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(
+          icon,
+          color: isActive ? Colors.white : const Color(0xFFFE4EF0),
+          size: 16,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final activeCall = _callManager.activeCall;
+    final outgoingCall = _callManager.outgoingCall;
+    if (activeCall == null && outgoingCall == null) return const SizedBox.shrink();
+
+    final call = activeCall ?? outgoingCall!;
+    final isActive = activeCall != null;
+    final isVideo = call.callType == CallType.video;
+    final topPadding = MediaQuery.of(context).padding.top;
+
+    return Positioned(
+      top: topPadding + 8,
+      left: 16,
+      right: 16,
+      child: GestureDetector(
+        onTap: widget.onReturnToCall,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: isActive
+                    ? [const Color(0xFF2D1B69), const Color(0xFF1A0A2E)]
+                    : [const Color(0xFF1A0A2E), const Color(0xFF2D1B69)],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: const Color(0xFFFE4EF0).withValues(alpha: 0.4),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFE4EF0).withValues(alpha: 0.2),
+                  blurRadius: 12,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFFFE4EF0).withValues(alpha: 0.2),
+                  ),
+                  child: Icon(
+                    isVideo ? Icons.videocam : Icons.call,
+                    color: const Color(0xFFFE4EF0),
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        call.callName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: isActive ? Colors.green : Colors.orange,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            isActive
+                                ? _formatDuration(_callManager.callDuration)
+                                : 'Ringing...',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.7),
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                if (isActive) ...[
+                  _buildControlButton(
+                    icon: _callManager.isMuted ? Icons.mic_off : Icons.mic,
+                    isActive: !_callManager.isMuted,
+                    onTap: () => _callManager.toggleMute(),
+                  ),
+                  const SizedBox(width: 6),
+                  if (isVideo) ...[
+                    _buildControlButton(
+                      icon: _callManager.isVideoOff
+                          ? Icons.videocam_off
+                          : Icons.videocam,
+                      isActive: !_callManager.isVideoOff,
+                      onTap: () => _callManager.toggleVideo(),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  _buildControlButton(
+                    icon: _callManager.isSpeakerOn
+                        ? Icons.volume_up
+                        : Icons.volume_down,
+                    isActive: true,
+                    onTap: () => _callManager.toggleSpeaker(),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                GestureDetector(
+                  onTap: widget.onEndCall,
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.call_end,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                GestureDetector(
+                  onTap: widget.onReturnToCall,
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.open_in_full,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

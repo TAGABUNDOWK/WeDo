@@ -47,6 +47,16 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
     );
     _playRingtone();
     _listenForCallStatus();
+    _callManager.trackOutgoingCall(
+      callId: widget.call.id,
+      callName: widget.callName,
+      callType: widget.call.type,
+      members: widget.call.members,
+      createdBy: widget.call.createdBy,
+      isGroup: widget.call.groupId != null,
+      chatId: widget.call.chatId,
+      groupId: widget.call.groupId,
+    );
   }
 
   void _playRingtone() async {
@@ -140,14 +150,23 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
   void _endCall() {
     _callSub?.cancel();
     _ringtonePlayer.stop();
+    _callManager.cancelOutgoingCall();
     _callService.endCall(widget.call.id);
     if (mounted) Navigator.of(context).pop();
+  }
+
+  void _minimizeCall() {
+    if (mounted) {
+      _callManager.showCallOverlay();
+      Navigator.of(context).pop();
+    }
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
     _callSub?.cancel();
+    _callManager.cancelOutgoingCall();
     _ringtonePlayer.dispose();
     super.dispose();
   }
@@ -156,8 +175,13 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
   Widget build(BuildContext context) {
     final isVideo = widget.call.type == CallType.video;
 
-    return Scaffold(
-      body: Container(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _minimizeCall();
+      },
+      child: Scaffold(
+        body: Container(
         width: double.infinity,
         height: double.infinity,
         decoration: const BoxDecoration(
@@ -294,6 +318,7 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
           ),
         ),
       ),
+    ),
     );
   }
 }

@@ -58,7 +58,10 @@ class _CallScreenState extends State<CallScreen> {
   }
 
   void _minimizeCall() {
-    if (mounted) Navigator.of(context).pop();
+    if (mounted) {
+      _callManager.showCallOverlay();
+      Navigator.of(context).pop();
+    }
   }
 
   Future<void> _endCall() async {
