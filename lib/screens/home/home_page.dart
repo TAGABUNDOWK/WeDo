@@ -6,7 +6,7 @@ import '../account/account_screen.dart';
 import '../friends/friends_page.dart';
 import '../session/session_entry_screen.dart';
 import '../session/create_session_screen.dart';
-import '../session/join_session_screen.dart';
+import '../../features/spin_wheel/screens/wheel_screen.dart';
 import '../chat/chat_tab.dart';
 import '../../widgets/animated_background.dart';
 import '../../services/auth/user_service.dart';
@@ -83,7 +83,7 @@ class _HomePageState extends State<HomePage> {
 
 // ── Glassmorphism capsule navigation bar ────────────────────────────────────
 
-class BlobNavBar extends StatelessWidget {
+class BlobNavBar extends StatefulWidget {
   final int currentIndex;
   final Color activeColor;
   final Color inactiveColor;
@@ -100,6 +100,60 @@ class BlobNavBar extends StatelessWidget {
   static const _iconColor = Color(0xFF7A4A8A);
 
   @override
+  State<BlobNavBar> createState() => _BlobNavBarState();
+}
+
+class _BlobNavBarState extends State<BlobNavBar>
+    with SingleTickerProviderStateMixin {
+  bool _isMenuOpen = false;
+  late final AnimationController _menuCtrl;
+  late final Animation<double> _menuScale;
+  late final Animation<double> _menuFade;
+
+  @override
+  void initState() {
+    super.initState();
+    _menuCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _menuScale = CurvedAnimation(parent: _menuCtrl, curve: Curves.easeOutBack);
+    _menuFade = CurvedAnimation(
+      parent: _menuCtrl,
+      curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _menuCtrl.dispose();
+    super.dispose();
+  }
+
+  void _toggleMenu() {
+    setState(() => _isMenuOpen = !_isMenuOpen);
+    if (_isMenuOpen) {
+      _menuCtrl.forward();
+    } else {
+      _menuCtrl.reverse();
+    }
+  }
+
+  void _closeMenu() {
+    if (_isMenuOpen) {
+      setState(() => _isMenuOpen = false);
+      _menuCtrl.reverse();
+    }
+  }
+
+  void _onChoiceTap(VoidCallback? navigation) {
+    _closeMenu();
+    if (navigation != null) {
+      Future.delayed(const Duration(milliseconds: 200), navigation);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -112,13 +166,14 @@ class BlobNavBar extends StatelessWidget {
         const double centerDiameter = capsuleH + centerRaise;
         final double sideW = (w - padX * 2 - gap * 2 - centerDiameter) / 2;
         const double barH = capsuleH + 16;
+        const double popupSpace = 120;
 
         const double leftX = padX;
         final double centerX = w / 2 - centerDiameter / 2;
         final double rightX = w - padX - sideW;
 
         return SizedBox(
-          height: barH,
+          height: barH + popupSpace,
           width: w,
           child: Stack(
             clipBehavior: Clip.none,
@@ -126,7 +181,7 @@ class BlobNavBar extends StatelessWidget {
               // ── Left hourglass connector ──
               Positioned(
                 left: leftX + sideW - 21,
-                top: (barH - capsuleH) / 2,
+                top: popupSpace + (barH - capsuleH) / 2,
                 width: centerX - (leftX + sideW) + 39,
                 height: capsuleH,
                 child: CustomPaint(
@@ -139,7 +194,7 @@ class BlobNavBar extends StatelessWidget {
               // ── Right hourglass connector ──
               Positioned(
                 left: centerX + centerDiameter - 17,
-                top: (barH - capsuleH) / 2,
+                top: popupSpace + (barH - capsuleH) / 2,
                 width: rightX - (centerX + centerDiameter) + 39,
                 height: capsuleH,
                 child: CustomPaint(
@@ -152,7 +207,7 @@ class BlobNavBar extends StatelessWidget {
               // ── Left glass capsule ──
               Positioned(
                 left: leftX,
-                top: (barH - capsuleH) / 2,
+                top: popupSpace + (barH - capsuleH) / 2,
                 width: sideW,
                 height: capsuleH,
                 child: _GlassCapsule(
@@ -164,20 +219,20 @@ class BlobNavBar extends StatelessWidget {
                           index: 0,
                           asset: 'assets/icons/home.png',
                         ),
-                        isActive: currentIndex == 0,
-                        activeColor: activeColor,
-                        iconColor: _iconColor,
-                        onTap: () => onTap(0),
+                        isActive: widget.currentIndex == 0,
+                        activeColor: widget.activeColor,
+                        iconColor: BlobNavBar._iconColor,
+                        onTap: () => widget.onTap(0),
                       ),
                       _NavIconButton(
                         item: const _NavDef(
                           index: 1,
                           asset: 'assets/icons/message.png',
                         ),
-                        isActive: currentIndex == 1,
-                        activeColor: activeColor,
-                        iconColor: _iconColor,
-                        onTap: () => onTap(1),
+                        isActive: widget.currentIndex == 1,
+                        activeColor: widget.activeColor,
+                        iconColor: BlobNavBar._iconColor,
+                        onTap: () => widget.onTap(1),
                       ),
                     ],
                   ),
@@ -187,7 +242,7 @@ class BlobNavBar extends StatelessWidget {
               // ── Right glass capsule ──
               Positioned(
                 left: rightX,
-                top: (barH - capsuleH) / 2,
+                top: popupSpace + (barH - capsuleH) / 2,
                 width: sideW,
                 height: capsuleH,
                 child: _GlassCapsule(
@@ -199,10 +254,10 @@ class BlobNavBar extends StatelessWidget {
                           index: 2,
                           asset: 'assets/icons/friends.png',
                         ),
-                        isActive: currentIndex == 2,
-                        activeColor: activeColor,
-                        iconColor: _iconColor,
-                        onTap: () => onTap(2),
+                        isActive: widget.currentIndex == 2,
+                        activeColor: widget.activeColor,
+                        iconColor: BlobNavBar._iconColor,
+                        onTap: () => widget.onTap(2),
                       ),
                       _NavIconButton(
                         item: const _NavDef(
@@ -210,10 +265,10 @@ class BlobNavBar extends StatelessWidget {
                           asset: 'assets/icons/avatar.png',
                           size: 20,
                         ),
-                        isActive: currentIndex == 4,
-                        activeColor: activeColor,
-                        iconColor: _iconColor,
-                        onTap: () => onTap(4),
+                        isActive: widget.currentIndex == 4,
+                        activeColor: widget.activeColor,
+                        iconColor: BlobNavBar._iconColor,
+                        onTap: () => widget.onTap(4),
                       ),
                     ],
                   ),
@@ -223,14 +278,84 @@ class BlobNavBar extends StatelessWidget {
               // ── Raised center capsule (hero button) ──
               Positioned(
                 left: centerX,
-                top: (barH - centerDiameter) / 2,
+                top: popupSpace + (barH - centerDiameter) / 2,
                 width: centerDiameter,
                 height: centerDiameter,
                 child: _CenterLogoButton(
-                  isActive: currentIndex == 3,
-                  activeColor: activeColor,
-                  inactiveColor: inactiveColor,
-                  onTap: () => onTap(3),
+                  isActive: widget.currentIndex == 3,
+                  isMenuOpen: _isMenuOpen,
+                  activeColor: widget.activeColor,
+                  inactiveColor: widget.inactiveColor,
+                  onTap: () => widget.onTap(3),
+                  onLongPress: _toggleMenu,
+                ),
+              ),
+
+              Positioned(
+                bottom: 54,
+                left: centerX + centerDiameter / 2 - 90,
+                width: 180,
+                child: AnimatedBuilder(
+                  animation: _menuCtrl,
+                  builder: (context, _) {
+                    return Opacity(
+                      opacity: _menuFade.value,
+                      child: SizedBox(
+                        height: 110,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Positioned(
+                              left: 14,
+                              bottom: 20 * _menuScale.value,
+                              child: Transform.translate(
+                                offset: Offset(0, 30 * (1 - _menuScale.value)),
+                                child: _PopupCircle(
+                                  icon: 'assets/icons/bolt.png',
+                                  onTap: () => _onChoiceTap(null),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              left: (180 - 52) / 2,
+                              bottom: 40 * _menuScale.value,
+                              child: Transform.translate(
+                                offset: Offset(0, 20 * (1 - _menuScale.value)),
+                                child: _PopupCircle(
+                                  icon: 'assets/icons/punch.png',
+                                  onTap: () => _onChoiceTap(() {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const CreateSessionScreen(),
+                                      ),
+                                    );
+                                  }),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              right: 14,
+                              bottom: 20 * _menuScale.value,
+                              child: Transform.translate(
+                                offset: Offset(0, 30 * (1 - _menuScale.value)),
+                                child: _PopupCircle(
+                                  icon: 'assets/icons/spinning-wheel.png',
+                                  onTap: () => _onChoiceTap(() {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => const WheelScreen(),
+                                      ),
+                                    );
+                                  }),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ],
@@ -273,74 +398,27 @@ class _GlassCapsule extends StatelessWidget {
 
 class _CenterLogoButton extends StatefulWidget {
   final bool isActive;
+  final bool isMenuOpen;
   final Color activeColor;
   final Color inactiveColor;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
 
   const _CenterLogoButton({
     required this.isActive,
+    required this.isMenuOpen,
     required this.activeColor,
     required this.inactiveColor,
     required this.onTap,
+    required this.onLongPress,
   });
 
   @override
   State<_CenterLogoButton> createState() => _CenterLogoButtonState();
 }
 
-class _CenterLogoButtonState extends State<_CenterLogoButton>
-    with SingleTickerProviderStateMixin {
+class _CenterLogoButtonState extends State<_CenterLogoButton> {
   bool _isPressed = false;
-  bool _isMenuOpen = false;
-  late final AnimationController _menuCtrl;
-  late final Animation<double> _menuScale;
-  late final Animation<double> _menuFade;
-
-  @override
-  void initState() {
-    super.initState();
-    _menuCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _menuScale = CurvedAnimation(
-      parent: _menuCtrl,
-      curve: Curves.easeOutBack,
-    );
-    _menuFade = CurvedAnimation(
-      parent: _menuCtrl,
-      curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _menuCtrl.dispose();
-    super.dispose();
-  }
-
-  void _toggleMenu() {
-    setState(() => _isMenuOpen = !_isMenuOpen);
-    if (_isMenuOpen) {
-      _menuCtrl.forward();
-    } else {
-      _menuCtrl.reverse();
-    }
-  }
-
-  void _closeMenu() {
-    if (_isMenuOpen) {
-      setState(() => _isMenuOpen = false);
-      _menuCtrl.reverse();
-    }
-  }
-
-  void _onChoiceTap(VoidCallback? navigation) {
-    _closeMenu();
-    if (navigation != null) {
-      Future.delayed(const Duration(milliseconds: 200), navigation);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -350,13 +428,13 @@ class _CenterLogoButtonState extends State<_CenterLogoButton>
         // ── Center capsule button (painted first = lower hit-test priority) ──
         Positioned.fill(
           child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
+            behavior: HitTestBehavior.deferToChild,
             onTap: () {
-              if (!_isMenuOpen) {
+              if (!widget.isMenuOpen) {
                 widget.onTap();
               }
             },
-            onLongPress: _toggleMenu,
+            onLongPress: widget.onLongPress,
             onTapDown: (_) => setState(() => _isPressed = true),
             onTapUp: (_) => setState(() => _isPressed = false),
             onTapCancel: () => setState(() => _isPressed = false),
@@ -371,26 +449,33 @@ class _CenterLogoButtonState extends State<_CenterLogoButton>
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      _isMenuOpen
+                      widget.isMenuOpen
                           ? const Color(0xFFFF6BB5)
                           : widget.isActive
-                              ? const Color(0xFFFF6BB5)
-                              : const Color(0xFF9A5AB0),
-                      _isMenuOpen
+                          ? const Color(0xFFFF6BB5)
+                          : const Color(0xFF9A5AB0),
+                      widget.isMenuOpen
                           ? const Color(0xFF800DD8)
                           : widget.isActive
-                              ? const Color(0xFF800DD8)
-                              : const Color(0xFF6A3A80),
+                          ? const Color(0xFF800DD8)
+                          : const Color(0xFF6A3A80),
                     ],
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: (_isMenuOpen
-                              ? const Color(0xFFFE4EF0)
-                              : widget.isActive
+                      color:
+                          (widget.isMenuOpen
+                                  ? const Color(0xFFFE4EF0)
+                                  : widget.isActive
                                   ? const Color(0xFFFE4EF0)
                                   : const Color(0xFF7A4A8A))
-                          .withValues(alpha: _isMenuOpen ? 0.6 : widget.isActive ? 0.5 : 0.25),
+                              .withValues(
+                                alpha: widget.isMenuOpen
+                                    ? 0.6
+                                    : widget.isActive
+                                    ? 0.5
+                                    : 0.25,
+                              ),
                       blurRadius: 20,
                       spreadRadius: 2,
                       offset: const Offset(0, 4),
@@ -407,10 +492,12 @@ class _CenterLogoButtonState extends State<_CenterLogoButton>
                       ),
                       padding: const EdgeInsets.all(12),
                       child: AnimatedRotation(
-                        turns: _isMenuOpen ? 0.125 : 0,
+                        turns: widget.isMenuOpen ? 0.125 : 0,
                         duration: const Duration(milliseconds: 300),
                         child: Opacity(
-                          opacity: _isMenuOpen || widget.isActive ? 1.0 : 0.65,
+                          opacity: widget.isMenuOpen || widget.isActive
+                              ? 1.0
+                              : 0.65,
                           child: Image.asset(
                             'assets/images/WeDo-Logo.png',
                             fit: BoxFit.contain,
@@ -433,79 +520,6 @@ class _CenterLogoButtonState extends State<_CenterLogoButton>
             ),
           ),
         ),
-
-        // ── Radial popup menu (painted last = higher hit-test priority) ──
-        Positioned(
-          bottom: 54,
-          left: -90,
-          right: -90,
-          child: AnimatedBuilder(
-            animation: _menuCtrl,
-            builder: (context, _) {
-              return Opacity(
-                opacity: _menuFade.value,
-                child: SizedBox(
-                  height: 110,
-                  width: 180,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      // Left — Create Session (upper-left of arc)
-                      Positioned(
-                        left: 44,
-                        bottom: 20 * _menuScale.value,
-                        child: Transform.translate(
-                          offset: Offset(0, 30 * (1 - _menuScale.value)),
-                          child: _PopupCircle(
-                            icon: 'assets/icons/pickfight.png',
-                            onTap: () => _onChoiceTap(() {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const CreateSessionScreen(),
-                                ),
-                              );
-                            }),
-                          ),
-                        ),
-                      ),
-                      // Middle — Placeholder (top of arc)
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 40 * _menuScale.value,
-                        child: Transform.translate(
-                          offset: Offset(0, 20 * (1 - _menuScale.value)),
-                          child: _PopupCircle(
-                            icon: 'assets/icons/controller.png',
-                            onTap: () => _onChoiceTap(null),
-                          ),
-                        ),
-                      ),
-                      // Right — Join Session (upper-right of arc)
-                      Positioned(
-                        right: 44,
-                        bottom: 20 * _menuScale.value,
-                        child: Transform.translate(
-                          offset: Offset(0, 30 * (1 - _menuScale.value)),
-                          child: _PopupCircle(
-                            icon: 'assets/icons/spin the wheel.png',
-                            onTap: () => _onChoiceTap(() {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const JoinSessionScreen(),
-                                ),
-                              );
-                            }),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
       ],
     );
   }
@@ -517,10 +531,7 @@ class _PopupCircle extends StatelessWidget {
   final String icon;
   final VoidCallback onTap;
 
-  const _PopupCircle({
-    required this.icon,
-    required this.onTap,
-  });
+  const _PopupCircle({required this.icon, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -532,9 +543,9 @@ class _PopupCircle extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: Colors.white.withValues(alpha: 0.10),
+            color: Colors.white.withValues(alpha: 0.25),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.15),
+              color: Colors.white.withValues(alpha: 0.35),
               width: 1,
             ),
           ),
@@ -895,7 +906,15 @@ class _FeatureCarouselState extends State<_FeatureCarousel>
     final data = _featureCards[_currentIndex];
 
     return GestureDetector(
-      onTap: _advance,
+      onTap: () {
+        if (_currentIndex == 4) {
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const WheelScreen()));
+        } else {
+          _advance();
+        }
+      },
       child: AnimatedSwitcher(
         duration: _animDuration,
         switchInCurve: Curves.easeInOut,
@@ -1301,37 +1320,33 @@ class _StackedCardsState extends State<_StackedCards>
   }
 
   void _initAnimations() {
-    _leftOffsetX = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween(begin: 0.0, end: -60.0), weight: 1),
-      TweenSequenceItem(tween: Tween(begin: -60.0, end: 0.0), weight: 1),
-    ]).animate(CurvedAnimation(
-      parent: _swapCtrl,
-      curve: Curves.easeInOutCubic,
-    ));
+    _leftOffsetX = TweenSequence<double>(
+      [
+        TweenSequenceItem(tween: Tween(begin: 0.0, end: -60.0), weight: 1),
+        TweenSequenceItem(tween: Tween(begin: -60.0, end: 0.0), weight: 1),
+      ],
+    ).animate(CurvedAnimation(parent: _swapCtrl, curve: Curves.easeInOutCubic));
 
-    _leftAngle = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween(begin: -0.03, end: -0.78), weight: 1),
-      TweenSequenceItem(tween: Tween(begin: -0.78, end: -0.03), weight: 1),
-    ]).animate(CurvedAnimation(
-      parent: _swapCtrl,
-      curve: Curves.easeInOutCubic,
-    ));
+    _leftAngle = TweenSequence<double>(
+      [
+        TweenSequenceItem(tween: Tween(begin: -0.03, end: -0.78), weight: 1),
+        TweenSequenceItem(tween: Tween(begin: -0.78, end: -0.03), weight: 1),
+      ],
+    ).animate(CurvedAnimation(parent: _swapCtrl, curve: Curves.easeInOutCubic));
 
-    _rightOffsetX = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween(begin: 30.0, end: 90.0), weight: 1),
-      TweenSequenceItem(tween: Tween(begin: 90.0, end: 30.0), weight: 1),
-    ]).animate(CurvedAnimation(
-      parent: _swapCtrl,
-      curve: Curves.easeInOutCubic,
-    ));
+    _rightOffsetX = TweenSequence<double>(
+      [
+        TweenSequenceItem(tween: Tween(begin: 30.0, end: 90.0), weight: 1),
+        TweenSequenceItem(tween: Tween(begin: 90.0, end: 30.0), weight: 1),
+      ],
+    ).animate(CurvedAnimation(parent: _swapCtrl, curve: Curves.easeInOutCubic));
 
-    _rightAngle = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween(begin: -0.04, end: -0.78), weight: 1),
-      TweenSequenceItem(tween: Tween(begin: -0.78, end: -0.04), weight: 1),
-    ]).animate(CurvedAnimation(
-      parent: _swapCtrl,
-      curve: Curves.easeInOutCubic,
-    ));
+    _rightAngle = TweenSequence<double>(
+      [
+        TweenSequenceItem(tween: Tween(begin: -0.04, end: -0.78), weight: 1),
+        TweenSequenceItem(tween: Tween(begin: -0.78, end: -0.04), weight: 1),
+      ],
+    ).animate(CurvedAnimation(parent: _swapCtrl, curve: Curves.easeInOutCubic));
   }
 
   @override
@@ -1535,10 +1550,7 @@ class _StackedCardsState extends State<_StackedCards>
           child: Stack(
             alignment: Alignment.center,
             clipBehavior: Clip.none,
-            children: [
-              backCard,
-              frontCard,
-            ],
+            children: [backCard, frontCard],
           ),
         );
       },
