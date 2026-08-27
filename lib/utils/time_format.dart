@@ -98,3 +98,19 @@ String formatCallBubbleTime(dynamic timestamp) {
 String formatMonthDay(DateTime date) {
   return '${_monthsShort[date.month - 1]} ${date.day}';
 }
+
+String formatDuration(Duration d) {
+  final minutes = d.inMinutes;
+  final seconds = d.inSeconds % 60;
+  return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+}
+
+String formatSeconds(int totalSeconds) {
+  final hours = totalSeconds ~/ 3600;
+  final minutes = (totalSeconds % 3600) ~/ 60;
+  final seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+  return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+}

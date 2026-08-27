@@ -6,6 +6,7 @@ import '../../models/direct_chat.dart';
 import '../../models/message.dart';
 import '../../models/user_entity.dart';
 import '../../utils/constants.dart';
+import '../../utils/time_format.dart';
 
 class DirectService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -252,7 +253,7 @@ class DirectService {
         : '';
     final displayText = statusText.isNotEmpty
         ? '$statusText $callText'
-        : '$callText · ${_formatDuration(durationSeconds)}';
+        : '$callText · ${formatSeconds(durationSeconds)}';
 
     batch.set(_messages(chatId).doc(), {
       'sender_id': senderId,
@@ -313,12 +314,6 @@ class DirectService {
     });
 
     await batch.commit();
-  }
-
-  String _formatDuration(int totalSeconds) {
-    final minutes = totalSeconds ~/ 60;
-    final seconds = totalSeconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
   Future<void> sendPollMessage({
@@ -429,21 +424,20 @@ class DirectService {
 
   Stream<List<ChatMessage>> getMessagesStream(String chatId) {
     return _messages(chatId)
-        .orderBy('created_at', descending: false)
+        .orderBy('created_at', descending: true)
         .snapshots()
         .map((snap) => snap.docs.map(ChatMessage.fromFirestore).toList());
   }
 
   Future<void> markMessagesAsRead(String chatId, String uid) async {
-    final unreadDocs = await _messages(chatId).get();
+    final unreadDocs = await _messages(chatId)
+        .where('read_by', isNotEqualTo: uid)
+        .get();
     final batch = _db.batch();
     for (final doc in unreadDocs.docs) {
-      final readBy = List<String>.from(doc.data()['read_by'] ?? []);
-      if (!readBy.contains(uid)) {
-        batch.update(doc.reference, {
-          'read_by': FieldValue.arrayUnion([uid]),
-        });
-      }
+      batch.update(doc.reference, {
+        'read_by': FieldValue.arrayUnion([uid]),
+      });
     }
     batch.update(_chats.doc(chatId), {
       'lastMessageReadBy': FieldValue.arrayUnion([uid]),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -58,15 +59,35 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   int _newMessageCount = 0;
   bool _isAtBottom = true;
   List<ChatMessage> _previousMessages = [];
+  StreamSubscription<List<ChatMessage>>? _messagesSub;
+  late Stream<List<ChatMessage>> _messagesStream;
 
   @override
   void initState() {
     super.initState();
+    _messagesStream = _directService.getMessagesStream(widget.chatId);
     _loadData();
     if (_currentUser != null) {
       _directService.markMessagesAsRead(widget.chatId, _currentUser.uid);
     }
     _scrollCtrl.addListener(_onScroll);
+    _messagesSub = _messagesStream.listen((messages) {
+      final prevLength = _previousMessages.length;
+      final newMessageArrived = messages.length > prevLength;
+      final wasAtBottom = _isAtBottom;
+
+      _previousMessages = messages;
+
+      if (!mounted) return;
+
+      if (wasAtBottom && newMessageArrived) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_scrollCtrl.hasClients) _scrollCtrl.jumpTo(0);
+        });
+      } else if (!wasAtBottom && newMessageArrived) {
+        setState(() => _newMessageCount += messages.length - prevLength);
+      }
+    });
   }
 
   Future<void> _loadData() async {
@@ -85,7 +106,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
 
   String _getDisplayName() {
     if (_currentUser == null) return _otherName;
-    return _nicknames[_currentUser.uid] ?? _otherName;
+    return _nicknames[widget.otherUid] ?? _otherName;
   }
 
   Future<void> _loadEventPollData(ChatMessage msg) async {
@@ -111,6 +132,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
 
   @override
   void dispose() {
+    _messagesSub?.cancel();
     _messageCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
@@ -118,9 +140,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
 
   void _onScroll() {
     if (!_scrollCtrl.hasClients) return;
-    final maxScroll = _scrollCtrl.position.maxScrollExtent;
     final currentScroll = _scrollCtrl.offset;
-    final atBottom = (maxScroll - currentScroll) < 80;
+    final atBottom = currentScroll < 80;
     if (atBottom != _isAtBottom) {
       setState(() => _isAtBottom = atBottom);
       if (atBottom) {
@@ -130,31 +151,13 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   }
 
   void _scrollToBottom() {
-    if (_scrollCtrl.hasClients) {
-      _scrollCtrl.animateTo(
-        _scrollCtrl.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
-      setState(() => _newMessageCount = 0);
-    }
-  }
-
-  void _onMessagesUpdated(List<ChatMessage> messages) {
-    if (_previousMessages.isNotEmpty && !_isAtBottom) {
-      final newCount = messages.length - _previousMessages.length;
-      if (newCount > 0) {
-        setState(() => _newMessageCount += newCount);
-      }
-    }
-    _previousMessages = messages;
-    if (_isAtBottom && messages.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollCtrl.hasClients) {
-          _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
-        }
-      });
-    }
+    if (!_scrollCtrl.hasClients) return;
+    _scrollCtrl.animateTo(
+      0,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+    setState(() => _newMessageCount = 0);
   }
 
   void _sendMessage() {
@@ -251,10 +254,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     if (!mounted) return;
 
     final callStream = _callService.getCallStream(callId);
-    final call = await callStream.firstWhere(
-      (c) => c != null,
-      orElse: () => null,
-    );
+    final call = await callStream.first;
 
     if (!mounted || call == null) return;
 
@@ -416,7 +416,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                   opacity: t.backgroundOpacity,
                 ),
                 StreamBuilder<List<ChatMessage>>(
-                    stream: _directService.getMessagesStream(widget.chatId),
+                    stream: _messagesStream,
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return const Center(child: CircularProgressIndicator());
@@ -431,9 +431,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                         );
                       }
 
-                      _onMessagesUpdated(messages);
-
                   return ListView.builder(
+                    reverse: true,
                     controller: _scrollCtrl,
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                     itemCount: messages.length,
@@ -441,6 +440,15 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                       final msg = messages[index];
                       final isMe = msg.senderId == _currentUser?.uid;
                       final isSystem = msg.type == MessageType.system;
+
+                      final sameSenderAsNextOlder = index + 1 < messages.length &&
+                          messages[index + 1].senderId == msg.senderId &&
+                          isSameDay(msg.createdAt, messages[index + 1].createdAt);
+                      final sameSenderAsPrevNewer = index - 1 >= 0 &&
+                          messages[index - 1].senderId == msg.senderId &&
+                          isSameDay(msg.createdAt, messages[index - 1].createdAt);
+                      final isFirstInGroup = !sameSenderAsNextOlder;
+                      final isLastInGroup = !sameSenderAsPrevNewer;
 
                       final showDateSeparator = index == 0 ||
                           !isSameDay(
@@ -457,11 +465,13 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                             time: formatChatTime(msg.createdAt),
                             isSystem: true,
                             theme: t,
+                            isFirstInGroup: isFirstInGroup,
+                            isLastInGroup: isLastInGroup,
                           );
                         }
 
                         if (msg.type == MessageType.event && msg.refId != null) {
-                          _loadEventPollData(msg);
+                          WidgetsBinding.instance.addPostFrameCallback((_) => _loadEventPollData(msg));
                           final evt = _events[msg.refId];
                           return MessageBubble(
                             content: msg.content,
@@ -471,6 +481,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                             event: evt,
                             currentUid: _currentUser?.uid,
                             theme: t,
+                            isFirstInGroup: isFirstInGroup,
+                            isLastInGroup: isLastInGroup,
                             onEventTap: evt != null
                                 ? () {
                                     Navigator.push(
@@ -488,7 +500,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                         }
 
                         if (msg.type == MessageType.poll && msg.refId != null) {
-                          _loadEventPollData(msg);
+                          WidgetsBinding.instance.addPostFrameCallback((_) => _loadEventPollData(msg));
                           return MessageBubble(
                             content: msg.content,
                             isMe: isMe,
@@ -497,6 +509,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                             poll: _polls[msg.refId],
                             currentUid: _currentUser?.uid,
                             theme: t,
+                            isFirstInGroup: isFirstInGroup,
+                            isLastInGroup: isLastInGroup,
                           );
                         }
 
@@ -518,6 +532,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                             senderName: null,
                             time: formatChatTime(msg.createdAt),
                             theme: t,
+                            isFirstInGroup: isFirstInGroup,
+                            isLastInGroup: isLastInGroup,
                           );
                         }
 
@@ -530,6 +546,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                             senderName: null,
                             time: formatChatTime(msg.createdAt),
                             theme: t,
+                            isFirstInGroup: isFirstInGroup,
+                            isLastInGroup: isLastInGroup,
                           );
                         }
 
@@ -546,6 +564,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                             chatId: widget.chatId,
                             members: [_currentUser?.uid ?? '', widget.otherUid],
                             theme: t,
+                            isFirstInGroup: isFirstInGroup,
+                            isLastInGroup: isLastInGroup,
                           );
                         }
 
@@ -568,6 +588,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                           senderName: null,
                           time: formatChatTime(msg.createdAt),
                           theme: t,
+                          isFirstInGroup: isFirstInGroup,
+                          isLastInGroup: isLastInGroup,
                         );
                       }
 

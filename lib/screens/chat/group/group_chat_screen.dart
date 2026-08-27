@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -55,16 +56,36 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   int _newMessageCount = 0;
   bool _isAtBottom = true;
   List<ChatMessage> _previousMessages = [];
+  StreamSubscription<List<ChatMessage>>? _messagesSub;
+  late Stream<List<ChatMessage>> _messagesStream;
 
   @override
   void initState() {
     super.initState();
     _groupStream = _groupService.getGroupStream(widget.groupId);
+    _messagesStream = _groupService.getMessagesStream(widget.groupId);
     _loadGroupInfo();
     if (_currentUser != null) {
       _groupService.markMessagesAsRead(widget.groupId, _currentUser.uid);
     }
     _scrollCtrl.addListener(_onScroll);
+    _messagesSub = _messagesStream.listen((messages) {
+      final prevLength = _previousMessages.length;
+      final newMessageArrived = messages.length > prevLength;
+      final wasAtBottom = _isAtBottom;
+
+      _previousMessages = messages;
+
+      if (!mounted) return;
+
+      if (wasAtBottom && newMessageArrived) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_scrollCtrl.hasClients) _scrollCtrl.jumpTo(0);
+        });
+      } else if (!wasAtBottom && newMessageArrived) {
+        setState(() => _newMessageCount += messages.length - prevLength);
+      }
+    });
   }
 
   Future<void> _loadGroupInfo() async {
@@ -109,6 +130,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   @override
   void dispose() {
+    _messagesSub?.cancel();
     _messageCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
@@ -116,9 +138,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   void _onScroll() {
     if (!_scrollCtrl.hasClients) return;
-    final maxScroll = _scrollCtrl.position.maxScrollExtent;
     final currentScroll = _scrollCtrl.offset;
-    final atBottom = (maxScroll - currentScroll) < 80;
+    final atBottom = currentScroll < 80;
     if (atBottom != _isAtBottom) {
       setState(() => _isAtBottom = atBottom);
       if (atBottom) {
@@ -128,31 +149,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   void _scrollToBottom() {
-    if (_scrollCtrl.hasClients) {
-      _scrollCtrl.animateTo(
-        _scrollCtrl.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
-      setState(() => _newMessageCount = 0);
-    }
-  }
-
-  void _onMessagesUpdated(List<ChatMessage> messages) {
-    if (_previousMessages.isNotEmpty && !_isAtBottom) {
-      final newCount = messages.length - _previousMessages.length;
-      if (newCount > 0) {
-        setState(() => _newMessageCount += newCount);
-      }
-    }
-    _previousMessages = messages;
-    if (_isAtBottom && messages.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollCtrl.hasClients) {
-          _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
-        }
-      });
-    }
+    if (!_scrollCtrl.hasClients) return;
+    _scrollCtrl.animateTo(
+      0,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+    setState(() => _newMessageCount = 0);
   }
 
   void _sendMessage() {
@@ -254,10 +257,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     if (!mounted) return;
 
     final callStream = _callService.getCallStream(callId);
-    final call = await callStream.firstWhere(
-      (c) => c != null,
-      orElse: () => null,
-    );
+    final call = await callStream.first;
 
     if (!mounted || call == null) return;
 
@@ -419,7 +419,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                   opacity: t.backgroundOpacity,
                 ),
                 StreamBuilder<List<ChatMessage>>(
-                    stream: _groupService.getMessagesStream(widget.groupId),
+                    stream: _messagesStream,
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return const Center(child: CircularProgressIndicator());
@@ -434,9 +434,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                         );
                       }
 
-                      _onMessagesUpdated(messages);
-
                   return ListView.builder(
+                    reverse: true,
                     controller: _scrollCtrl,
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                     itemCount: messages.length,
@@ -444,6 +443,15 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                       final msg = messages[index];
                       final isMe = msg.senderId == _currentUser?.uid;
                       final isSystem = msg.type == MessageType.system;
+
+                      final sameSenderAsNextOlder = index + 1 < messages.length &&
+                          messages[index + 1].senderId == msg.senderId &&
+                          isSameDay(msg.createdAt, messages[index + 1].createdAt);
+                      final sameSenderAsPrevNewer = index - 1 >= 0 &&
+                          messages[index - 1].senderId == msg.senderId &&
+                          isSameDay(msg.createdAt, messages[index - 1].createdAt);
+                      final isFirstInGroup = !sameSenderAsNextOlder;
+                      final isLastInGroup = !sameSenderAsPrevNewer;
 
                       final showDateSeparator = index == 0 ||
                           !isSameDay(
@@ -460,20 +468,24 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             time: formatChatTime(msg.createdAt),
                             isSystem: true,
                             theme: t,
+                            isFirstInGroup: isFirstInGroup,
+                            isLastInGroup: isLastInGroup,
                           );
                         }
 
                         if (msg.type == MessageType.event && msg.refId != null) {
-                          _loadEventPollData(msg);
+                          WidgetsBinding.instance.addPostFrameCallback((_) => _loadEventPollData(msg));
                           final evt = _events[msg.refId];
                           return MessageBubble(
                             content: msg.content,
                             isMe: isMe,
-                            senderName: _getDisplayName(msg.senderId, msg.senderName),
+                            senderName: isMe ? null : (isFirstInGroup ? _getDisplayName(msg.senderId, msg.senderName) : null),
                             time: formatChatTime(msg.createdAt),
                             event: evt,
                             currentUid: _currentUser?.uid,
                             theme: t,
+                            isFirstInGroup: isFirstInGroup,
+                            isLastInGroup: isLastInGroup,
                             onEventTap: evt != null
                                 ? () {
                                     Navigator.push(
@@ -491,15 +503,17 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                         }
 
                         if (msg.type == MessageType.poll && msg.refId != null) {
-                          _loadEventPollData(msg);
+                          WidgetsBinding.instance.addPostFrameCallback((_) => _loadEventPollData(msg));
                           return MessageBubble(
                             content: msg.content,
                             isMe: isMe,
-                            senderName: isMe ? null : _getDisplayName(msg.senderId, msg.senderName),
+                            senderName: isMe ? null : (isFirstInGroup ? _getDisplayName(msg.senderId, msg.senderName) : null),
                             time: formatChatTime(msg.createdAt),
                             poll: _polls[msg.refId],
                             currentUid: _currentUser?.uid,
                             theme: t,
+                            isFirstInGroup: isFirstInGroup,
+                            isLastInGroup: isLastInGroup,
                           );
                         }
 
@@ -523,9 +537,11 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             content: msg.content,
                             imageUrl: msg.imageUrl,
                             isMe: isMe,
-                            senderName: isMe ? null : displayName,
+                            senderName: isMe ? null : (isFirstInGroup ? displayName : null),
                             time: formatChatTime(msg.createdAt),
                             theme: t,
+                            isFirstInGroup: isFirstInGroup,
+                            isLastInGroup: isLastInGroup,
                           );
                         }
 
@@ -535,9 +551,11 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             audioUrl: msg.audioUrl,
                             durationSeconds: msg.durationSeconds,
                             isMe: isMe,
-                            senderName: isMe ? null : displayName,
+                            senderName: isMe ? null : (isFirstInGroup ? displayName : null),
                             time: formatChatTime(msg.createdAt),
                             theme: t,
+                            isFirstInGroup: isFirstInGroup,
+                            isLastInGroup: isLastInGroup,
                           );
                         }
 
@@ -554,6 +572,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             groupId: widget.groupId,
                             members: _members,
                             theme: t,
+                            isFirstInGroup: isFirstInGroup,
+                            isLastInGroup: isLastInGroup,
                           );
                         }
 
@@ -573,9 +593,11 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                         return MessageBubble(
                           content: msg.content,
                           isMe: isMe,
-                          senderName: isMe ? null : displayName,
+                          senderName: isMe ? null : (isFirstInGroup ? displayName : null),
                           time: formatChatTime(msg.createdAt),
                           theme: t,
+                          isFirstInGroup: isFirstInGroup,
+                          isLastInGroup: isLastInGroup,
                         );
                       }
 

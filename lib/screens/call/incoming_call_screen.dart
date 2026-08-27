@@ -78,46 +78,53 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
     _ringtonePlayer.stop();
     if (!mounted) return;
 
-    await _callManager.startNewCall(
-      callData: ActiveCallData(
-        callId: widget.call.id,
-        callName: widget.callerName,
-        callType: widget.call.type,
-        members: widget.call.members,
-        createdBy: widget.call.createdBy,
-        isGroup: widget.call.groupId != null,
-        chatId: widget.call.chatId,
-        groupId: widget.call.groupId,
-        startedAt: DateTime.now(),
-      ),
-      audioOnly: widget.call.type == CallType.audio,
-    );
-
-    if (mounted) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => CallScreen(
-            callId: widget.call.id,
-            callName: widget.callerName,
-            callType: widget.call.type,
-            members: widget.call.members,
-            createdBy: widget.call.createdBy,
-            isGroup: widget.call.groupId != null,
-            chatId: widget.call.chatId,
-            groupId: widget.call.groupId,
-          ),
+    try {
+      await _callManager.startNewCall(
+        callData: ActiveCallData(
+          callId: widget.call.id,
+          callName: widget.callerName,
+          callType: widget.call.type,
+          members: widget.call.members,
+          createdBy: widget.call.createdBy,
+          isGroup: widget.call.groupId != null,
+          chatId: widget.call.chatId,
+          groupId: widget.call.groupId,
+          startedAt: DateTime.now(),
         ),
+        audioOnly: widget.call.type == CallType.audio,
       );
+
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => CallScreen(
+              callId: widget.call.id,
+              callName: widget.callerName,
+              callType: widget.call.type,
+              members: widget.call.members,
+              createdBy: widget.call.createdBy,
+              isGroup: widget.call.groupId != null,
+              chatId: widget.call.chatId,
+              groupId: widget.call.groupId,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error accepting call: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to accept call: $e')),
+        );
+        Navigator.of(context).pop();
+      }
     }
   }
 
   void _declineCall() {
     _ringtonePlayer.stop();
+    _sendMissedCallMessage();
     final callService = CallService();
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser != null) {
-      _sendMissedCallMessage();
-    }
     callService.endCall(widget.call.id);
     Navigator.of(context).pop();
   }
@@ -132,7 +139,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
       GroupService().sendCallMessage(
         groupId: widget.call.groupId!,
         senderId: currentUser.uid,
-        senderName: widget.callerName,
+        senderName: currentUser.displayName ?? currentUser.email ?? 'Unknown',
         callType: callTypeStr,
         callStatus: 'missed',
         durationSeconds: 0,
@@ -141,7 +148,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
       DirectService().sendCallMessage(
         chatId: widget.call.chatId!,
         senderId: currentUser.uid,
-        senderName: widget.callerName,
+        senderName: currentUser.displayName ?? currentUser.email ?? 'Unknown',
         callType: callTypeStr,
         callStatus: 'missed',
         durationSeconds: 0,
@@ -153,7 +160,12 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
   Widget build(BuildContext context) {
     final isVideo = widget.call.type == CallType.video;
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _declineCall();
+      },
+      child: Scaffold(
       body: Container(
         width: double.infinity,
         height: double.infinity,
@@ -311,6 +323,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
           ),
         ),
       ),
+    ),
     );
   }
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
@@ -34,14 +35,21 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
   List<Map<String, dynamic>> _members = [];
   GroupChat? _group;
   String? _currentThemeId;
+  StreamSubscription<String?>? _themeSub;
 
   @override
   void initState() {
     super.initState();
     _loadData();
-    _themeService.getChatThemeStream(widget.groupId, 'group_chats').listen((id) {
+    _themeSub = _themeService.getChatThemeStream(widget.groupId, 'group_chats').listen((id) {
       if (mounted) setState(() => _currentThemeId = id);
     });
+  }
+
+  @override
+  void dispose() {
+    _themeSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadData() async {

@@ -4,6 +4,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import '../../models/group_chat.dart';
 import '../../models/message.dart';
 import '../../utils/constants.dart';
+import '../../utils/time_format.dart';
 
 class GroupService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -252,7 +253,7 @@ class GroupService {
         : '';
     final displayText = statusText.isNotEmpty
         ? '$statusText $callText'
-        : '$callText · ${_formatDuration(durationSeconds)}';
+        : '$callText · ${formatSeconds(durationSeconds)}';
 
     batch.set(_messages(groupId).doc(), {
       'sender_id': senderId,
@@ -309,12 +310,6 @@ class GroupService {
     });
 
     await batch.commit();
-  }
-
-  String _formatDuration(int totalSeconds) {
-    final minutes = totalSeconds ~/ 60;
-    final seconds = totalSeconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
   Future<void> sendPollMessage({
@@ -379,22 +374,21 @@ class GroupService {
 
   Stream<List<ChatMessage>> getMessagesStream(String groupId) {
     return _messages(groupId)
-        .orderBy('created_at', descending: false)
+        .orderBy('created_at', descending: true)
         .snapshots()
         .map((snap) =>
             snap.docs.map(ChatMessage.fromFirestore).toList());
   }
 
   Future<void> markMessagesAsRead(String groupId, String uid) async {
-    final allDocs = await _messages(groupId).get();
+    final unreadDocs = await _messages(groupId)
+        .where('read_by', isNotEqualTo: uid)
+        .get();
     final batch = _db.batch();
-    for (final doc in allDocs.docs) {
-      final readBy = List<String>.from(doc.data()['read_by'] ?? []);
-      if (!readBy.contains(uid)) {
-        batch.update(doc.reference, {
-          'read_by': FieldValue.arrayUnion([uid]),
-        });
-      }
+    for (final doc in unreadDocs.docs) {
+      batch.update(doc.reference, {
+        'read_by': FieldValue.arrayUnion([uid]),
+      });
     }
     batch.update(_groups.doc(groupId), {
       'lastMessageReadBy': FieldValue.arrayUnion([uid]),

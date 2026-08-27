@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/call.dart';
 import '../services/call/call_manager.dart';
 import '../screens/call/call_screen.dart';
+import '../utils/time_format.dart';
 
 class MiniCallBanner extends StatefulWidget {
   const MiniCallBanner({super.key});
@@ -27,16 +28,6 @@ class _MiniCallBannerState extends State<MiniCallBanner> {
 
   void _onCallUpdate() {
     if (mounted) setState(() {});
-  }
-
-  String _formatDuration(int totalSeconds) {
-    final hours = totalSeconds ~/ 3600;
-    final minutes = (totalSeconds % 3600) ~/ 60;
-    final seconds = totalSeconds % 60;
-    if (hours > 0) {
-      return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-    }
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
   void _returnToCall() {
@@ -157,7 +148,7 @@ class _MiniCallBannerState extends State<MiniCallBanner> {
                       ),
                       const SizedBox(width: 5),
                       Text(
-                        _formatDuration(_callManager.callDuration),
+                        formatSeconds(_callManager.callDuration),
                         style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.7),
                           fontSize: 11,

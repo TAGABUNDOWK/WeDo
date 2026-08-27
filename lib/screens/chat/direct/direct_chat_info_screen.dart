@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../models/user_entity.dart';
 import '../../../services/direct/direct_service.dart';
@@ -25,14 +26,21 @@ class _DirectChatInfoScreenState extends State<DirectChatInfoScreen> {
   bool _isLoading = true;
   bool _isMuted = false;
   String? _currentThemeId;
+  StreamSubscription<String?>? _themeSub;
 
   @override
   void initState() {
     super.initState();
     _loadData();
-    _themeService.getChatThemeStream(widget.chatId, 'direct_chats').listen((id) {
+    _themeSub = _themeService.getChatThemeStream(widget.chatId, 'direct_chats').listen((id) {
       if (mounted) setState(() => _currentThemeId = id);
     });
+  }
+
+  @override
+  void dispose() {
+    _themeSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadData() async {

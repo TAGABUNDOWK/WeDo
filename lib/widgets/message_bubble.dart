@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import '../models/chat_theme.dart';
+import '../utils/time_format.dart';
 import '../screens/chat/image_viewer_screen.dart';
 import '../screens/call/outgoing_call_screen.dart';
 import '../services/call/call_service.dart';
@@ -30,6 +32,8 @@ class MessageBubble extends StatelessWidget {
   final String? currentUid;
   final VoidCallback? onEventTap;
   final AppChatTheme? theme;
+  final bool isFirstInGroup;
+  final bool isLastInGroup;
 
   const MessageBubble({
     super.key,
@@ -46,6 +50,8 @@ class MessageBubble extends StatelessWidget {
     this.currentUid,
     this.onEventTap,
     this.theme,
+    this.isFirstInGroup = true,
+    this.isLastInGroup = true,
   });
 
   @override
@@ -128,6 +134,8 @@ class MessageBubble extends StatelessWidget {
         senderName: senderName,
         time: time,
         theme: t,
+        isFirstInGroup: isFirstInGroup,
+        isLastInGroup: isLastInGroup,
       );
     }
 
@@ -137,8 +145,8 @@ class MessageBubble extends StatelessWidget {
         margin: EdgeInsets.only(
           left: isMe ? 60 : 8,
           right: isMe ? 8 : 60,
-          top: 2,
-          bottom: 2,
+          top: isFirstInGroup ? 2 : 0,
+          bottom: isLastInGroup ? 2 : 0,
         ),
         child: Column(
           crossAxisAlignment:
@@ -229,14 +237,16 @@ class MessageBubble extends StatelessWidget {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          time,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: txtSec,
+                        if (isLastInGroup) ...[
+                          const SizedBox(width: 4),
+                          Text(
+                            time,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: txtSec,
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                 ],
@@ -256,6 +266,8 @@ class _AudioMessageBubble extends StatefulWidget {
   final String? senderName;
   final String time;
   final AppChatTheme? theme;
+  final bool isFirstInGroup;
+  final bool isLastInGroup;
 
   const _AudioMessageBubble({
     required this.audioUrl,
@@ -264,6 +276,8 @@ class _AudioMessageBubble extends StatefulWidget {
     this.senderName,
     required this.time,
     this.theme,
+    this.isFirstInGroup = true,
+    this.isLastInGroup = true,
   });
 
   @override
@@ -275,6 +289,9 @@ class _AudioMessageBubbleState extends State<_AudioMessageBubble> {
   bool _isPlaying = false;
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
+  StreamSubscription<Duration?>? _durationSub;
+  StreamSubscription<Duration>? _positionSub;
+  StreamSubscription<PlayerState>? _playerStateSub;
 
   @override
   void initState() {
@@ -285,17 +302,17 @@ class _AudioMessageBubbleState extends State<_AudioMessageBubble> {
   Future<void> _initPlayer() async {
     try {
       await _player.setUrl(widget.audioUrl);
-      _player.durationStream.listen((duration) {
+      _durationSub = _player.durationStream.listen((duration) {
         if (mounted && duration != null) {
           setState(() => _duration = duration);
         }
       });
-      _player.positionStream.listen((position) {
+      _positionSub = _player.positionStream.listen((position) {
         if (mounted) {
           setState(() => _position = position);
         }
       });
-      _player.playerStateStream.listen((state) {
+      _playerStateSub = _player.playerStateStream.listen((state) {
         if (mounted) {
           setState(() => _isPlaying = state.playing);
         }
@@ -307,14 +324,11 @@ class _AudioMessageBubbleState extends State<_AudioMessageBubble> {
 
   @override
   void dispose() {
+    _durationSub?.cancel();
+    _positionSub?.cancel();
+    _playerStateSub?.cancel();
     _player.dispose();
     super.dispose();
-  }
-
-  String _formatDuration(Duration d) {
-    final minutes = d.inMinutes;
-    final seconds = d.inSeconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -332,8 +346,8 @@ class _AudioMessageBubbleState extends State<_AudioMessageBubble> {
         margin: EdgeInsets.only(
           left: widget.isMe ? 60 : 8,
           right: widget.isMe ? 8 : 60,
-          top: 2,
-          bottom: 2,
+          top: widget.isFirstInGroup ? 2 : 0,
+          bottom: widget.isLastInGroup ? 2 : 0,
         ),
         child: Column(
           crossAxisAlignment:
@@ -421,7 +435,7 @@ class _AudioMessageBubbleState extends State<_AudioMessageBubble> {
                         ),
                       ),
                       Text(
-                        _formatDuration(_duration),
+                        formatDuration(_duration),
                         style: TextStyle(
                           fontSize: 11,
                           color: widget.isMe
@@ -434,13 +448,14 @@ class _AudioMessageBubbleState extends State<_AudioMessageBubble> {
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.only(top: 2, right: 4),
-              child: Text(
-                widget.time,
-                style: TextStyle(fontSize: 11, color: txtSec),
+            if (widget.isLastInGroup)
+              Padding(
+                padding: const EdgeInsets.only(top: 2, right: 4),
+                child: Text(
+                  widget.time,
+                  style: TextStyle(fontSize: 11, color: txtSec),
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -461,6 +476,8 @@ class CallMessageBubble extends StatefulWidget {
   final String? groupId;
   final List<String> members;
   final AppChatTheme? theme;
+  final bool isFirstInGroup;
+  final bool isLastInGroup;
 
   const CallMessageBubble({
     super.key,
@@ -476,6 +493,8 @@ class CallMessageBubble extends StatefulWidget {
     this.groupId,
     required this.members,
     this.theme,
+    this.isFirstInGroup = true,
+    this.isLastInGroup = true,
   });
 
   @override
@@ -484,12 +503,6 @@ class CallMessageBubble extends StatefulWidget {
 
 class _CallMessageBubbleState extends State<CallMessageBubble> {
   bool _isCalling = false;
-
-  String _formatDuration(int totalSeconds) {
-    final minutes = totalSeconds ~/ 60;
-    final seconds = totalSeconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -514,14 +527,14 @@ class _CallMessageBubbleState extends State<CallMessageBubble> {
     final durationText = !hasStatus &&
             widget.durationSeconds != null &&
             widget.durationSeconds! > 0
-        ? _formatDuration(widget.durationSeconds!)
+        ? formatSeconds(widget.durationSeconds!)
         : null;
 
     return Center(
       child: GestureDetector(
         onTap: (isMissed || isDeclined) && !_isCalling ? () => _callBack() : null,
         child: Container(
-          margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 40),
+          margin: const EdgeInsets.symmetric(vertical: 0, horizontal: 40),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
             color: hasStatus
@@ -579,13 +592,14 @@ class _CallMessageBubbleState extends State<CallMessageBubble> {
                   ],
                 ],
               ),
-              Text(
-                widget.time,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: txtSec,
+              if (widget.isLastInGroup)
+                Text(
+                  widget.time,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: txtSec,
+                  ),
                 ),
-              ),
             ],
           ),
         ),

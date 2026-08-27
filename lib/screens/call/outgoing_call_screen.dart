@@ -88,26 +88,27 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
   }
 
   void _startCallInManager(Call call) async {
-    await _callManager.startNewCall(
-      callData: ActiveCallData(
-        callId: call.id,
-        callName: widget.callName,
-        callType: call.type,
-        members: call.members,
-        createdBy: call.createdBy,
-        isGroup: call.groupId != null,
-        chatId: call.chatId,
-        groupId: call.groupId,
-        startedAt: DateTime.now(),
-      ),
-      audioOnly: call.type == CallType.audio,
-    );
+    try {
+      await _callManager.startNewCall(
+        callData: ActiveCallData(
+          callId: call.id,
+          callName: widget.callName,
+          callType: call.type,
+          members: call.members,
+          createdBy: call.createdBy,
+          isGroup: call.groupId != null,
+          chatId: call.chatId,
+          groupId: call.groupId,
+          startedAt: DateTime.now(),
+        ),
+        audioOnly: call.type == CallType.audio,
+      );
 
-    if (mounted) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => CallScreen(
-            callId: call.id,
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => CallScreen(
+              callId: call.id,
             callName: widget.callName,
             callType: call.type,
             members: call.members,
@@ -118,6 +119,15 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
           ),
         ),
       );
+      }
+    } catch (e) {
+      debugPrint('Error starting call in manager: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to join call: $e')),
+        );
+        _endCall();
+      }
     }
   }
 

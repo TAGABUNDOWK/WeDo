@@ -7,6 +7,7 @@ import '../../main.dart' show navigatorKey;
 import '../../models/call.dart';
 import '../../screens/call/call_screen.dart';
 import '../../screens/call/outgoing_call_screen.dart';
+import '../../utils/time_format.dart';
 import '../direct/direct_service.dart';
 import '../group/group_service.dart';
 import 'call_service.dart';
@@ -282,28 +283,39 @@ class CallManager extends ChangeNotifier {
         _processedSignals.add(doc.id);
 
         final data = doc.data();
-        final fromUid = data['fromUid'] as String;
-        final type = data['type'] as String;
+        final fromUid = data['fromUid'] as String?;
+        final type = data['type'] as String?;
+        if (fromUid == null || type == null) continue;
 
-        if (type == 'offer') {
-          _webrtcService!.handleOffer(
-            callId: callData.callId,
-            fromUid: fromUid,
-            toUid: user.uid,
-            sdpJson: data['sdp'] as String,
-          );
-        } else if (type == 'answer') {
-          _webrtcService!.handleAnswer(
-            fromUid: fromUid,
-            toUid: user.uid,
-            sdpJson: data['sdp'] as String,
-          );
-        } else if (type == 'candidate') {
-          _webrtcService!.handleIceCandidate(
-            fromUid: fromUid,
-            toUid: user.uid,
-            candidateJson: data['candidate'] as String,
-          );
+        try {
+          if (type == 'offer') {
+            final sdp = data['sdp'] as String?;
+            if (sdp == null) continue;
+            _webrtcService!.handleOffer(
+              callId: callData.callId,
+              fromUid: fromUid,
+              toUid: user.uid,
+              sdpJson: sdp,
+            );
+          } else if (type == 'answer') {
+            final sdp = data['sdp'] as String?;
+            if (sdp == null) continue;
+            _webrtcService!.handleAnswer(
+              fromUid: fromUid,
+              toUid: user.uid,
+              sdpJson: sdp,
+            );
+          } else if (type == 'candidate') {
+            final candidateJson = data['candidate'] as String?;
+            if (candidateJson == null) continue;
+            _webrtcService!.handleIceCandidate(
+              fromUid: fromUid,
+              toUid: user.uid,
+              candidateJson: candidateJson,
+            );
+          }
+        } catch (e) {
+          debugPrint('Error handling signal $type: $e');
         }
       }
     });
@@ -366,7 +378,7 @@ class CallManager extends ChangeNotifier {
     }
   }
 
-  void _sendCallMessage() {
+  Future<void> _sendCallMessage() async {
     final user = _currentUser;
     if (user == null || _activeCall == null) return;
 
@@ -377,7 +389,7 @@ class CallManager extends ChangeNotifier {
     final duration = _callDuration;
 
     if (_activeCall!.isGroup && _activeCall!.groupId != null) {
-      GroupService().sendCallMessage(
+      await GroupService().sendCallMessage(
         groupId: _activeCall!.groupId!,
         senderId: uid,
         senderName: userName,
@@ -386,7 +398,7 @@ class CallManager extends ChangeNotifier {
         durationSeconds: duration,
       );
     } else if (_activeCall!.chatId != null) {
-      DirectService().sendCallMessage(
+      await DirectService().sendCallMessage(
         chatId: _activeCall!.chatId!,
         senderId: uid,
         senderName: userName,
@@ -410,12 +422,21 @@ class CallManager extends ChangeNotifier {
     _groupCallSub?.cancel();
     _groupCallDebounce?.cancel();
 
-    _sendCallMessage();
+    await _sendCallMessage();
 
-    try {
-      await _callService.leaveCall(callId, _currentUser?.uid ?? '');
-    } catch (e) {
-      debugPrint('Error leaving call: $e');
+    final uid = _currentUser?.uid;
+    if (uid != null && uid.isNotEmpty) {
+      try {
+        await _callService.leaveCall(callId, uid);
+      } catch (e) {
+        debugPrint('Error leaving call: $e');
+      }
+    } else {
+      try {
+        await _callService.endCall(callId);
+      } catch (e) {
+        debugPrint('Error ending call: $e');
+      }
     }
 
     if (_webrtcService != null) {
@@ -501,16 +522,6 @@ class _CallOverlayBannerState extends State<_CallOverlayBanner> {
 
   void _onCallUpdate() {
     if (mounted) setState(() {});
-  }
-
-  String _formatDuration(int totalSeconds) {
-    final hours = totalSeconds ~/ 3600;
-    final minutes = (totalSeconds % 3600) ~/ 60;
-    final seconds = totalSeconds % 60;
-    if (hours > 0) {
-      return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-    }
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
   Widget _buildControlButton({
@@ -623,7 +634,7 @@ class _CallOverlayBannerState extends State<_CallOverlayBanner> {
                           const SizedBox(width: 5),
                           Text(
                             isActive
-                                ? _formatDuration(_callManager.callDuration)
+                                ? formatSeconds(_callManager.callDuration)
                                 : 'Ringing...',
                             style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.7),

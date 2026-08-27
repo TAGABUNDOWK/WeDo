@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../../models/call.dart';
 import '../../services/call/call_manager.dart';
+import '../../utils/time_format.dart';
 
 class CallScreen extends StatefulWidget {
   final String callId;
@@ -69,16 +70,6 @@ class _CallScreenState extends State<CallScreen> {
     if (mounted) {
       Navigator.of(context).pop();
     }
-  }
-
-  String _formatDuration(int totalSeconds) {
-    final hours = totalSeconds ~/ 3600;
-    final minutes = (totalSeconds % 3600) ~/ 60;
-    final seconds = totalSeconds % 60;
-    if (hours > 0) {
-      return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-    }
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -197,7 +188,7 @@ class _CallScreenState extends State<CallScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                _formatDuration(_callManager.callDuration),
+                formatSeconds(_callManager.callDuration),
                 textAlign: TextAlign.center,
                 style:
                     const TextStyle(color: Colors.white70, fontSize: 14),
@@ -238,7 +229,7 @@ class _CallScreenState extends State<CallScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            _formatDuration(_callManager.callDuration),
+            formatSeconds(_callManager.callDuration),
             textAlign: TextAlign.center,
             style: const TextStyle(color: Colors.white70, fontSize: 16),
           ),
