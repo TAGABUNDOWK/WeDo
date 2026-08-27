@@ -174,6 +174,79 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     _messageCtrl.clear();
   }
 
+  void _editMessage(ChatMessage msg) {
+    final editCtrl = TextEditingController(text: msg.content);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Message'),
+        content: TextField(
+          controller: editCtrl,
+          maxLines: null,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Edit message...'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              final newContent = editCtrl.text.trim();
+              if (newContent.isNotEmpty && newContent != msg.content) {
+                _directService.editMessage(
+                  chatId: widget.chatId,
+                  messageId: msg.id,
+                  newContent: newContent,
+                );
+              }
+              Navigator.pop(ctx);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteMessageForEveryone(ChatMessage msg) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete for everyone?'),
+        content: const Text('This message will be deleted for everyone in this chat.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              _directService.deleteMessage(
+                chatId: widget.chatId,
+                messageId: msg.id,
+                uid: _currentUser!.uid,
+                forEveryone: true,
+              );
+              Navigator.pop(ctx);
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteMessageForMe(ChatMessage msg) {
+    _directService.deleteMessage(
+      chatId: widget.chatId,
+      messageId: msg.id,
+      uid: _currentUser!.uid,
+      forEveryone: false,
+    );
+  }
+
   Future<void> _pickAndSendImage() async {
     final source = await showDialog<ImageSource>(
       context: context,
@@ -421,7 +494,9 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return const Center(child: CircularProgressIndicator());
                       }
-                      final messages = snapshot.data ?? [];
+                      final messages = (snapshot.data ?? [])
+                          .where((m) => !m.deletedFor.contains(_currentUser?.uid))
+                          .toList();
                       if (messages.isEmpty) {
                         return Center(
                           child: Text(
@@ -467,6 +542,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                             theme: t,
                             isFirstInGroup: isFirstInGroup,
                             isLastInGroup: isLastInGroup,
+                            createdAt: msg.createdAt,
                           );
                         }
 
@@ -483,6 +559,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                             theme: t,
                             isFirstInGroup: isFirstInGroup,
                             isLastInGroup: isLastInGroup,
+                            createdAt: msg.createdAt,
                             onEventTap: evt != null
                                 ? () {
                                     Navigator.push(
@@ -511,6 +588,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                             theme: t,
                             isFirstInGroup: isFirstInGroup,
                             isLastInGroup: isLastInGroup,
+                            createdAt: msg.createdAt,
                           );
                         }
 
@@ -529,11 +607,18 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                             content: msg.content,
                             imageUrl: msg.imageUrl,
                             isMe: isMe,
-                            senderName: null,
+                            senderName: !isMe ? _otherName : null,
                             time: formatChatTime(msg.createdAt),
                             theme: t,
                             isFirstInGroup: isFirstInGroup,
                             isLastInGroup: isLastInGroup,
+                            createdAt: msg.createdAt,
+                            edited: msg.edited,
+                            onEdit: isMe ? () => _editMessage(msg) : null,
+                            onDeleteForEveryone: isMe ? () => _deleteMessageForEveryone(msg) : null,
+                            onDeleteForMe: () => _deleteMessageForMe(msg),
+                            senderPhotoUrl: !isMe ? _otherPhotoUrl : null,
+                            isRead: isMe && msg.isRead,
                           );
                         }
 
@@ -543,11 +628,18 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                             audioUrl: msg.audioUrl,
                             durationSeconds: msg.durationSeconds,
                             isMe: isMe,
-                            senderName: null,
+                            senderName: !isMe ? _otherName : null,
                             time: formatChatTime(msg.createdAt),
                             theme: t,
                             isFirstInGroup: isFirstInGroup,
                             isLastInGroup: isLastInGroup,
+                            createdAt: msg.createdAt,
+                            edited: msg.edited,
+                            onEdit: isMe ? () => _editMessage(msg) : null,
+                            onDeleteForEveryone: isMe ? () => _deleteMessageForEveryone(msg) : null,
+                            onDeleteForMe: () => _deleteMessageForMe(msg),
+                            senderPhotoUrl: !isMe ? _otherPhotoUrl : null,
+                            isRead: isMe && msg.isRead,
                           );
                         }
 
@@ -585,11 +677,18 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                         return MessageBubble(
                           content: msg.content,
                           isMe: isMe,
-                          senderName: null,
+                          senderName: !isMe ? _otherName : null,
                           time: formatChatTime(msg.createdAt),
                           theme: t,
                           isFirstInGroup: isFirstInGroup,
                           isLastInGroup: isLastInGroup,
+                          createdAt: msg.createdAt,
+                          edited: msg.edited,
+                          onEdit: isMe ? () => _editMessage(msg) : null,
+                          onDeleteForEveryone: isMe ? () => _deleteMessageForEveryone(msg) : null,
+                          onDeleteForMe: () => _deleteMessageForMe(msg),
+                          senderPhotoUrl: !isMe ? _otherPhotoUrl : null,
+                          isRead: isMe && msg.isRead,
                         );
                       }
 

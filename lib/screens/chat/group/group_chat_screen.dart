@@ -47,6 +47,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   String _groupName = '';
   String? _groupPhotoUrl;
   Map<String, String> _nicknames = {};
+  final Map<String, String> _memberPhotos = {};
   List<String> _members = [];
   late Stream<GroupChat?> _groupStream;
   bool _isUploading = false;
@@ -100,6 +101,14 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         _members = List<String>.from(group.members);
         _chatTheme = theme;
       });
+    }
+  }
+
+  Future<void> _loadMemberPhoto(String uid) async {
+    if (_memberPhotos.containsKey(uid)) return;
+    final user = await _groupService.getUser(uid);
+    if (user != null && mounted) {
+      setState(() => _memberPhotos[uid] = user.photoUrl ?? '');
     }
   }
 
@@ -170,6 +179,79 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     );
 
     _messageCtrl.clear();
+  }
+
+  void _editMessage(ChatMessage msg) {
+    final editCtrl = TextEditingController(text: msg.content);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Message'),
+        content: TextField(
+          controller: editCtrl,
+          maxLines: null,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Edit message...'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              final newContent = editCtrl.text.trim();
+              if (newContent.isNotEmpty && newContent != msg.content) {
+                _groupService.editMessage(
+                  groupId: widget.groupId,
+                  messageId: msg.id,
+                  newContent: newContent,
+                );
+              }
+              Navigator.pop(ctx);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteMessageForEveryone(ChatMessage msg) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete for everyone?'),
+        content: const Text('This message will be deleted for everyone in this group.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              _groupService.deleteMessage(
+                groupId: widget.groupId,
+                messageId: msg.id,
+                uid: _currentUser!.uid,
+                forEveryone: true,
+              );
+              Navigator.pop(ctx);
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteMessageForMe(ChatMessage msg) {
+    _groupService.deleteMessage(
+      groupId: widget.groupId,
+      messageId: msg.id,
+      uid: _currentUser!.uid,
+      forEveryone: false,
+    );
   }
 
   Future<void> _pickAndSendImage() async {
@@ -424,7 +506,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return const Center(child: CircularProgressIndicator());
                       }
-                      final messages = snapshot.data ?? [];
+                      final messages = (snapshot.data ?? [])
+                          .where((m) => !m.deletedFor.contains(_currentUser?.uid))
+                          .toList();
                       if (messages.isEmpty) {
                         return Center(
                           child: Text(
@@ -470,6 +554,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             theme: t,
                             isFirstInGroup: isFirstInGroup,
                             isLastInGroup: isLastInGroup,
+                            createdAt: msg.createdAt,
                           );
                         }
 
@@ -486,6 +571,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             theme: t,
                             isFirstInGroup: isFirstInGroup,
                             isLastInGroup: isLastInGroup,
+                            createdAt: msg.createdAt,
                             onEventTap: evt != null
                                 ? () {
                                     Navigator.push(
@@ -514,6 +600,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             theme: t,
                             isFirstInGroup: isFirstInGroup,
                             isLastInGroup: isLastInGroup,
+                            createdAt: msg.createdAt,
                           );
                         }
 
@@ -521,6 +608,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                           msg.senderId,
                           msg.senderName,
                         );
+
+                        if (!isMe && !_memberPhotos.containsKey(msg.senderId)) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) => _loadMemberPhoto(msg.senderId));
+                        }
 
                         if (msg.type == MessageType.invite && msg.activityId != null) {
                           return InviteMessageCard(
@@ -542,6 +633,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             theme: t,
                             isFirstInGroup: isFirstInGroup,
                             isLastInGroup: isLastInGroup,
+                            createdAt: msg.createdAt,
+                            edited: msg.edited,
+                            onEdit: isMe ? () => _editMessage(msg) : null,
+                            onDeleteForEveryone: isMe ? () => _deleteMessageForEveryone(msg) : null,
+                            onDeleteForMe: () => _deleteMessageForMe(msg),
+                            senderPhotoUrl: !isMe ? (_memberPhotos[msg.senderId] ?? '') : null,
+                            isRead: isMe && msg.isRead,
                           );
                         }
 
@@ -556,6 +654,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             theme: t,
                             isFirstInGroup: isFirstInGroup,
                             isLastInGroup: isLastInGroup,
+                            createdAt: msg.createdAt,
+                            edited: msg.edited,
+                            onEdit: isMe ? () => _editMessage(msg) : null,
+                            onDeleteForEveryone: isMe ? () => _deleteMessageForEveryone(msg) : null,
+                            onDeleteForMe: () => _deleteMessageForMe(msg),
+                            senderPhotoUrl: !isMe ? (_memberPhotos[msg.senderId] ?? '') : null,
+                            isRead: isMe && msg.isRead,
                           );
                         }
 
@@ -598,6 +703,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                           theme: t,
                           isFirstInGroup: isFirstInGroup,
                           isLastInGroup: isLastInGroup,
+                          createdAt: msg.createdAt,
+                          edited: msg.edited,
+                          onEdit: isMe ? () => _editMessage(msg) : null,
+                          onDeleteForEveryone: isMe ? () => _deleteMessageForEveryone(msg) : null,
+                          onDeleteForMe: () => _deleteMessageForMe(msg),
+                          senderPhotoUrl: !isMe ? (_memberPhotos[msg.senderId] ?? '') : null,
+                          isRead: isMe && msg.isRead,
                         );
                       }
 

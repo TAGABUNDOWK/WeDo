@@ -460,4 +460,30 @@ class DirectService {
     final total = totalDocs.count ?? 0;
     return total - snap.docs.length;
   }
+
+  Future<void> editMessage({
+    required String chatId,
+    required String messageId,
+    required String newContent,
+  }) async {
+    await _messages(chatId).doc(messageId).update({
+      'content': newContent,
+      'edited': true,
+    });
+  }
+
+  Future<void> deleteMessage({
+    required String chatId,
+    required String messageId,
+    required String uid,
+    required bool forEveryone,
+  }) async {
+    if (forEveryone) {
+      await _messages(chatId).doc(messageId).delete();
+    } else {
+      await _messages(chatId).doc(messageId).update({
+        'deleted_for': FieldValue.arrayUnion([uid]),
+      });
+    }
+  }
 }

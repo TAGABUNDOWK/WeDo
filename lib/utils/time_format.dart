@@ -114,3 +114,19 @@ String formatSeconds(int totalSeconds) {
   }
   return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
 }
+
+String formatFullDateTime(dynamic timestamp) {
+  final dt = _toDateTime(timestamp);
+  if (dt == null) return '';
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final msgDate = DateTime(dt.year, dt.month, dt.day);
+  final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+  final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+  final min = dt.minute.toString().padLeft(2, '0');
+  final time = '$hour:$min $ampm';
+  if (msgDate == today) return 'Today at $time';
+  if (msgDate == today.subtract(const Duration(days: 1))) return 'Yesterday at $time';
+  if (dt.year == now.year) return '${_months[dt.month - 1]} ${dt.day} at $time';
+  return '${_months[dt.month - 1]} ${dt.day}, ${dt.year} at $time';
+}

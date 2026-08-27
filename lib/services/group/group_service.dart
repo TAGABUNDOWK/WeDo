@@ -3,11 +3,18 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../../models/group_chat.dart';
 import '../../models/message.dart';
+import '../../models/user_entity.dart';
 import '../../utils/constants.dart';
 import '../../utils/time_format.dart';
 
 class GroupService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+
+  Future<UserEntity?> getUser(String uid) async {
+    final doc = await _db.collection(AppConstants.usersCollection).doc(uid).get();
+    if (!doc.exists) return null;
+    return UserEntity.fromJson(doc.data()!);
+  }
 
   CollectionReference<Map<String, dynamic>> get _groups =>
       _db.collection(AppConstants.groupsCollection);
@@ -562,6 +569,32 @@ class GroupService {
     } else {
       await _groups.doc(groupId).update({
         'mutedBy': FieldValue.arrayUnion([uid]),
+      });
+    }
+  }
+
+  Future<void> editMessage({
+    required String groupId,
+    required String messageId,
+    required String newContent,
+  }) async {
+    await _messages(groupId).doc(messageId).update({
+      'content': newContent,
+      'edited': true,
+    });
+  }
+
+  Future<void> deleteMessage({
+    required String groupId,
+    required String messageId,
+    required String uid,
+    required bool forEveryone,
+  }) async {
+    if (forEveryone) {
+      await _messages(groupId).doc(messageId).delete();
+    } else {
+      await _messages(groupId).doc(messageId).update({
+        'deleted_for': FieldValue.arrayUnion([uid]),
       });
     }
   }

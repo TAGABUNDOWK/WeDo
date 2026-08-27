@@ -71,6 +71,7 @@ class ChatMessage {
   final bool edited;
   final DateTime createdAt;
   final Map<String, dynamic>? groupInviteData;
+  final List<String> deletedFor;
 
   const ChatMessage({
     required this.id,
@@ -90,6 +91,7 @@ class ChatMessage {
     required this.edited,
     required this.createdAt,
     this.groupInviteData,
+    this.deletedFor = const [],
   });
 
   factory ChatMessage.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -127,6 +129,7 @@ class ChatMessage {
     final groupInviteData = data['groupInviteData'] != null
         ? Map<String, dynamic>.from(data['groupInviteData'] as Map)
         : null;
+    final deletedFor = (data['deleted_for'] as List?)?.cast<String>() ?? [];
 
     return ChatMessage(
       id: doc.id,
@@ -146,6 +149,7 @@ class ChatMessage {
       edited: edited,
       createdAt: createdAt,
       groupInviteData: groupInviteData,
+      deletedFor: deletedFor,
     );
   }
 
@@ -167,6 +171,7 @@ class ChatMessage {
       'edited': edited,
       'createdAt': Timestamp.fromDate(createdAt),
       if (groupInviteData != null) 'groupInviteData': groupInviteData,
+      'deleted_for': deletedFor,
     };
   }
 
