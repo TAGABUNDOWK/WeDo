@@ -384,6 +384,15 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                     );
                   }
 
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    for (final m in messages) {
+                      if ((m.type == MessageType.event || m.type == MessageType.poll) &&
+                          m.refId != null) {
+                        _loadEventPollData(m);
+                      }
+                    }
+                  });
+
                   return ListView.builder(
                     controller: _scrollCtrl,
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
@@ -405,7 +414,6 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                       }
 
                       if (msg.type == MessageType.event && msg.refId != null) {
-                        _loadEventPollData(msg);
                         final evt = _events[msg.refId];
                         return MessageBubble(
                           content: msg.content,
@@ -432,7 +440,6 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                       }
 
                       if (msg.type == MessageType.poll && msg.refId != null) {
-                        _loadEventPollData(msg);
                         return MessageBubble(
                           content: msg.content,
                           isMe: isMe,
