@@ -3,10 +3,18 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../../models/group_chat.dart';
 import '../../models/message.dart';
+import '../../models/user_entity.dart';
 import '../../utils/constants.dart';
+import '../../utils/time_format.dart';
 
 class GroupService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+
+  Future<UserEntity?> getUser(String uid) async {
+    final doc = await _db.collection(AppConstants.usersCollection).doc(uid).get();
+    if (!doc.exists) return null;
+    return UserEntity.fromJson(doc.data()!);
+  }
 
   CollectionReference<Map<String, dynamic>> get _groups =>
       _db.collection(AppConstants.groupsCollection);
@@ -165,7 +173,10 @@ class GroupService {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final ref = FirebaseStorage.instance
         .ref('chat_images/$groupId/$timestamp.jpg');
-    await ref.putFile(imageFile);
+    await ref.putFile(
+      imageFile,
+      SettableMetadata(contentType: 'image/jpeg'),
+    );
     final url = await ref.getDownloadURL();
 
     final batch = _db.batch();
@@ -243,10 +254,13 @@ class GroupService {
     final batch = _db.batch();
 
     final callText = callType == 'video' ? 'Video call' : 'Audio call';
-    final statusText = callStatus == 'missed' ? 'Missed' : '';
-    final displayText = callStatus == 'missed'
+    final statusPrefixes = ['missed', 'declined', 'cancelled'];
+    final statusText = statusPrefixes.contains(callStatus)
+        ? '${callStatus[0].toUpperCase()}${callStatus.substring(1)}'
+        : '';
+    final displayText = statusText.isNotEmpty
         ? '$statusText $callText'
-        : '$callText · ${_formatDuration(durationSeconds)}';
+        : '$callText · ${formatSeconds(durationSeconds)}';
 
     batch.set(_messages(groupId).doc(), {
       'sender_id': senderId,
@@ -303,12 +317,6 @@ class GroupService {
     });
 
     await batch.commit();
-  }
-
-  String _formatDuration(int totalSeconds) {
-    final minutes = totalSeconds ~/ 60;
-    final seconds = totalSeconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
   Future<void> sendPollMessage({
@@ -373,22 +381,21 @@ class GroupService {
 
   Stream<List<ChatMessage>> getMessagesStream(String groupId) {
     return _messages(groupId)
-        .orderBy('created_at', descending: false)
+        .orderBy('created_at', descending: true)
         .snapshots()
         .map((snap) =>
             snap.docs.map(ChatMessage.fromFirestore).toList());
   }
 
   Future<void> markMessagesAsRead(String groupId, String uid) async {
-    final allDocs = await _messages(groupId).get();
+    final unreadDocs = await _messages(groupId)
+        .where('read_by', isNotEqualTo: uid)
+        .get();
     final batch = _db.batch();
-    for (final doc in allDocs.docs) {
-      final readBy = List<String>.from(doc.data()['read_by'] ?? []);
-      if (!readBy.contains(uid)) {
-        batch.update(doc.reference, {
-          'read_by': FieldValue.arrayUnion([uid]),
-        });
-      }
+    for (final doc in unreadDocs.docs) {
+      batch.update(doc.reference, {
+        'read_by': FieldValue.arrayUnion([uid]),
+      });
     }
     batch.update(_groups.doc(groupId), {
       'lastMessageReadBy': FieldValue.arrayUnion([uid]),
@@ -401,6 +408,15 @@ class GroupService {
         .orderBy('created_at', descending: false)
         .get();
     return snap.docs.map(ChatMessage.fromFirestore).toList();
+  }
+
+  Future<int> getUnreadCount(String groupId, String uid) async {
+    final readSnap = await _messages(groupId)
+        .where('read_by', arrayContains: uid)
+        .get();
+    final totalDocs = await _messages(groupId).count().get();
+    final total = totalDocs.count ?? 0;
+    return total - readSnap.docs.length;
   }
 
   Future<List<Map<String, dynamic>>> getGroupMembersWithNames(
@@ -471,9 +487,16 @@ class GroupService {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final ref = FirebaseStorage.instance
         .ref('group_photos/$groupId/$timestamp.jpg');
-    await ref.putFile(imageFile);
+    await ref.putFile(
+      imageFile,
+      SettableMetadata(contentType: 'image/jpeg'),
+    );
     final url = await ref.getDownloadURL();
-    await _groups.doc(groupId).update({'photoUrl': url});
+    try {
+      await _groups.doc(groupId).update({'photoUrl': url});
+    } catch (e) {
+      throw Exception('Photo uploaded but failed to save to group: $e');
+    }
     return url;
   }
 
@@ -546,6 +569,32 @@ class GroupService {
     } else {
       await _groups.doc(groupId).update({
         'mutedBy': FieldValue.arrayUnion([uid]),
+      });
+    }
+  }
+
+  Future<void> editMessage({
+    required String groupId,
+    required String messageId,
+    required String newContent,
+  }) async {
+    await _messages(groupId).doc(messageId).update({
+      'content': newContent,
+      'edited': true,
+    });
+  }
+
+  Future<void> deleteMessage({
+    required String groupId,
+    required String messageId,
+    required String uid,
+    required bool forEveryone,
+  }) async {
+    if (forEveryone) {
+      await _messages(groupId).doc(messageId).delete();
+    } else {
+      await _messages(groupId).doc(messageId).update({
+        'deleted_for': FieldValue.arrayUnion([uid]),
       });
     }
   }

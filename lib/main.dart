@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -5,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'app.dart';
+import 'models/call.dart';
 import 'services/auth/user_service.dart';
 import 'services/call/call_service.dart';
 import 'screens/call/incoming_call_screen.dart';
@@ -95,6 +97,7 @@ class _IncomingCallListener extends StatefulWidget {
 
 class _IncomingCallListenerState extends State<_IncomingCallListener> {
   final _callService = CallService();
+  StreamSubscription<Call?>? _callSub;
 
   @override
   void initState() {
@@ -103,7 +106,7 @@ class _IncomingCallListenerState extends State<_IncomingCallListener> {
   }
 
   void _listenForCall() {
-    _callService.getCallStream(widget.callId).listen((call) {
+    _callSub = _callService.getCallStream(widget.callId).listen((call) {
       if (call == null) {
         if (mounted) Navigator.of(context).pop();
         return;
@@ -125,6 +128,12 @@ class _IncomingCallListenerState extends State<_IncomingCallListener> {
         );
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _callSub?.cancel();
+    super.dispose();
   }
 
   @override

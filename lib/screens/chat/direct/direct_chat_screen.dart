@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -7,7 +8,6 @@ import '../../../models/event.dart';
 import '../../../models/chat_theme.dart';
 import '../../../models/message.dart';
 import '../../../models/poll.dart';
-import '../../../models/user_entity.dart';
 import '../../../services/direct/direct_service.dart';
 import '../../../services/event/event_service.dart';
 import '../../../services/poll/poll_service.dart';
@@ -15,16 +15,17 @@ import '../../../services/call/call_service.dart';
 import '../../../services/theme/chat_theme_resolver.dart';
 import '../../../utils/time_format.dart';
 import '../../../widgets/message_bubble.dart';
+import '../../../widgets/date_separator.dart';
 import '../../../widgets/invite_message_card.dart';
 import '../../../widgets/group_invite_message_card.dart';
 import '../../../widgets/composer_option.dart';
 import '../../../widgets/audio_recorder_button.dart';
+import '../../../widgets/chat_background_painter.dart';
 import '../../call/outgoing_call_screen.dart';
-import '../image_viewer_screen.dart';
 import '../event/create_event_screen.dart';
 import '../event/event_detail_screen.dart';
 import '../poll/create_poll_screen.dart';
-import '../search/direct_chat_search_screen.dart';
+import 'direct_chat_info_screen.dart';
 
 class DirectChatScreen extends StatefulWidget {
   final String chatId;
@@ -49,19 +50,44 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   final _currentUser = FirebaseAuth.instance.currentUser;
   final _imagePicker = ImagePicker();
   String _otherName = '';
+  String? _otherPhotoUrl;
   Map<String, String> _nicknames = {};
   bool _isUploading = false;
   final Map<String, ChatEvent> _events = {};
   final Map<String, ChatPoll> _polls = {};
   AppChatTheme _chatTheme = ChatThemeResolver.defaultTheme;
+  int _newMessageCount = 0;
+  bool _isAtBottom = true;
+  List<ChatMessage> _previousMessages = [];
+  StreamSubscription<List<ChatMessage>>? _messagesSub;
+  late Stream<List<ChatMessage>> _messagesStream;
 
   @override
   void initState() {
     super.initState();
+    _messagesStream = _directService.getMessagesStream(widget.chatId);
     _loadData();
     if (_currentUser != null) {
       _directService.markMessagesAsRead(widget.chatId, _currentUser.uid);
     }
+    _scrollCtrl.addListener(_onScroll);
+    _messagesSub = _messagesStream.listen((messages) {
+      final prevLength = _previousMessages.length;
+      final newMessageArrived = messages.length > prevLength;
+      final wasAtBottom = _isAtBottom;
+
+      _previousMessages = messages;
+
+      if (!mounted) return;
+
+      if (wasAtBottom && newMessageArrived) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_scrollCtrl.hasClients) _scrollCtrl.jumpTo(0);
+        });
+      } else if (!wasAtBottom && newMessageArrived) {
+        setState(() => _newMessageCount += messages.length - prevLength);
+      }
+    });
   }
 
   Future<void> _loadData() async {
@@ -71,6 +97,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     if (mounted) {
       setState(() {
         _otherName = user?.displayName ?? widget.otherUid;
+        _otherPhotoUrl = user?.photoUrl;
         _nicknames = nicknames;
         _chatTheme = theme;
       });
@@ -79,7 +106,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
 
   String _getDisplayName() {
     if (_currentUser == null) return _otherName;
-    return _nicknames[_currentUser.uid] ?? _otherName;
+    return _nicknames[widget.otherUid] ?? _otherName;
   }
 
   Future<void> _loadEventPollData(ChatMessage msg) async {
@@ -105,9 +132,32 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
 
   @override
   void dispose() {
+    _messagesSub?.cancel();
     _messageCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollCtrl.hasClients) return;
+    final currentScroll = _scrollCtrl.offset;
+    final atBottom = currentScroll < 80;
+    if (atBottom != _isAtBottom) {
+      setState(() => _isAtBottom = atBottom);
+      if (atBottom) {
+        setState(() => _newMessageCount = 0);
+      }
+    }
+  }
+
+  void _scrollToBottom() {
+    if (!_scrollCtrl.hasClients) return;
+    _scrollCtrl.animateTo(
+      0,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+    setState(() => _newMessageCount = 0);
   }
 
   void _sendMessage() {
@@ -122,6 +172,79 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     );
 
     _messageCtrl.clear();
+  }
+
+  void _editMessage(ChatMessage msg) {
+    final editCtrl = TextEditingController(text: msg.content);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Message'),
+        content: TextField(
+          controller: editCtrl,
+          maxLines: null,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Edit message...'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              final newContent = editCtrl.text.trim();
+              if (newContent.isNotEmpty && newContent != msg.content) {
+                _directService.editMessage(
+                  chatId: widget.chatId,
+                  messageId: msg.id,
+                  newContent: newContent,
+                );
+              }
+              Navigator.pop(ctx);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteMessageForEveryone(ChatMessage msg) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete for everyone?'),
+        content: const Text('This message will be deleted for everyone in this chat.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              _directService.deleteMessage(
+                chatId: widget.chatId,
+                messageId: msg.id,
+                uid: _currentUser!.uid,
+                forEveryone: true,
+              );
+              Navigator.pop(ctx);
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteMessageForMe(ChatMessage msg) {
+    _directService.deleteMessage(
+      chatId: widget.chatId,
+      messageId: msg.id,
+      uid: _currentUser!.uid,
+      forEveryone: false,
+    );
   }
 
   Future<void> _pickAndSendImage() async {
@@ -204,10 +327,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     if (!mounted) return;
 
     final callStream = _callService.getCallStream(callId);
-    final call = await callStream.firstWhere(
-      (c) => c != null,
-      orElse: () => null,
-    );
+    final call = await callStream.first;
 
     if (!mounted || call == null) return;
 
@@ -304,9 +424,27 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       backgroundColor: t.background,
       appBar: AppBar(
         backgroundColor: t.appBarBackground,
-        title: Text(
-          _getDisplayName(),
-          style: TextStyle(color: t.isDark ? Colors.white : Colors.white, fontWeight: FontWeight.w600),
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 14,
+              backgroundColor: Colors.white.withValues(alpha: 0.2),
+              backgroundImage: _otherPhotoUrl != null && _otherPhotoUrl!.isNotEmpty
+                  ? NetworkImage(_otherPhotoUrl!)
+                  : null,
+              child: _otherPhotoUrl == null || _otherPhotoUrl!.isEmpty
+                  ? const Icon(Icons.person, color: Colors.white, size: 16)
+                  : null,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _getDisplayName(),
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
         ),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
@@ -321,36 +459,12 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
             onPressed: () => _startCall(CallType.video),
           ),
           IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () async {
-              final messageId = await Navigator.push<String>(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => DirectChatSearchScreen(chatId: widget.chatId),
-                ),
-              );
-              if (messageId != null && _scrollCtrl.hasClients) {
-                final messages = await _directService.getMessagesOnce(
-                  widget.chatId,
-                );
-                final index = messages.indexWhere((m) => m.id == messageId);
-                if (index != -1 && _scrollCtrl.hasClients) {
-                  _scrollCtrl.animateTo(
-                    index * 80.0,
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeOut,
-                  );
-                }
-              }
-            },
-          ),
-          IconButton(
             icon: const Icon(Icons.info_outline),
             onPressed: () async {
               await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => _DirectChatInfoScreen(
+                  builder: (_) => DirectChatInfoScreen(
                     chatId: widget.chatId,
                     otherUid: widget.otherUid,
                   ),
@@ -366,25 +480,34 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
           if (_isUploading)
             const LinearProgressIndicator(backgroundColor: Colors.transparent),
           Expanded(
-            child: Container(
-              color: t.background,
-              child: StreamBuilder<List<ChatMessage>>(
-                stream: _directService.getMessagesStream(widget.chatId),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  final messages = snapshot.data ?? [];
-                  if (messages.isEmpty) {
-                    return Center(
-                      child: Text(
-                        'No messages yet',
-                        style: TextStyle(color: t.textSecondary),
-                      ),
-                    );
-                  }
+            child: Stack(
+              children: [
+                Container(color: t.background),
+                ChatBackground(
+                  style: t.backgroundStyle,
+                  color: t.accent,
+                  opacity: t.backgroundOpacity,
+                ),
+                StreamBuilder<List<ChatMessage>>(
+                    stream: _messagesStream,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      final messages = (snapshot.data ?? [])
+                          .where((m) => !m.deletedFor.contains(_currentUser?.uid))
+                          .toList();
+                      if (messages.isEmpty) {
+                        return Center(
+                          child: Text(
+                            'No messages yet',
+                            style: TextStyle(color: t.textSecondary),
+                          ),
+                        );
+                      }
 
                   return ListView.builder(
+                    reverse: true,
                     controller: _scrollCtrl,
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                     itemCount: messages.length,
@@ -393,130 +516,237 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                       final isMe = msg.senderId == _currentUser?.uid;
                       final isSystem = msg.type == MessageType.system;
 
-                      if (isSystem) {
-                        return MessageBubble(
-                          content: msg.content,
-                          isMe: false,
-                          senderName: msg.senderName.isNotEmpty ? msg.senderName : null,
-                          time: formatChatTime(msg.createdAt),
-                          isSystem: true,
-                          theme: t,
-                        );
-                      }
+                      final sameSenderAsNextOlder = index + 1 < messages.length &&
+                          messages[index + 1].senderId == msg.senderId &&
+                          isSameDay(msg.createdAt, messages[index + 1].createdAt);
+                      final sameSenderAsPrevNewer = index - 1 >= 0 &&
+                          messages[index - 1].senderId == msg.senderId &&
+                          isSameDay(msg.createdAt, messages[index - 1].createdAt);
+                      final isFirstInGroup = !sameSenderAsNextOlder;
+                      final isLastInGroup = !sameSenderAsPrevNewer;
 
-                      if (msg.type == MessageType.event && msg.refId != null) {
-                        _loadEventPollData(msg);
-                        final evt = _events[msg.refId];
-                        return MessageBubble(
-                          content: msg.content,
-                          isMe: isMe,
-                          senderName: msg.senderName.isNotEmpty ? msg.senderName : null,
-                          time: formatChatTime(msg.createdAt),
-                          event: evt,
-                          currentUid: _currentUser?.uid,
-                          theme: t,
-                          onEventTap: evt != null
-                              ? () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => EventDetailScreen(
-                                        eventId: evt.id,
-                                        chatId: widget.chatId,
+                      final showDateSeparator = index == 0 ||
+                          !isSameDay(
+                            messages[index].createdAt,
+                            messages[index - 1].createdAt,
+                          );
+
+                      Widget buildMessage() {
+                        if (isSystem) {
+                          return MessageBubble(
+                            content: msg.content,
+                            isMe: false,
+                            senderName: msg.senderName.isNotEmpty ? msg.senderName : null,
+                            time: formatChatTime(msg.createdAt),
+                            isSystem: true,
+                            theme: t,
+                            isFirstInGroup: isFirstInGroup,
+                            isLastInGroup: isLastInGroup,
+                            createdAt: msg.createdAt,
+                          );
+                        }
+
+                        if (msg.type == MessageType.event && msg.refId != null) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) => _loadEventPollData(msg));
+                          final evt = _events[msg.refId];
+                          return MessageBubble(
+                            content: msg.content,
+                            isMe: isMe,
+                            senderName: msg.senderName.isNotEmpty ? msg.senderName : null,
+                            time: formatChatTime(msg.createdAt),
+                            event: evt,
+                            currentUid: _currentUser?.uid,
+                            theme: t,
+                            isFirstInGroup: isFirstInGroup,
+                            isLastInGroup: isLastInGroup,
+                            createdAt: msg.createdAt,
+                            onEventTap: evt != null
+                                ? () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => EventDetailScreen(
+                                          eventId: evt.id,
+                                          chatId: widget.chatId,
+                                        ),
                                       ),
-                                    ),
-                                  );
-                                }
-                              : null,
-                        );
-                      }
+                                    );
+                                  }
+                                : null,
+                          );
+                        }
 
-                      if (msg.type == MessageType.poll && msg.refId != null) {
-                        _loadEventPollData(msg);
-                        return MessageBubble(
-                          content: msg.content,
-                          isMe: isMe,
-                          senderName: null,
-                          time: formatChatTime(msg.createdAt),
-                          poll: _polls[msg.refId],
-                          currentUid: _currentUser?.uid,
-                          theme: t,
-                        );
-                      }
-
-                      if (msg.type == MessageType.invite && msg.activityId != null) {
-                        return InviteMessageCard(
-                          sessionId: msg.activityId!,
-                          content: msg.content,
-                          isMe: isMe,
-                          senderName: null,
-                          time: formatChatTime(msg.createdAt),
-                        );
-                      }
-
-                      if (msg.type == MessageType.image && msg.imageUrl != null) {
-                        return MessageBubble(
-                          content: msg.content,
-                          imageUrl: msg.imageUrl,
-                          isMe: isMe,
-                          senderName: null,
-                          time: formatChatTime(msg.createdAt),
-                          theme: t,
-                        );
-                      }
-
-                      if (msg.type == MessageType.audio && msg.audioUrl != null) {
-                        return MessageBubble(
-                          content: msg.content,
-                          audioUrl: msg.audioUrl,
-                          durationSeconds: msg.durationSeconds,
-                          isMe: isMe,
-                          senderName: null,
-                          time: formatChatTime(msg.createdAt),
-                          theme: t,
-                        );
-                      }
-
-                      if (msg.type == MessageType.call) {
-                        return CallMessageBubble(
-                          callType: msg.callType ?? 'audio',
-                          callStatus: msg.callStatus ?? 'active',
-                          durationSeconds: msg.durationSeconds,
-                          time: formatChatTime(msg.createdAt),
-                          isMe: isMe,
-                          senderId: msg.senderId,
-                          senderName: _otherName,
-                          currentUserId: _currentUser!.uid,
-                          chatId: widget.chatId,
-                          members: [_currentUser.uid, widget.otherUid],
-                        );
-                      }
-
-                      if (msg.type == MessageType.text) {
-                        final groupLinkMatch = RegExp(r'wedo://group/([^\s]+)').firstMatch(msg.content);
-                        if (groupLinkMatch != null) {
-                          return GroupInviteMessageCard(
-                            groupId: groupLinkMatch.group(1)!,
+                        if (msg.type == MessageType.poll && msg.refId != null) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) => _loadEventPollData(msg));
+                          return MessageBubble(
+                            content: msg.content,
                             isMe: isMe,
                             senderName: null,
                             time: formatChatTime(msg.createdAt),
-                            groupInviteData: msg.groupInviteData,
+                            poll: _polls[msg.refId],
+                            currentUid: _currentUser?.uid,
+                            theme: t,
+                            isFirstInGroup: isFirstInGroup,
+                            isLastInGroup: isLastInGroup,
+                            createdAt: msg.createdAt,
                           );
                         }
+
+                        if (msg.type == MessageType.invite && msg.activityId != null) {
+                          return InviteMessageCard(
+                            sessionId: msg.activityId!,
+                            content: msg.content,
+                            isMe: isMe,
+                            senderName: null,
+                            time: formatChatTime(msg.createdAt),
+                          );
+                        }
+
+                        if (msg.type == MessageType.image && msg.imageUrl != null) {
+                          return MessageBubble(
+                            content: msg.content,
+                            imageUrl: msg.imageUrl,
+                            isMe: isMe,
+                            senderName: !isMe ? _otherName : null,
+                            time: formatChatTime(msg.createdAt),
+                            theme: t,
+                            isFirstInGroup: isFirstInGroup,
+                            isLastInGroup: isLastInGroup,
+                            createdAt: msg.createdAt,
+                            edited: msg.edited,
+                            onEdit: isMe ? () => _editMessage(msg) : null,
+                            onDeleteForEveryone: isMe ? () => _deleteMessageForEveryone(msg) : null,
+                            onDeleteForMe: () => _deleteMessageForMe(msg),
+                            senderPhotoUrl: !isMe ? _otherPhotoUrl : null,
+                            isRead: isMe && msg.isRead,
+                          );
+                        }
+
+                        if (msg.type == MessageType.audio && msg.audioUrl != null) {
+                          return MessageBubble(
+                            content: msg.content,
+                            audioUrl: msg.audioUrl,
+                            durationSeconds: msg.durationSeconds,
+                            isMe: isMe,
+                            senderName: !isMe ? _otherName : null,
+                            time: formatChatTime(msg.createdAt),
+                            theme: t,
+                            isFirstInGroup: isFirstInGroup,
+                            isLastInGroup: isLastInGroup,
+                            createdAt: msg.createdAt,
+                            edited: msg.edited,
+                            onEdit: isMe ? () => _editMessage(msg) : null,
+                            onDeleteForEveryone: isMe ? () => _deleteMessageForEveryone(msg) : null,
+                            onDeleteForMe: () => _deleteMessageForMe(msg),
+                            senderPhotoUrl: !isMe ? _otherPhotoUrl : null,
+                            isRead: isMe && msg.isRead,
+                          );
+                        }
+
+                        if (msg.type == MessageType.call) {
+                          return CallMessageBubble(
+                            callType: msg.callType ?? 'audio',
+                            callStatus: msg.callStatus ?? 'active',
+                            durationSeconds: msg.durationSeconds,
+                            time: formatCallBubbleTime(msg.createdAt),
+                            isMe: isMe,
+                            senderId: msg.senderId,
+                            senderName: _otherName,
+                            currentUserId: _currentUser?.uid ?? '',
+                            chatId: widget.chatId,
+                            members: [_currentUser?.uid ?? '', widget.otherUid],
+                            theme: t,
+                            isFirstInGroup: isFirstInGroup,
+                            isLastInGroup: isLastInGroup,
+                          );
+                        }
+
+                        if (msg.type == MessageType.text) {
+                          final groupLinkMatch = RegExp(r'wedo://group/([^\s]+)').firstMatch(msg.content);
+                          if (groupLinkMatch != null) {
+                            return GroupInviteMessageCard(
+                              groupId: groupLinkMatch.group(1)!,
+                              isMe: isMe,
+                              senderName: null,
+                              time: formatChatTime(msg.createdAt),
+                              groupInviteData: msg.groupInviteData,
+                            );
+                          }
+                        }
+
+                        return MessageBubble(
+                          content: msg.content,
+                          isMe: isMe,
+                          senderName: !isMe ? _otherName : null,
+                          time: formatChatTime(msg.createdAt),
+                          theme: t,
+                          isFirstInGroup: isFirstInGroup,
+                          isLastInGroup: isLastInGroup,
+                          createdAt: msg.createdAt,
+                          edited: msg.edited,
+                          onEdit: isMe ? () => _editMessage(msg) : null,
+                          onDeleteForEveryone: isMe ? () => _deleteMessageForEveryone(msg) : null,
+                          onDeleteForMe: () => _deleteMessageForMe(msg),
+                          senderPhotoUrl: !isMe ? _otherPhotoUrl : null,
+                          isRead: isMe && msg.isRead,
+                        );
                       }
 
-                      return MessageBubble(
-                        content: msg.content,
-                        isMe: isMe,
-                        senderName: null,
-                        time: formatChatTime(msg.createdAt),
-                        theme: t,
-                      );
+                      if (showDateSeparator) {
+                        return Column(
+                          children: [
+                            DateSeparator(timestamp: msg.createdAt),
+                            buildMessage(),
+                          ],
+                        );
+                      }
+                      return buildMessage();
                     },
                   );
                 },
               ),
-            ),
+              if (_newMessageCount > 0)
+                Positioned(
+                  bottom: 16,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: GestureDetector(
+                      onTap: _scrollToBottom,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFE4EF0),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFFE4EF0).withValues(alpha: 0.3),
+                              blurRadius: 8,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.arrow_downward, color: Colors.white, size: 16),
+                            const SizedBox(width: 6),
+                            Text(
+                              '$_newMessageCount New Message${_newMessageCount > 1 ? 's' : ''}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
@@ -575,277 +805,6 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _DirectChatInfoScreen extends StatefulWidget {
-  final String chatId;
-  final String otherUid;
-  const _DirectChatInfoScreen({required this.chatId, required this.otherUid});
-
-  @override
-  State<_DirectChatInfoScreen> createState() => _DirectChatInfoScreenState();
-}
-
-class _DirectChatInfoScreenState extends State<_DirectChatInfoScreen> {
-  final _directService = DirectService();
-  UserEntity? _otherUser;
-  Map<String, String> _nicknames = {};
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadData();
-  }
-
-  Future<void> _loadData() async {
-    final user = await _directService.getUser(widget.otherUid);
-    final nicks = await _directService.getNicknames(widget.chatId);
-    if (mounted) {
-      setState(() {
-        _otherUser = user;
-        _nicknames = nicks;
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _changeNickname() async {
-    final currentUid = _directService.getCurrentUid();
-    final currentNickname = currentUid != null
-        ? _nicknames[currentUid] ?? ''
-        : '';
-    final ctrl = TextEditingController(text: currentNickname);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Change Nickname'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Nickname for yourself',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-
-    if (result != null && currentUid != null && mounted) {
-      await _directService.updateNickname(
-        chatId: widget.chatId,
-        uid: currentUid,
-        nickname: result,
-      );
-      _loadData();
-    }
-  }
-
-  Future<void> _changeOtherNickname() async {
-    final otherNickname = _nicknames[widget.otherUid] ?? '';
-    final ctrl = TextEditingController(text: otherNickname);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Change Nickname'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Nickname for them',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-
-    if (result != null && mounted) {
-      await _directService.updateNickname(
-        chatId: widget.chatId,
-        uid: widget.otherUid,
-        nickname: result,
-      );
-      _loadData();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final name = _otherUser?.displayName ?? widget.otherUid;
-    final currentUid = _directService.getCurrentUid();
-    final myNickname = currentUid != null ? _nicknames[currentUid] : null;
-    final otherNickname = _nicknames[widget.otherUid];
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Chat Info')),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Center(
-                  child: CircleAvatar(
-                    radius: 50,
-                    child: Text(
-                      name.isNotEmpty ? name[0].toUpperCase() : '?',
-                      style: const TextStyle(fontSize: 32),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Center(
-                  child: Text(
-                    name,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                if (_otherUser?.email != null) ...[
-                  const SizedBox(height: 4),
-                  Center(
-                    child: Text(
-                      _otherUser!.email!,
-                      style: const TextStyle(color: Colors.grey),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 24),
-                const Divider(),
-                ListTile(
-                  leading: const Icon(Icons.badge_outlined, color: Colors.blue),
-                  title: const Text('Your Nickname'),
-                  subtitle: Text(myNickname ?? 'Tap to set'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _changeNickname,
-                ),
-                ListTile(
-                  leading: const Icon(Icons.person_outline, color: Colors.blue),
-                  title: Text(name),
-                  subtitle: Text(otherNickname ?? 'Tap to set'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _changeOtherNickname,
-                ),
-                const Divider(),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Text(
-                    'Media',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                _MediaSection(chatId: widget.chatId),
-              ],
-            ),
-    );
-  }
-}
-
-class _MediaSection extends StatefulWidget {
-  final String chatId;
-  const _MediaSection({required this.chatId});
-
-  @override
-  State<_MediaSection> createState() => _MediaSectionState();
-}
-
-class _MediaSectionState extends State<_MediaSection> {
-  final _directService = DirectService();
-  List<String> _imageUrls = [];
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadMedia();
-  }
-
-  Future<void> _loadMedia() async {
-    final messages = await _directService.getMessagesOnce(widget.chatId);
-    final images = messages
-        .where((m) => m.type == MessageType.image && m.imageUrl != null)
-        .map((m) => m.imageUrl!)
-        .toList();
-    if (mounted) {
-      setState(() {
-        _imageUrls = images;
-        _isLoading = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_imageUrls.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Text(
-            'No media shared yet',
-            style: TextStyle(color: Colors.grey),
-          ),
-        ),
-      );
-    }
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 4,
-        mainAxisSpacing: 4,
-      ),
-      itemCount: _imageUrls.length,
-      itemBuilder: (context, index) {
-        return GestureDetector(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ImageViewerScreen(
-                  imageUrl: _imageUrls[index],
-                ),
-              ),
-            );
-          },
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Image.network(
-              _imageUrls[index],
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => const Center(
-                child: Icon(Icons.broken_image, color: Colors.grey),
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 }

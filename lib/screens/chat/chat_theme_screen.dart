@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/chat_theme.dart';
 import '../../services/theme/theme_service.dart';
+import '../../widgets/chat_background_painter.dart';
 
 class ChatThemeScreen extends StatefulWidget {
   const ChatThemeScreen({super.key});
@@ -73,51 +74,56 @@ class _ChatThemeScreenState extends State<ChatThemeScreen> {
                   // Theme preview
                   Container(
                     height: 200,
-                    decoration: BoxDecoration(
-                      color: theme.background,
-                      borderRadius: const BorderRadius.vertical(
+                    decoration: const BoxDecoration(
+                      borderRadius: BorderRadius.vertical(
                         top: Radius.circular(15),
                       ),
                     ),
-                    child: Column(
+                    clipBehavior: Clip.antiAlias,
+                    child: Stack(
                       children: [
-                        // App bar preview
-                        Container(
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: theme.appBarBackground,
-                            borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(15),
-                            ),
-                          ),
-                          alignment: Alignment.centerLeft,
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.arrow_back,
-                                  color: Colors.white, size: 18),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Preview',
-                                style: TextStyle(
-                                  color: theme.isDark
-                                      ? Colors.white
-                                      : Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
+                        Container(color: theme.background),
+                        ChatBackground(
+                          style: theme.backgroundStyle,
+                          color: theme.accent,
+                          opacity: theme.backgroundOpacity,
                         ),
-                        // Message bubbles preview
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                Align(
+                        Column(
+                          children: [
+                            // App bar preview
+                            Container(
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: theme.appBarBackground,
+                              ),
+                              alignment: Alignment.centerLeft,
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.arrow_back,
+                                      color: Colors.white, size: 18),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Preview',
+                                    style: TextStyle(
+                                      color: theme.isDark
+                                          ? Colors.white
+                                          : Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Message bubbles preview
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    Align(
                                   alignment: Alignment.centerLeft,
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(
@@ -179,6 +185,8 @@ class _ChatThemeScreenState extends State<ChatThemeScreen> {
                           ),
                         ),
                       ],
+                    ),
+                    ],
                     ),
                   ),
                   // Theme name + accent color

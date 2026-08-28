@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import '../../models/call.dart';
 import '../../utils/constants.dart';
 
@@ -7,7 +8,7 @@ class CallService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   final Map<String, List<Map<String, dynamic>>> _iceBuffer = {};
-  Timer? _iceFlushTimer;
+  final Map<String, Timer> _iceFlushTimers = {};
 
   CollectionReference<Map<String, dynamic>> get _calls =>
       _db.collection(AppConstants.callsCollection);
@@ -154,14 +155,16 @@ class CallService {
     if ((_iceBuffer[bufferKey]?.length ?? 0) >= 5) {
       _flushIceBuffer(bufferKey, callId);
     } else {
-      _iceFlushTimer?.cancel();
-      _iceFlushTimer = Timer(const Duration(milliseconds: 500), () {
-        _flushAllIceBuffers(callId);
+      _iceFlushTimers[bufferKey]?.cancel();
+      _iceFlushTimers[bufferKey] = Timer(const Duration(milliseconds: 500), () {
+        _flushIceBuffer(bufferKey, callId);
       });
     }
   }
 
-  void _flushIceBuffer(String bufferKey, String callId) {
+  Future<void> _flushIceBuffer(String bufferKey, String callId) async {
+    _iceFlushTimers[bufferKey]?.cancel();
+    _iceFlushTimers.remove(bufferKey);
     final candidates = _iceBuffer.remove(bufferKey);
     if (candidates == null || candidates.isEmpty) return;
 
@@ -173,13 +176,10 @@ class CallService {
         'createdAt': FieldValue.serverTimestamp(),
       });
     }
-    batch.commit();
-  }
-
-  void _flushAllIceBuffers(String callId) {
-    final keys = _iceBuffer.keys.toList();
-    for (final key in keys) {
-      _flushIceBuffer(key, callId);
+    try {
+      await batch.commit();
+    } catch (e) {
+      debugPrint('Error flushing ICE buffer: $e');
     }
   }
 
@@ -206,24 +206,19 @@ class CallService {
   }
 
   Future<void> deleteCallSignals(String callId) async {
-    _flushAllIceBuffers(callId);
+    for (final key in _iceBuffer.keys.toList()) {
+      if (key.startsWith('${callId}_')) {
+        _iceFlushTimers[key]?.cancel();
+        _iceFlushTimers.remove(key);
+        _iceBuffer.remove(key);
+      }
+    }
     final signals = await _signals(callId).get();
     final batch = _db.batch();
     for (final doc in signals.docs) {
       batch.delete(doc.reference);
     }
     await batch.commit();
-  }
-
-  Future<void> cleanupCall(String callId) async {
-    await deleteCallSignals(callId);
-    final participants = await _participants(callId).get();
-    final batch = _db.batch();
-    for (final doc in participants.docs) {
-      batch.delete(doc.reference);
-    }
-    await batch.commit();
-    await _calls.doc(callId).delete();
   }
 
   Future<void> cleanupCallData(String callId) async {
@@ -237,7 +232,10 @@ class CallService {
   }
 
   void dispose() {
-    _iceFlushTimer?.cancel();
+    for (final timer in _iceFlushTimers.values) {
+      timer.cancel();
+    }
+    _iceFlushTimers.clear();
     _iceBuffer.clear();
   }
 }

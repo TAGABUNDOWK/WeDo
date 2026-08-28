@@ -75,6 +75,7 @@ class _GroupChatsPageState extends State<GroupChatsPage> {
                       lastMessage: group.lastMessage,
                       lastMessageAt: group.lastMessageAt,
                       memberCount: group.memberCount,
+                      avatarUrl: group.photoUrl,
                       onTap: () => _openChat(context, group.id),
                     );
                   },

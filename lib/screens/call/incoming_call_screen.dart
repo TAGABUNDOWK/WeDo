@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../models/call.dart';
+import '../../services/call/call_manager.dart';
 import '../../services/call/call_service.dart';
 import '../../services/direct/direct_service.dart';
 import '../../services/group/group_service.dart';
@@ -25,6 +26,7 @@ class IncomingCallScreen extends StatefulWidget {
 class _IncomingCallScreenState extends State<IncomingCallScreen>
     with SingleTickerProviderStateMixin {
   final AudioPlayer _ringtonePlayer = AudioPlayer();
+  final CallManager _callManager = CallManager();
   StreamSubscription? _callSub;
 
   late AnimationController _pulseController;
@@ -75,11 +77,10 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
   void _acceptCall() async {
     _ringtonePlayer.stop();
     if (!mounted) return;
-    Navigator.of(context).pop();
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => CallScreen(
+
+    try {
+      await _callManager.startNewCall(
+        callData: ActiveCallData(
           callId: widget.call.id,
           callName: widget.callerName,
           callType: widget.call.type,
@@ -88,18 +89,42 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
           isGroup: widget.call.groupId != null,
           chatId: widget.call.chatId,
           groupId: widget.call.groupId,
+          startedAt: DateTime.now(),
         ),
-      ),
-    );
+        audioOnly: widget.call.type == CallType.audio,
+      );
+
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => CallScreen(
+              callId: widget.call.id,
+              callName: widget.callerName,
+              callType: widget.call.type,
+              members: widget.call.members,
+              createdBy: widget.call.createdBy,
+              isGroup: widget.call.groupId != null,
+              chatId: widget.call.chatId,
+              groupId: widget.call.groupId,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error accepting call: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to accept call: $e')),
+        );
+        Navigator.of(context).pop();
+      }
+    }
   }
 
   void _declineCall() {
     _ringtonePlayer.stop();
+    _sendMissedCallMessage();
     final callService = CallService();
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser != null) {
-      _sendMissedCallMessage();
-    }
     callService.endCall(widget.call.id);
     Navigator.of(context).pop();
   }
@@ -114,7 +139,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
       GroupService().sendCallMessage(
         groupId: widget.call.groupId!,
         senderId: currentUser.uid,
-        senderName: widget.callerName,
+        senderName: currentUser.displayName ?? currentUser.email ?? 'Unknown',
         callType: callTypeStr,
         callStatus: 'missed',
         durationSeconds: 0,
@@ -123,7 +148,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
       DirectService().sendCallMessage(
         chatId: widget.call.chatId!,
         senderId: currentUser.uid,
-        senderName: widget.callerName,
+        senderName: currentUser.displayName ?? currentUser.email ?? 'Unknown',
         callType: callTypeStr,
         callStatus: 'missed',
         durationSeconds: 0,
@@ -135,7 +160,12 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
   Widget build(BuildContext context) {
     final isVideo = widget.call.type == CallType.video;
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _declineCall();
+      },
+      child: Scaffold(
       body: Container(
         width: double.infinity,
         height: double.infinity,
@@ -293,6 +323,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
           ),
         ),
       ),
+    ),
     );
   }
 }

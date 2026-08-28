@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../models/call.dart';
+import '../../services/call/call_manager.dart';
 import '../../services/call/call_service.dart';
 import '../../services/direct/direct_service.dart';
 import '../../services/group/group_service.dart';
@@ -25,6 +26,7 @@ class OutgoingCallScreen extends StatefulWidget {
 class _OutgoingCallScreenState extends State<OutgoingCallScreen>
     with SingleTickerProviderStateMixin {
   final CallService _callService = CallService();
+  final CallManager _callManager = CallManager();
   final AudioPlayer _ringtonePlayer = AudioPlayer();
   final _currentUser = FirebaseAuth.instance.currentUser;
   StreamSubscription? _callSub;
@@ -45,6 +47,16 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
     );
     _playRingtone();
     _listenForCallStatus();
+    _callManager.trackOutgoingCall(
+      callId: widget.call.id,
+      callName: widget.callName,
+      callType: widget.call.type,
+      members: widget.call.members,
+      createdBy: widget.call.createdBy,
+      isGroup: widget.call.groupId != null,
+      chatId: widget.call.chatId,
+      groupId: widget.call.groupId,
+    );
   }
 
   void _playRingtone() async {
@@ -70,24 +82,53 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
       if (call.status == CallStatus.active) {
         _callWasActive = true;
         _ringtonePlayer.stop();
-        if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => CallScreen(
-                callId: call.id,
-                callName: widget.callName,
-                callType: call.type,
-                members: call.members,
-                createdBy: call.createdBy,
-                isGroup: call.groupId != null,
-                chatId: call.chatId,
-                groupId: call.groupId,
-              ),
-            ),
-          );
-        }
+        _startCallInManager(call);
       }
     });
+  }
+
+  void _startCallInManager(Call call) async {
+    try {
+      await _callManager.startNewCall(
+        callData: ActiveCallData(
+          callId: call.id,
+          callName: widget.callName,
+          callType: call.type,
+          members: call.members,
+          createdBy: call.createdBy,
+          isGroup: call.groupId != null,
+          chatId: call.chatId,
+          groupId: call.groupId,
+          startedAt: DateTime.now(),
+        ),
+        audioOnly: call.type == CallType.audio,
+      );
+
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => CallScreen(
+              callId: call.id,
+            callName: widget.callName,
+            callType: call.type,
+            members: call.members,
+            createdBy: call.createdBy,
+            isGroup: call.groupId != null,
+            chatId: call.chatId,
+            groupId: call.groupId,
+          ),
+        ),
+      );
+      }
+    } catch (e) {
+      debugPrint('Error starting call in manager: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to join call: $e')),
+        );
+        _endCall();
+      }
+    }
   }
 
   void _sendMissedCallMessage() {
@@ -119,14 +160,23 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
   void _endCall() {
     _callSub?.cancel();
     _ringtonePlayer.stop();
+    _callManager.cancelOutgoingCall();
     _callService.endCall(widget.call.id);
     if (mounted) Navigator.of(context).pop();
+  }
+
+  void _minimizeCall() {
+    if (mounted) {
+      _callManager.showCallOverlay();
+      Navigator.of(context).pop();
+    }
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
     _callSub?.cancel();
+    _callManager.cancelOutgoingCall();
     _ringtonePlayer.dispose();
     super.dispose();
   }
@@ -135,8 +185,13 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
   Widget build(BuildContext context) {
     final isVideo = widget.call.type == CallType.video;
 
-    return Scaffold(
-      body: Container(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _minimizeCall();
+      },
+      child: Scaffold(
+        body: Container(
         width: double.infinity,
         height: double.infinity,
         decoration: const BoxDecoration(
@@ -273,6 +328,7 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
           ),
         ),
       ),
+    ),
     );
   }
 }

@@ -61,7 +61,13 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
             SafeArea(
-              child: IndexedStack(index: _currentIndex, children: _tabs),
+              child: Column(
+                children: [
+                  Expanded(
+                    child: IndexedStack(index: _currentIndex, children: _tabs),
+                  ),
+                ],
+              ),
             ),
             Positioned(
               left: 16,

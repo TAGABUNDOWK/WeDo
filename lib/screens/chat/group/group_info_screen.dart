@@ -1,16 +1,20 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'dart:io';
 import '../../../models/group_chat.dart';
-import '../../../models/message.dart';
 import '../../../models/user_entity.dart';
 import '../../../services/group/group_service.dart';
 import '../../../services/friends/friend_service.dart';
 import '../../../services/direct/direct_service.dart';
-import '../image_viewer_screen.dart';
+import '../../../services/theme/theme_service.dart';
+import '../search/chat_search_screen.dart';
 import '../../../utils/constants.dart';
+import '../../../widgets/chat_theme_picker.dart';
 import '../../../widgets/invite_card.dart';
+import '../../../widgets/media_files_links_section.dart';
 
 const _fontFamily = 'PlusJakartaSans';
 
@@ -26,26 +30,42 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
   final _groupService = GroupService();
   final _friendService = FriendService();
   final _directService = DirectService();
+  final _themeService = ThemeService();
   final _currentUser = FirebaseAuth.instance.currentUser;
   List<Map<String, dynamic>> _members = [];
   GroupChat? _group;
+  String? _currentThemeId;
+  StreamSubscription<String?>? _themeSub;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _themeSub = _themeService.getChatThemeStream(widget.groupId, 'group_chats').listen((id) {
+      if (mounted) setState(() => _currentThemeId = id);
+    });
+  }
+
+  @override
+  void dispose() {
+    _themeSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
-    final group = await _groupService.getGroup(widget.groupId);
-    final members = await _groupService.getGroupMembersWithNames(
-      widget.groupId,
-    );
-    if (mounted) {
-      setState(() {
-        _group = group;
-        _members = members;
-      });
+    try {
+      final group = await _groupService.getGroup(widget.groupId);
+      final members = await _groupService.getGroupMembersWithNames(
+        widget.groupId,
+      );
+      if (mounted) {
+        setState(() {
+          _group = group;
+          _members = members;
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to load group data: $e');
     }
   }
 
@@ -120,6 +140,15 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
           }
 
   Future<void> _changeGroupPhoto() async {
+    if (_currentUser == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('You must be signed in to change the photo')),
+        );
+      }
+      return;
+    }
+
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
       builder: (ctx) => SafeArea(
@@ -150,7 +179,29 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     final picked = await picker.pickImage(source: source, imageQuality: 80);
     if (picked == null || !mounted) return;
 
-    final file = File(picked.path);
+    final cropped = await ImageCropper().cropImage(
+      sourcePath: picked.path,
+      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+      uiSettings: [
+        AndroidUiSettings(
+          toolbarTitle: 'Crop Photo',
+          toolbarColor: const Color(0xFF211635),
+          toolbarWidgetColor: Colors.white,
+          activeControlsWidgetColor: AppColors.lavenderAccent,
+          initAspectRatio: CropAspectRatioPreset.square,
+          lockAspectRatio: true,
+        ),
+        IOSUiSettings(
+          title: 'Crop Photo',
+          cropStyle: CropStyle.circle,
+          aspectRatioLockEnabled: true,
+        ),
+      ],
+    );
+
+    if (cropped == null || !mounted) return;
+
+    final file = File(cropped.path);
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -162,11 +213,16 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
         groupId: widget.groupId,
         imageFile: file,
       );
-    } finally {
       if (mounted) Navigator.pop(context);
+      await _loadData();
+    } catch (e) {
+      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update photo: $e')),
+        );
+      }
     }
-
-    _loadData();
   }
 
   Future<void> _changeNickname(String memberUid) async {
@@ -441,6 +497,14 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     _loadData();
   }
 
+  Future<void> _setTheme(String? themeId) async {
+    if (themeId == null) {
+      await _themeService.clearChatTheme(widget.groupId, 'group_chats');
+    } else {
+      await _themeService.setChatTheme(widget.groupId, 'group_chats', themeId);
+    }
+  }
+
   void _showInviteLink() {
     showModalBottomSheet(
       context: context,
@@ -713,6 +777,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                             ],
                           ),
                           child: CircleAvatar(
+                            key: ValueKey(group.photoUrl),
                             radius: 55,
                             backgroundColor: const Color(0xFF211635),
                             backgroundImage:
@@ -920,15 +985,41 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
 
-                // ── Media Card ──
+                // ── Search in Conversation ──
+                _GlassCard(
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.search, color: Color(0xFF800DD8), size: 22),
+                    title: const Text(
+                      'Search in Conversation',
+                      style: TextStyle(
+                        fontFamily: _fontFamily,
+                        color: AppColors.textPrimary,
+                        fontSize: 14,
+                      ),
+                    ),
+                    trailing: Icon(Icons.chevron_right, color: AppColors.textSecondary.withValues(alpha: 0.6), size: 20),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ChatSearchScreen(groupId: widget.groupId),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // ── Chat Theme ──
                 _GlassCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Media',
+                        'Chat Theme',
                         style: TextStyle(
                           fontFamily: _fontFamily,
                           fontSize: 15,
@@ -937,11 +1028,35 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      _GroupMediaSection(groupId: widget.groupId),
+                      ChatThemePicker(
+                        currentThemeId: _currentThemeId,
+                        onSelected: _setTheme,
+                      ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
+
+                // ── Media, Files & Links Card ──
+                _GlassCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Media, Files & Links',
+                        style: TextStyle(
+                          fontFamily: _fontFamily,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      MediaFilesLinksSection(groupId: widget.groupId),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
 
                 // ── Delete Group ──
                 if (isAdmin)
@@ -995,116 +1110,6 @@ class _FriendUser {
   final String uid;
   final UserEntity? user;
   const _FriendUser({required this.uid, required this.user});
-}
-
-class _GroupMediaSection extends StatefulWidget {
-  final String groupId;
-  const _GroupMediaSection({required this.groupId});
-
-  @override
-  State<_GroupMediaSection> createState() => _GroupMediaSectionState();
-}
-
-class _GroupMediaSectionState extends State<_GroupMediaSection> {
-  final _groupService = GroupService();
-  List<String> _imageUrls = [];
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadMedia();
-  }
-
-  Future<void> _loadMedia() async {
-    final messages = await _groupService.getMessagesOnce(widget.groupId);
-    final images = messages
-        .where((m) => m.type == MessageType.image && m.imageUrl != null)
-        .map((m) => m.imageUrl!)
-        .toList();
-    if (mounted) {
-      setState(() {
-        _imageUrls = images;
-        _isLoading = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: CircularProgressIndicator(color: AppColors.lavenderAccent, strokeWidth: 2),
-        ),
-      );
-    }
-    if (_imageUrls.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.image_outlined,
-                size: 48,
-                color: AppColors.textSecondary.withValues(alpha: 0.4),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'No media shared yet',
-                style: TextStyle(
-                  fontFamily: _fontFamily,
-                  fontSize: 13,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 6,
-        mainAxisSpacing: 6,
-      ),
-      itemCount: _imageUrls.length,
-      itemBuilder: (context, index) {
-        return GestureDetector(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ImageViewerScreen(
-                  imageUrl: _imageUrls[index],
-                ),
-              ),
-            );
-          },
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Image.network(
-              _imageUrls[index],
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => Container(
-                decoration: BoxDecoration(
-                  color: AppColors.glassBg,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.broken_image, color: AppColors.textSecondary),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
 }
 
 class _AddMemberScreen extends StatefulWidget {

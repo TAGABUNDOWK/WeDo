@@ -32,6 +32,7 @@ class WebRTCService {
 
   bool _isAudioOnly = false;
   Function(String peerId, String candidateJson)? onIceCandidateGenerated;
+  Function(String peerId, RTCPeerConnectionState state)? onConnectionStateChanged;
 
   /// Normalized key: always alphabetical order so A_B == B_A lookup works.
   static String _pcKey(String uid1, String uid2) {
@@ -195,6 +196,7 @@ class WebRTCService {
 
       pc.onConnectionState = (RTCPeerConnectionState state) {
         _connectionStateController.add((peerId, state));
+        onConnectionStateChanged?.call(peerId, state);
         debugPrint('Peer connection state with $peerId: $state');
 
         if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||

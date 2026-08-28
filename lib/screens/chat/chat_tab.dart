@@ -112,8 +112,20 @@ class _ChatTabState extends State<ChatTab> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => GroupChatScreen(groupId: groupId),
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 250),
+        reverseTransitionDuration: const Duration(milliseconds: 200),
+        pageBuilder: (_, __, ___) => GroupChatScreen(groupId: groupId),
+        transitionsBuilder: (_, animation, __, child) {
+          final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0.06, 0),
+              end: Offset.zero,
+            ).animate(curved),
+            child: FadeTransition(opacity: curved, child: child),
+          );
+        },
       ),
     ).then((_) {
       if (uid != null) _groupService.markMessagesAsRead(groupId, uid);
@@ -124,8 +136,20 @@ class _ChatTabState extends State<ChatTab> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => DirectChatScreen(chatId: chatId, otherUid: otherUid),
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 250),
+        reverseTransitionDuration: const Duration(milliseconds: 200),
+        pageBuilder: (_, __, ___) => DirectChatScreen(chatId: chatId, otherUid: otherUid),
+        transitionsBuilder: (_, animation, __, child) {
+          final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0.06, 0),
+              end: Offset.zero,
+            ).animate(curved),
+            child: FadeTransition(opacity: curved, child: child),
+          );
+        },
       ),
     ).then((_) {
       if (uid != null) _directService.markMessagesAsRead(chatId, uid);
@@ -248,6 +272,7 @@ class _ChatTabState extends State<ChatTab> {
                                 hasUnread: hasUnread,
                                 lastSenderId: chat.lastMessageSenderId,
                                 currentUserId: currentUser.uid,
+                                avatarUrl: user?.photoUrl,
                                 onTap: () => _openDirectChat(chat.id, otherUid),
                               );
                             },

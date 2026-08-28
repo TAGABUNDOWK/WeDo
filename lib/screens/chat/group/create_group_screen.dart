@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
 import '../../../models/user_entity.dart';
 import '../../../services/group/group_service.dart';
 import '../../../services/friends/friend_service.dart';
@@ -98,8 +99,30 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
     if (source == null) return;
 
     final picked = await _imagePicker.pickImage(source: source, imageQuality: 80);
-    if (picked != null) {
-      setState(() => _selectedImage = File(picked.path));
+    if (picked == null) return;
+
+    final cropped = await ImageCropper().cropImage(
+      sourcePath: picked.path,
+      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+      uiSettings: [
+        AndroidUiSettings(
+          toolbarTitle: 'Crop Photo',
+          toolbarColor: const Color(0xFF190831),
+          toolbarWidgetColor: Colors.white,
+          activeControlsWidgetColor: const Color(0xFFFE4EF0),
+          initAspectRatio: CropAspectRatioPreset.square,
+          lockAspectRatio: true,
+        ),
+        IOSUiSettings(
+          title: 'Crop Photo',
+          cropStyle: CropStyle.circle,
+          aspectRatioLockEnabled: true,
+        ),
+      ],
+    );
+
+    if (cropped != null) {
+      setState(() => _selectedImage = File(cropped.path));
     }
   }
 

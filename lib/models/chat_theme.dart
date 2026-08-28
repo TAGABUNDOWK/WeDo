@@ -1,5 +1,17 @@
 import 'package:flutter/material.dart';
 
+enum ChatBackgroundStyle {
+  none,
+  dotGrid,
+  waves,
+  clouds,
+  leaves,
+  bokeh,
+  starfield,
+  geometric,
+  petals,
+}
+
 class AppChatTheme {
   final String id;
   final String name;
@@ -15,6 +27,8 @@ class AppChatTheme {
   final Color composerBackground;
   final Color inputBackground;
   final bool isDark;
+  final ChatBackgroundStyle backgroundStyle;
+  final double backgroundOpacity;
 
   const AppChatTheme({
     required this.id,
@@ -31,6 +45,8 @@ class AppChatTheme {
     required this.composerBackground,
     required this.inputBackground,
     this.isDark = false,
+    this.backgroundStyle = ChatBackgroundStyle.none,
+    this.backgroundOpacity = 0.15,
   });
 
   static String _colorToHex(Color c) =>
@@ -40,6 +56,16 @@ class AppChatTheme {
     hex = hex.replaceFirst('#', '');
     if (hex.length == 6) hex = 'FF$hex';
     return Color(int.parse(hex, radix: 16));
+  }
+
+  static String _bgStyleToString(ChatBackgroundStyle style) => style.name;
+
+  static ChatBackgroundStyle _stringToBgStyle(String? value) {
+    if (value == null) return ChatBackgroundStyle.none;
+    return ChatBackgroundStyle.values.firstWhere(
+      (s) => s.name == value,
+      orElse: () => ChatBackgroundStyle.none,
+    );
   }
 
   Map<String, dynamic> toFirestore() => {
@@ -56,6 +82,8 @@ class AppChatTheme {
         'composerBackground': _colorToHex(composerBackground),
         'inputBackground': _colorToHex(inputBackground),
         'isDark': isDark,
+        'backgroundStyle': _bgStyleToString(backgroundStyle),
+        'backgroundOpacity': backgroundOpacity,
       };
 
   factory AppChatTheme.fromFirestore(Map<String, dynamic> data) =>
@@ -74,6 +102,8 @@ class AppChatTheme {
         composerBackground: _hexToColor(data['composerBackground'] ?? '#F0F2F5'),
         inputBackground: _hexToColor(data['inputBackground'] ?? '#FFFFFF'),
         isDark: data['isDark'] ?? false,
+        backgroundStyle: _stringToBgStyle(data['backgroundStyle']),
+        backgroundOpacity: (data['backgroundOpacity'] as num?)?.toDouble() ?? 0.15,
       );
 
   AppChatTheme copyWith({
@@ -91,6 +121,8 @@ class AppChatTheme {
     Color? composerBackground,
     Color? inputBackground,
     bool? isDark,
+    ChatBackgroundStyle? backgroundStyle,
+    double? backgroundOpacity,
   }) =>
       AppChatTheme(
         id: id ?? this.id,
@@ -107,6 +139,8 @@ class AppChatTheme {
         composerBackground: composerBackground ?? this.composerBackground,
         inputBackground: inputBackground ?? this.inputBackground,
         isDark: isDark ?? this.isDark,
+        backgroundStyle: backgroundStyle ?? this.backgroundStyle,
+        backgroundOpacity: backgroundOpacity ?? this.backgroundOpacity,
       );
 
   static const List<AppChatTheme> presets = [
@@ -124,6 +158,8 @@ class AppChatTheme {
       appBarBackground: Color(0xFF008069),
       composerBackground: Color(0xFFF0F2F5),
       inputBackground: Color(0xFFFFFFFF),
+      backgroundStyle: ChatBackgroundStyle.dotGrid,
+      backgroundOpacity: 0.12,
     ),
     AppChatTheme(
       id: 'ocean',
@@ -139,6 +175,8 @@ class AppChatTheme {
       appBarBackground: Color(0xFF1565C0),
       composerBackground: Color(0xFFF0F8FF),
       inputBackground: Color(0xFFFFFFFF),
+      backgroundStyle: ChatBackgroundStyle.waves,
+      backgroundOpacity: 0.15,
     ),
     AppChatTheme(
       id: 'sunset',
@@ -154,6 +192,8 @@ class AppChatTheme {
       appBarBackground: Color(0xFFE65100),
       composerBackground: Color(0xFFFFF8F5),
       inputBackground: Color(0xFFFFFFFF),
+      backgroundStyle: ChatBackgroundStyle.clouds,
+      backgroundOpacity: 0.18,
     ),
     AppChatTheme(
       id: 'forest',
@@ -169,6 +209,8 @@ class AppChatTheme {
       appBarBackground: Color(0xFF2E7D32),
       composerBackground: Color(0xFFF0FFF4),
       inputBackground: Color(0xFFFFFFFF),
+      backgroundStyle: ChatBackgroundStyle.leaves,
+      backgroundOpacity: 0.15,
     ),
     AppChatTheme(
       id: 'lavender',
@@ -184,6 +226,8 @@ class AppChatTheme {
       appBarBackground: Color(0xFF7B1FA2),
       composerBackground: Color(0xFFF8F0FF),
       inputBackground: Color(0xFFFFFFFF),
+      backgroundStyle: ChatBackgroundStyle.bokeh,
+      backgroundOpacity: 0.15,
     ),
     AppChatTheme(
       id: 'midnight',
@@ -200,6 +244,8 @@ class AppChatTheme {
       composerBackground: Color(0xFF0D1117),
       inputBackground: Color(0xFF21262D),
       isDark: true,
+      backgroundStyle: ChatBackgroundStyle.starfield,
+      backgroundOpacity: 0.3,
     ),
     AppChatTheme(
       id: 'dark_green',
@@ -216,6 +262,8 @@ class AppChatTheme {
       composerBackground: Color(0xFF0A1A0A),
       inputBackground: Color(0xFF1E3E1E),
       isDark: true,
+      backgroundStyle: ChatBackgroundStyle.geometric,
+      backgroundOpacity: 0.12,
     ),
     AppChatTheme(
       id: 'rose',
@@ -231,6 +279,8 @@ class AppChatTheme {
       appBarBackground: Color(0xFFC2185B),
       composerBackground: Color(0xFFFFF0F3),
       inputBackground: Color(0xFFFFFFFF),
+      backgroundStyle: ChatBackgroundStyle.petals,
+      backgroundOpacity: 0.15,
     ),
   ];
 }

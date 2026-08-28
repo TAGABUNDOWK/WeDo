@@ -6,6 +6,7 @@ import '../../models/direct_chat.dart';
 import '../../models/message.dart';
 import '../../models/user_entity.dart';
 import '../../utils/constants.dart';
+import '../../utils/time_format.dart';
 
 class DirectService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -161,7 +162,10 @@ class DirectService {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final ref = FirebaseStorage.instance
         .ref('chat_images/direct/$chatId/$timestamp.jpg');
-    await ref.putFile(imageFile);
+    await ref.putFile(
+      imageFile,
+      SettableMetadata(contentType: 'image/jpeg'),
+    );
     final url = await ref.getDownloadURL();
 
     final batch = _db.batch();
@@ -243,10 +247,13 @@ class DirectService {
     final batch = _db.batch();
 
     final callText = callType == 'video' ? 'Video call' : 'Audio call';
-    final statusText = callStatus == 'missed' ? 'Missed' : '';
-    final displayText = callStatus == 'missed'
+    final statusPrefixes = ['missed', 'declined', 'cancelled'];
+    final statusText = statusPrefixes.contains(callStatus)
+        ? '${callStatus[0].toUpperCase()}${callStatus.substring(1)}'
+        : '';
+    final displayText = statusText.isNotEmpty
         ? '$statusText $callText'
-        : '$callText · ${_formatDuration(durationSeconds)}';
+        : '$callText · ${formatSeconds(durationSeconds)}';
 
     batch.set(_messages(chatId).doc(), {
       'sender_id': senderId,
@@ -307,12 +314,6 @@ class DirectService {
     });
 
     await batch.commit();
-  }
-
-  String _formatDuration(int totalSeconds) {
-    final minutes = totalSeconds ~/ 60;
-    final seconds = totalSeconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
   Future<void> sendPollMessage({
@@ -399,23 +400,44 @@ class DirectService {
     return {};
   }
 
+  Future<bool> isMuted(String chatId) async {
+    final doc = await _chats.doc(chatId).get();
+    if (!doc.exists) return false;
+    final mutedBy = (doc.data()?['mutedBy'] as List?)?.cast<String>() ?? [];
+    final uid = getCurrentUid();
+    return uid != null && mutedBy.contains(uid);
+  }
+
+  Future<void> toggleMute({required String chatId, required String uid}) async {
+    final doc = await _chats.doc(chatId).get();
+    final mutedBy = (doc.data()?['mutedBy'] as List?)?.cast<String>() ?? [];
+    if (mutedBy.contains(uid)) {
+      await _chats.doc(chatId).update({
+        'mutedBy': FieldValue.arrayRemove([uid]),
+      });
+    } else {
+      await _chats.doc(chatId).update({
+        'mutedBy': FieldValue.arrayUnion([uid]),
+      });
+    }
+  }
+
   Stream<List<ChatMessage>> getMessagesStream(String chatId) {
     return _messages(chatId)
-        .orderBy('created_at', descending: false)
+        .orderBy('created_at', descending: true)
         .snapshots()
         .map((snap) => snap.docs.map(ChatMessage.fromFirestore).toList());
   }
 
   Future<void> markMessagesAsRead(String chatId, String uid) async {
-    final unreadDocs = await _messages(chatId).get();
+    final unreadDocs = await _messages(chatId)
+        .where('read_by', isNotEqualTo: uid)
+        .get();
     final batch = _db.batch();
     for (final doc in unreadDocs.docs) {
-      final readBy = List<String>.from(doc.data()['read_by'] ?? []);
-      if (!readBy.contains(uid)) {
-        batch.update(doc.reference, {
-          'read_by': FieldValue.arrayUnion([uid]),
-        });
-      }
+      batch.update(doc.reference, {
+        'read_by': FieldValue.arrayUnion([uid]),
+      });
     }
     batch.update(_chats.doc(chatId), {
       'lastMessageReadBy': FieldValue.arrayUnion([uid]),
@@ -428,5 +450,40 @@ class DirectService {
         .orderBy('created_at', descending: false)
         .get();
     return snap.docs.map(ChatMessage.fromFirestore).toList();
+  }
+
+  Future<int> getUnreadCount(String chatId, String uid) async {
+    final snap = await _messages(chatId)
+        .where('read_by', arrayContains: uid)
+        .get();
+    final totalDocs = await _messages(chatId).count().get();
+    final total = totalDocs.count ?? 0;
+    return total - snap.docs.length;
+  }
+
+  Future<void> editMessage({
+    required String chatId,
+    required String messageId,
+    required String newContent,
+  }) async {
+    await _messages(chatId).doc(messageId).update({
+      'content': newContent,
+      'edited': true,
+    });
+  }
+
+  Future<void> deleteMessage({
+    required String chatId,
+    required String messageId,
+    required String uid,
+    required bool forEveryone,
+  }) async {
+    if (forEveryone) {
+      await _messages(chatId).doc(messageId).delete();
+    } else {
+      await _messages(chatId).doc(messageId).update({
+        'deleted_for': FieldValue.arrayUnion([uid]),
+      });
+    }
   }
 }
