@@ -47,6 +47,7 @@ dependencies:
   path_provider: ^2.1.0
   crypto: ^3.0.3
   wakelock_plus: ^1.2.0
+  shared_preferences: ^2.3.0
 
 dev_dependencies:
   flutter_test:
