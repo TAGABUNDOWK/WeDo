@@ -52,6 +52,7 @@ class CallManager extends ChangeNotifier {
   StreamSubscription? _groupCallSub;
   Timer? _groupCallDebounce;
   Timer? _callTimer;
+  Timer? _reconnectTimer;
   int _callDuration = 0;
   bool _isMuted = false;
   bool _isVideoOff = false;
@@ -110,7 +111,11 @@ class CallManager extends ChangeNotifier {
     _outgoingCallSub?.cancel();
     _outgoingCallSub = _callService.getCallStream(callId).listen((call) {
       if (call == null || call.status == CallStatus.ended) {
+        final outgoing = _outgoingCall;
         cancelOutgoingCall();
+        if (outgoing != null) {
+          _sendMissedCallMessageForCall(outgoing);
+        }
       } else if (call.status == CallStatus.active) {
         final outgoing = _outgoingCall;
         if (outgoing != null) {
@@ -140,6 +145,34 @@ class CallManager extends ChangeNotifier {
     _outgoingCall = null;
     removeCallOverlay();
     notifyListeners();
+  }
+
+  Future<void> _sendMissedCallMessageForCall(ActiveCallData call) async {
+    final user = _currentUser;
+    if (user == null) return;
+
+    final callTypeStr = call.callType == CallType.video ? 'video' : 'audio';
+    final senderName = user.displayName ?? user.email ?? 'Unknown';
+
+    if (call.isGroup && call.groupId != null) {
+      await GroupService().sendCallMessage(
+        groupId: call.groupId!,
+        senderId: user.uid,
+        senderName: senderName,
+        callType: callTypeStr,
+        callStatus: 'missed',
+        durationSeconds: 0,
+      );
+    } else if (call.chatId != null) {
+      await DirectService().sendCallMessage(
+        chatId: call.chatId!,
+        senderId: user.uid,
+        senderName: senderName,
+        callType: callTypeStr,
+        callStatus: 'missed',
+        durationSeconds: 0,
+      );
+    }
   }
 
   void showCallOverlay() {
@@ -227,7 +260,7 @@ class CallManager extends ChangeNotifier {
     _callDuration = 0;
     _isMuted = false;
     _isVideoOff = false;
-    _isSpeakerOn = false;
+    _isSpeakerOn = audioOnly;
     _processedSignals.clear();
     _pendingOfferPeers.clear();
 
@@ -237,13 +270,25 @@ class CallManager extends ChangeNotifier {
 
     await _webrtcService!.initialize(audioOnly: audioOnly);
 
+    if (_isSpeakerOn) {
+      await _webrtcService!.setSpeakerOn(true);
+    }
+
+    _localRenderer = RTCVideoRenderer();
+    await _localRenderer!.initialize();
+
+    _remoteRenderer = RTCVideoRenderer();
+    await _remoteRenderer!.initialize();
+
     _webrtcService!.onLocalStream.listen((stream) {
       _localStreamController?.add(stream);
+      _localRenderer?.srcObject = stream;
       notifyListeners();
     });
 
     _webrtcService!.onRemoteStream.listen((stream) {
       _remoteStreamController?.add(stream);
+      _remoteRenderer?.srcObject = stream;
       notifyListeners();
     });
 
@@ -259,10 +304,19 @@ class CallManager extends ChangeNotifier {
     _webrtcService!.onConnectionStateChanged = (peerId, state) {
       debugPrint('Connection state with $peerId: $state');
 
+      if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+        _reconnectTimer?.cancel();
+        _reconnectTimer = null;
+        return;
+      }
+
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
           state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
-        if (!callData.isGroup) {
-          endActiveCall();
+        if (!callData.isGroup && _reconnectTimer == null) {
+          _reconnectTimer = Timer(const Duration(seconds: 5), () {
+            _reconnectTimer = null;
+            endActiveCall();
+          });
         }
       }
     };
@@ -421,6 +475,8 @@ class CallManager extends ChangeNotifier {
     _signalsSub?.cancel();
     _groupCallSub?.cancel();
     _groupCallDebounce?.cancel();
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
 
     await _sendCallMessage();
 
