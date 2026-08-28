@@ -66,6 +66,9 @@ class DirectService {
     required String senderId,
     required String senderName,
     required String text,
+    String? replyTo,
+    String? replyToContent,
+    String? replyToSender,
   }) async {
     final batch = _db.batch();
 
@@ -74,10 +77,14 @@ class DirectService {
       'senderName': senderName,
       'type': 'text',
       'content': text,
+      'reactions': {},
       'read_by': [senderId],
       'created_at': FieldValue.serverTimestamp(),
       'createdAtLocal': DateTime.now().toIso8601String(),
       'edited': false,
+      if (replyTo != null) 'replyTo': replyTo,
+      if (replyToContent != null) 'replyToContent': replyToContent,
+      if (replyToSender != null) 'replyToSender': replyToSender,
     };
 
     final groupLinkMatch = RegExp(r'wedo://group/([^\s]+)').firstMatch(text);
@@ -485,5 +492,64 @@ class DirectService {
         'deleted_for': FieldValue.arrayUnion([uid]),
       });
     }
+  }
+
+  Future<void> addReaction({
+    required String chatId,
+    required String messageId,
+    required String uid,
+    required String emoji,
+  }) async {
+    await _messages(chatId).doc(messageId).update({
+      'reactions.$uid': emoji,
+    });
+  }
+
+  Future<void> removeReaction({
+    required String chatId,
+    required String messageId,
+    required String uid,
+  }) async {
+    await _messages(chatId).doc(messageId).update({
+      'reactions.$uid': FieldValue.delete(),
+    });
+  }
+
+  Future<void> setTyping({
+    required String chatId,
+    required String uid,
+    required bool isTyping,
+  }) async {
+    await _chats.doc(chatId).update({
+      if (isTyping)
+        'typing.$uid': FieldValue.serverTimestamp()
+      else
+        'typing.$uid': FieldValue.delete(),
+    });
+  }
+
+  Stream<List<String>> getTypingUsers(String chatId) {
+    return _chats.doc(chatId).snapshots().map((doc) {
+      final data = doc.data();
+      if (data == null) return [];
+      final typing = data['typing'] as Map<String, dynamic>? ?? {};
+      final now = DateTime.now();
+      return typing.entries
+          .where((e) {
+            final ts = e.value;
+            if (ts == null) return false;
+            DateTime typedAt;
+            if (ts is DateTime) {
+              typedAt = ts;
+            } else if (ts is Timestamp) {
+              typedAt = ts.toDate();
+            } else {
+              return false;
+            }
+            return now.difference(typedAt).inSeconds < 5;
+          })
+          .map((e) => e.key)
+          .toList();
+    });
   }
 }

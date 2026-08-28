@@ -22,6 +22,7 @@ import '../../../widgets/group_invite_message_card.dart';
 import '../../../widgets/composer_option.dart';
 import '../../../widgets/audio_recorder_button.dart';
 import '../../../widgets/chat_background_painter.dart';
+import '../../../widgets/typing_indicator.dart';
 import '../../call/outgoing_call_screen.dart';
 import '../event/create_event_screen.dart';
 import '../event/event_detail_screen.dart';
@@ -59,6 +60,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   List<ChatMessage> _previousMessages = [];
   StreamSubscription<List<ChatMessage>>? _messagesSub;
   late Stream<List<ChatMessage>> _messagesStream;
+  final LayerLink _attachLayerLink = LayerLink();
+  OverlayEntry? _attachMenuOverlay;
 
   @override
   void initState() {
@@ -69,6 +72,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     if (_currentUser != null) {
       _groupService.markMessagesAsRead(widget.groupId, _currentUser.uid);
     }
+    _messageCtrl.addListener(_onTextChanged);
     _scrollCtrl.addListener(_onScroll);
     _messagesSub = _messagesStream.listen((messages) {
       final prevLength = _previousMessages.length;
@@ -137,8 +141,39 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     return _nicknames[uid] ?? fallback;
   }
 
+  Timer? _typingTimer;
+
+  void _onTextChanged() {
+    if (_currentUser == null) return;
+    final hasText = _messageCtrl.text.trim().isNotEmpty;
+    _groupService.setTyping(
+      groupId: widget.groupId,
+      uid: _currentUser!.uid,
+      isTyping: hasText,
+    );
+    _typingTimer?.cancel();
+    if (hasText) {
+      _typingTimer = Timer(const Duration(seconds: 3), () {
+        _groupService.setTyping(
+          groupId: widget.groupId,
+          uid: _currentUser!.uid,
+          isTyping: false,
+        );
+      });
+    }
+  }
+
   @override
   void dispose() {
+    _dismissAttachMenu();
+    _typingTimer?.cancel();
+    if (_currentUser != null) {
+      _groupService.setTyping(
+        groupId: widget.groupId,
+        uid: _currentUser!.uid,
+        isTyping: false,
+      );
+    }
     _messagesSub?.cancel();
     _messageCtrl.dispose();
     _scrollCtrl.dispose();
@@ -176,9 +211,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       senderId: _currentUser.uid,
       senderName: _getDisplayName(_currentUser.uid, _currentUser.displayName ?? _currentUser.email ?? 'Unknown'),
       text: text,
+      replyTo: _replyingTo?.id,
+      replyToContent: _replyingTo?.content,
+      replyToSender: _replyingTo?.senderName,
     );
 
     _messageCtrl.clear();
+    setState(() => _replyingTo = null);
   }
 
   void _editMessage(ChatMessage msg) {
@@ -254,46 +293,62 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     );
   }
 
-  Future<void> _pickAndSendImage() async {
-    final source = await showDialog<ImageSource>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Select Source'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, ImageSource.camera),
-            child: const Text('Camera'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, ImageSource.gallery),
-            child: const Text('Gallery'),
-          ),
-        ],
-      ),
-    );
+  Future<void> _pickAndSendImage({bool camera = false}) async {
+    if (_currentUser == null) return;
 
-    if (source == null) return;
-
-    final picked = await _imagePicker.pickImage(source: source, imageQuality: 80);
-    if (picked == null || _currentUser == null) return;
-
-    setState(() => _isUploading = true);
-
-    try {
-      await _groupService.sendImageMessage(
-        groupId: widget.groupId,
-        senderId: _currentUser.uid,
-        senderName: _getDisplayName(_currentUser.uid, _currentUser.displayName ?? _currentUser.email ?? 'Unknown'),
-        imageFile: File(picked.path),
+    if (camera) {
+      final picked = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 80,
       );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send photo: $e')),
+      if (picked == null) return;
+      setState(() => _isUploading = true);
+      try {
+        await _groupService.sendImageMessage(
+          groupId: widget.groupId,
+          senderId: _currentUser.uid,
+          senderName: _getDisplayName(
+              _currentUser.uid,
+              _currentUser.displayName ??
+                  _currentUser.email ??
+                  'Unknown'),
+          imageFile: File(picked.path),
         );
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to send photo: $e')),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isUploading = false);
       }
-    } finally {
-      if (mounted) setState(() => _isUploading = false);
+    } else {
+      final picked = await _imagePicker.pickMultiImage(imageQuality: 80);
+      if (picked.isEmpty) return;
+      setState(() => _isUploading = true);
+      try {
+        for (final file in picked) {
+          await _groupService.sendImageMessage(
+            groupId: widget.groupId,
+            senderId: _currentUser.uid,
+            senderName: _getDisplayName(
+                _currentUser.uid,
+                _currentUser.displayName ??
+                    _currentUser.email ??
+                    'Unknown'),
+            imageFile: File(file.path),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to send photos: $e')),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isUploading = false);
+      }
     }
   }
 
@@ -355,78 +410,80 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   void _showComposerMenu() {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    if (_attachMenuOverlay != null) {
+      _dismissAttachMenu();
+      return;
+    }
+
+    final overlay = Overlay.of(context);
+    _attachMenuOverlay = OverlayEntry(
+      builder: (context) => _AttachMenu(
+        layerLink: _attachLayerLink,
+        onDismiss: _dismissAttachMenu,
+        onPhotoTap: () {
+          _dismissAttachMenu();
+          _pickAndSendImage(camera: false);
+        },
+        onCameraTap: () {
+          _dismissAttachMenu();
+          _pickAndSendImage(camera: true);
+        },
+        onEventTap: () async {
+          _dismissAttachMenu();
+          final result = await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CreateEventScreen(groupId: widget.groupId),
+            ),
+          );
+          if (result == true) _loadGroupInfo();
+        },
+        onPollTap: () async {
+          _dismissAttachMenu();
+          final result = await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CreatePollScreen(groupId: widget.groupId),
+            ),
+          );
+          if (result == true) _loadGroupInfo();
+        },
       ),
-      builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Add to chat',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 20),
-              Wrap(
-                spacing: 24,
-                runSpacing: 24,
-                children: [
-                  ComposerOption(
-                    icon: Icons.photo_outlined,
-                    label: 'Photo',
-                    color: Colors.blue,
-                    onTap: () {
-                      Navigator.pop(context);
-                      _pickAndSendImage();
-                    },
-                  ),
-                  ComposerOption(
-                    icon: Icons.event_outlined,
-                    label: 'Event',
-                    color: Colors.teal,
-                    onTap: () async {
-                      Navigator.pop(context);
-                      final result = await Navigator.push<bool>(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => CreateEventScreen(
-                            groupId: widget.groupId,
-                          ),
-                        ),
-                      );
-                      if (result == true) _loadGroupInfo();
-                    },
-                  ),
-                  ComposerOption(
-                    icon: Icons.poll_outlined,
-                    label: 'Poll',
-                    color: Colors.deepPurple,
-                    onTap: () async {
-                      Navigator.pop(context);
-                      final result = await Navigator.push<bool>(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => CreatePollScreen(
-                            groupId: widget.groupId,
-                          ),
-                        ),
-                      );
-                      if (result == true) _loadGroupInfo();
-                    },
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
     );
+    overlay.insert(_attachMenuOverlay!);
+  }
+
+  void _dismissAttachMenu() {
+    _attachMenuOverlay?.remove();
+    _attachMenuOverlay = null;
+  }
+
+  void _toggleReaction(ChatMessage msg, String emoji) async {
+    if (_currentUser == null) return;
+    if (emoji.isEmpty) {
+      await _groupService.removeReaction(
+        groupId: widget.groupId,
+        messageId: msg.id,
+        uid: _currentUser!.uid,
+      );
+    } else {
+      await _groupService.addReaction(
+        groupId: widget.groupId,
+        messageId: msg.id,
+        uid: _currentUser!.uid,
+        emoji: emoji,
+      );
+    }
+  }
+
+  ChatMessage? _replyingTo;
+
+  void _startReply(ChatMessage msg) {
+    setState(() => _replyingTo = msg);
+  }
+
+  void _cancelReply() {
+    setState(() => _replyingTo = null);
   }
 
   @override
@@ -537,8 +594,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                       final isFirstInGroup = !sameSenderAsNextOlder;
                       final isLastInGroup = !sameSenderAsPrevNewer;
 
-                      final showDateSeparator = index == 0 ||
-                          !isSameDay(
+                      final showDateSeparator = index > 0 && !isSameDay(
                             messages[index].createdAt,
                             messages[index - 1].createdAt,
                           );
@@ -640,6 +696,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             onDeleteForMe: () => _deleteMessageForMe(msg),
                             senderPhotoUrl: !isMe ? (_memberPhotos[msg.senderId] ?? '') : null,
                             isRead: isMe && msg.isRead,
+                            reactions: msg.reactions,
+                            currentUid: _currentUser?.uid,
+                            onReact: (emoji) => _toggleReaction(msg, emoji),
+                            onReply: () => _startReply(msg),
+                            replyToContent: msg.replyToContent,
+                            replyToSender: msg.replyToSender,
                           );
                         }
 
@@ -661,6 +723,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             onDeleteForMe: () => _deleteMessageForMe(msg),
                             senderPhotoUrl: !isMe ? (_memberPhotos[msg.senderId] ?? '') : null,
                             isRead: isMe && msg.isRead,
+                            reactions: msg.reactions,
+                            currentUid: _currentUser?.uid,
+                            onReact: (emoji) => _toggleReaction(msg, emoji),
+                            onReply: () => _startReply(msg),
+                            replyToContent: msg.replyToContent,
+                            replyToSender: msg.replyToSender,
                           );
                         }
 
@@ -710,6 +778,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                           onDeleteForMe: () => _deleteMessageForMe(msg),
                           senderPhotoUrl: !isMe ? (_memberPhotos[msg.senderId] ?? '') : null,
                           isRead: isMe && msg.isRead,
+                          reactions: msg.reactions,
+                          currentUid: _currentUser?.uid,
+                          onReact: (emoji) => _toggleReaction(msg, emoji),
+                          onReply: () => _startReply(msg),
+                          replyToContent: msg.replyToContent,
+                          replyToSender: msg.replyToSender,
                         );
                       }
 
@@ -767,17 +841,92 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                   ),
                 ),
             ],
-          ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-            color: t.composerBackground,
+           ),
+           ),
+           Divider(height: 1, thickness: 1, color: t.divider),
+           if (_replyingTo != null)
+             Container(
+               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+               color: t.composerBackground,
+               child: Row(
+                 children: [
+                   Container(
+                     width: 3,
+                     height: 32,
+                     decoration: BoxDecoration(
+                       color: t.accent,
+                       borderRadius: BorderRadius.circular(2),
+                     ),
+                   ),
+                   const SizedBox(width: 8),
+                   Expanded(
+                     child: Column(
+                       crossAxisAlignment: CrossAxisAlignment.start,
+                       mainAxisSize: MainAxisSize.min,
+                       children: [
+                         Text(
+                           _replyingTo!.senderName,
+                           style: TextStyle(
+                             fontSize: 12,
+                             fontWeight: FontWeight.w600,
+                             color: t.accent,
+                           ),
+                         ),
+                         Text(
+                           _replyingTo!.content,
+                           maxLines: 1,
+                           overflow: TextOverflow.ellipsis,
+                           style: TextStyle(
+                             fontSize: 12,
+                             color: t.textSecondary,
+                           ),
+                         ),
+                       ],
+                     ),
+                   ),
+                   IconButton(
+                     icon: Icon(Icons.close, size: 18, color: t.textSecondary),
+                     onPressed: _cancelReply,
+                     padding: EdgeInsets.zero,
+                     constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                    ),
+                   ],
+                 ),
+               ),
+             StreamBuilder<List<String>>(
+              stream: _groupService.getTypingUsers(widget.groupId),
+              builder: (context, snapshot) {
+                final typingUids = snapshot.data ?? [];
+                final otherTyping = typingUids
+                    .where((uid) => uid != _currentUser?.uid)
+                    .toList();
+                if (otherTyping.isEmpty) return const SizedBox.shrink();
+                final names = otherTyping
+                    .map((uid) => _nicknames[uid] ?? 'Someone')
+                    .toList();
+                final label = names.length == 1
+                    ? names.first
+                    : '${names[0]} and ${names.length - 1} more';
+                return TypingIndicator(typingUserName: label);
+              },
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              color: t.composerBackground,
             child: SafeArea(
               child: Row(
                 children: [
-                  IconButton(
-                    icon: Icon(Icons.add_circle_outline, color: t.textSecondary),
-                    onPressed: _showComposerMenu,
+                  CompositedTransformTarget(
+                    link: _attachLayerLink,
+                    child: IconButton(
+                      icon: Icon(
+                        _attachMenuOverlay != null
+                            ? Icons.close
+                            : Icons.add_circle_outline,
+                        color: t.textSecondary,
+                      ),
+                      onPressed: _showComposerMenu,
+                    ),
                   ),
                   AudioRecorderButton(onRecordingComplete: _onAudioRecorded),
                   const SizedBox(width: 4),
@@ -820,6 +969,81 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _AttachMenu extends StatelessWidget {
+  final LayerLink layerLink;
+  final VoidCallback onDismiss;
+  final VoidCallback onPhotoTap;
+  final VoidCallback onCameraTap;
+  final VoidCallback onEventTap;
+  final VoidCallback onPollTap;
+
+  const _AttachMenu({
+    required this.layerLink,
+    required this.onDismiss,
+    required this.onPhotoTap,
+    required this.onCameraTap,
+    required this.onEventTap,
+    required this.onPollTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: GestureDetector(
+            onTap: onDismiss,
+            behavior: HitTestBehavior.translucent,
+          ),
+        ),
+        CompositedTransformFollower(
+          link: layerLink,
+          showWhenUnlinked: false,
+          offset: const Offset(-12, -220),
+          child: Material(
+            elevation: 8,
+            borderRadius: BorderRadius.circular(16),
+            color: Colors.white,
+            child: Container(
+              width: 220,
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ComposerOption(
+                    icon: Icons.photo_library_outlined,
+                    label: 'Gallery',
+                    color: Colors.blue,
+                    onTap: onPhotoTap,
+                  ),
+                  ComposerOption(
+                    icon: Icons.camera_alt_outlined,
+                    label: 'Camera',
+                    color: Colors.orange,
+                    onTap: onCameraTap,
+                  ),
+                  ComposerOption(
+                    icon: Icons.event_outlined,
+                    label: 'Event',
+                    color: Colors.teal,
+                    onTap: onEventTap,
+                  ),
+                  ComposerOption(
+                    icon: Icons.poll_outlined,
+                    label: 'Poll',
+                    color: Colors.deepPurple,
+                    onTap: onPollTap,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

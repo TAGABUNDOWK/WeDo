@@ -72,6 +72,9 @@ class ChatMessage {
   final DateTime createdAt;
   final Map<String, dynamic>? groupInviteData;
   final List<String> deletedFor;
+  final String? replyTo;
+  final String? replyToContent;
+  final String? replyToSender;
 
   const ChatMessage({
     required this.id,
@@ -92,6 +95,9 @@ class ChatMessage {
     required this.createdAt,
     this.groupInviteData,
     this.deletedFor = const [],
+    this.replyTo,
+    this.replyToContent,
+    this.replyToSender,
   });
 
   factory ChatMessage.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -130,6 +136,9 @@ class ChatMessage {
         ? Map<String, dynamic>.from(data['groupInviteData'] as Map)
         : null;
     final deletedFor = (data['deleted_for'] as List?)?.cast<String>() ?? [];
+    final replyTo = data['replyTo'] as String? ?? data['reply_to'] as String?;
+    final replyToContent = data['replyToContent'] as String? ?? data['reply_to_content'] as String?;
+    final replyToSender = data['replyToSender'] as String? ?? data['reply_to_sender'] as String?;
 
     return ChatMessage(
       id: doc.id,
@@ -150,6 +159,9 @@ class ChatMessage {
       createdAt: createdAt,
       groupInviteData: groupInviteData,
       deletedFor: deletedFor,
+      replyTo: replyTo,
+      replyToContent: replyToContent,
+      replyToSender: replyToSender,
     );
   }
 
@@ -172,6 +184,9 @@ class ChatMessage {
       'createdAt': Timestamp.fromDate(createdAt),
       if (groupInviteData != null) 'groupInviteData': groupInviteData,
       'deleted_for': deletedFor,
+      if (replyTo != null) 'replyTo': replyTo,
+      if (replyToContent != null) 'replyToContent': replyToContent,
+      if (replyToSender != null) 'replyToSender': replyToSender,
     };
   }
 
