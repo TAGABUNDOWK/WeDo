@@ -409,6 +409,7 @@ class WebRTCService {
 
     _remoteStreams.clear();
     _pendingCandidates.clear();
+    _callService.dispose();
     await _localStreamController.close();
     await _remoteStreamController.close();
     await _connectionStateController.close();

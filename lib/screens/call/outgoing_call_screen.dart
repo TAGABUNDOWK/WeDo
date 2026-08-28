@@ -76,7 +76,6 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
     _callSub?.cancel();
     _ringtonePlayer.stop();
     _callManager.cancelOutgoingCall();
-    _callService.endCall(widget.call.id);
     if (mounted) Navigator.of(context).pop();
   }
 

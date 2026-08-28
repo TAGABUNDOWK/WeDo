@@ -109,7 +109,7 @@ class CallManager extends ChangeNotifier {
     notifyListeners();
 
     _outgoingCallSub?.cancel();
-    _outgoingCallSub = _callService.getCallStream(callId).listen((call) {
+    _outgoingCallSub = _callService.getCallStream(callId).listen((call) async {
       if (call == null || call.status == CallStatus.ended) {
         final outgoing = _outgoingCall;
         cancelOutgoingCall();
@@ -120,7 +120,7 @@ class CallManager extends ChangeNotifier {
         final outgoing = _outgoingCall;
         if (outgoing != null) {
           cancelOutgoingCall();
-          startNewCall(
+          await startNewCall(
             callData: ActiveCallData(
               callId: outgoing.callId,
               callName: outgoing.callName,
@@ -133,6 +133,21 @@ class CallManager extends ChangeNotifier {
               startedAt: DateTime.now(),
             ),
             audioOnly: outgoing.callType == CallType.audio,
+          );
+
+          navigatorKey.currentState?.pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => CallScreen(
+                callId: outgoing.callId,
+                callName: outgoing.callName,
+                callType: outgoing.callType,
+                members: outgoing.members,
+                createdBy: outgoing.createdBy,
+                isGroup: outgoing.isGroup,
+                chatId: outgoing.chatId,
+                groupId: outgoing.groupId,
+              ),
+            ),
           );
         }
       }
