@@ -487,31 +487,32 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
           if (_isUploading)
             const LinearProgressIndicator(backgroundColor: Colors.transparent),
           Expanded(
-            child: Stack(
-              children: [
-                Container(color: t.background),
-                ChatBackground(
-                  style: t.backgroundStyle,
-                  color: t.accent,
-                  opacity: t.backgroundOpacity,
-                ),
-                StreamBuilder<List<ChatMessage>>(
-                  stream: _messagesStream,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
+            child: Container(
+              color: t.background,
+              child: StreamBuilder<List<ChatMessage>>(
+                stream: _directService.getMessagesStream(widget.chatId),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final messages = snapshot.data ?? [];
+                  if (messages.isEmpty) {
+                    return Center(
+                      child: Text(
+                        'No messages yet',
+                        style: TextStyle(color: t.textSecondary),
+                      ),
+                    );
+                  }
+
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    for (final m in messages) {
+                      if ((m.type == MessageType.event || m.type == MessageType.poll) &&
+                          m.refId != null) {
+                        _loadEventPollData(m);
+                      }
                     }
-                    final messages = (snapshot.data ?? [])
-                        .where((m) => !m.deletedFor.contains(_currentUser?.uid))
-                        .toList();
-                    if (messages.isEmpty) {
-                      return Center(
-                        child: Text(
-                          'No messages yet',
-                          style: TextStyle(color: t.textSecondary),
-                        ),
-                      );
-                    }
+                  });
 
                     return ListView.builder(
                       reverse: true,
@@ -567,59 +568,43 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                             );
                           }
 
-                          if (msg.type == MessageType.event &&
-                              msg.refId != null) {
-                            WidgetsBinding.instance.addPostFrameCallback(
-                              (_) => _loadEventPollData(msg),
-                            );
-                            final evt = _events[msg.refId];
-                            return MessageBubble(
-                              content: msg.content,
-                              isMe: isMe,
-                              senderName: msg.senderName.isNotEmpty
-                                  ? msg.senderName
-                                  : null,
-                              time: formatChatTime(msg.createdAt),
-                              event: evt,
-                              currentUid: _currentUser?.uid,
-                              theme: t,
-                              isFirstInGroup: isFirstInGroup,
-                              isLastInGroup: isLastInGroup,
-                              createdAt: msg.createdAt,
-                              onEventTap: evt != null
-                                  ? () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => EventDetailScreen(
-                                            eventId: evt.id,
-                                            chatId: widget.chatId,
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                  : null,
-                            );
-                          }
+                      if (msg.type == MessageType.event && msg.refId != null) {
+                        final evt = _events[msg.refId];
+                        return MessageBubble(
+                          content: msg.content,
+                          isMe: isMe,
+                          senderName: msg.senderName.isNotEmpty ? msg.senderName : null,
+                          time: formatChatTime(msg.createdAt),
+                          event: evt,
+                          currentUid: _currentUser?.uid,
+                          theme: t,
+                          onEventTap: evt != null
+                              ? () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => EventDetailScreen(
+                                        eventId: evt.id,
+                                        chatId: widget.chatId,
+                                      ),
+                                    ),
+                                  );
+                                }
+                              : null,
+                        );
+                      }
 
-                          if (msg.type == MessageType.poll &&
-                              msg.refId != null) {
-                            WidgetsBinding.instance.addPostFrameCallback(
-                              (_) => _loadEventPollData(msg),
-                            );
-                            return MessageBubble(
-                              content: msg.content,
-                              isMe: isMe,
-                              senderName: null,
-                              time: formatChatTime(msg.createdAt),
-                              poll: _polls[msg.refId],
-                              currentUid: _currentUser?.uid,
-                              theme: t,
-                              isFirstInGroup: isFirstInGroup,
-                              isLastInGroup: isLastInGroup,
-                              createdAt: msg.createdAt,
-                            );
-                          }
+                      if (msg.type == MessageType.poll && msg.refId != null) {
+                        return MessageBubble(
+                          content: msg.content,
+                          isMe: isMe,
+                          senderName: null,
+                          time: formatChatTime(msg.createdAt),
+                          poll: _polls[msg.refId],
+                          currentUid: _currentUser?.uid,
+                          theme: t,
+                        );
+                      }
 
                           if (msg.type == MessageType.invite &&
                               msg.activityId != null) {

@@ -511,31 +511,32 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           if (_isUploading)
             const LinearProgressIndicator(backgroundColor: Colors.transparent),
           Expanded(
-            child: Stack(
-              children: [
-                Container(color: t.background),
-                ChatBackground(
-                  style: t.backgroundStyle,
-                  color: t.accent,
-                  opacity: t.backgroundOpacity,
-                ),
-                StreamBuilder<List<ChatMessage>>(
-                  stream: _messagesStream,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
+            child: Container(
+              color: t.background,
+              child: StreamBuilder<List<ChatMessage>>(
+                stream: _groupService.getMessagesStream(widget.groupId),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final messages = snapshot.data ?? [];
+                  if (messages.isEmpty) {
+                    return Center(
+                      child: Text(
+                        'No messages yet',
+                        style: TextStyle(color: t.textSecondary),
+                      ),
+                    );
+                  }
+
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    for (final m in messages) {
+                      if ((m.type == MessageType.event || m.type == MessageType.poll) &&
+                          m.refId != null) {
+                        _loadEventPollData(m);
+                      }
                     }
-                    final messages = (snapshot.data ?? [])
-                        .where((m) => !m.deletedFor.contains(_currentUser?.uid))
-                        .toList();
-                    if (messages.isEmpty) {
-                      return Center(
-                        child: Text(
-                          'No messages yet',
-                          style: TextStyle(color: t.textSecondary),
-                        ),
-                      );
-                    }
+                  });
 
                     return ListView.builder(
                       reverse: true,
@@ -591,71 +592,43 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             );
                           }
 
-                          if (msg.type == MessageType.event &&
-                              msg.refId != null) {
-                            WidgetsBinding.instance.addPostFrameCallback(
-                              (_) => _loadEventPollData(msg),
-                            );
-                            final evt = _events[msg.refId];
-                            return MessageBubble(
-                              content: msg.content,
-                              isMe: isMe,
-                              senderName: isMe
-                                  ? null
-                                  : (isFirstInGroup
-                                        ? _getDisplayName(
-                                            msg.senderId,
-                                            msg.senderName,
-                                          )
-                                        : null),
-                              time: formatChatTime(msg.createdAt),
-                              event: evt,
-                              currentUid: _currentUser?.uid,
-                              theme: t,
-                              isFirstInGroup: isFirstInGroup,
-                              isLastInGroup: isLastInGroup,
-                              createdAt: msg.createdAt,
-                              onEventTap: evt != null
-                                  ? () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => EventDetailScreen(
-                                            eventId: evt.id,
-                                            groupId: widget.groupId,
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                  : null,
-                            );
-                          }
+                      if (msg.type == MessageType.event && msg.refId != null) {
+                        final evt = _events[msg.refId];
+                        return MessageBubble(
+                          content: msg.content,
+                          isMe: isMe,
+                          senderName: _getDisplayName(msg.senderId, msg.senderName),
+                          time: formatChatTime(msg.createdAt),
+                          event: evt,
+                          currentUid: _currentUser?.uid,
+                          theme: t,
+                          onEventTap: evt != null
+                              ? () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => EventDetailScreen(
+                                        eventId: evt.id,
+                                        groupId: widget.groupId,
+                                      ),
+                                    ),
+                                  );
+                                }
+                              : null,
+                        );
+                      }
 
-                          if (msg.type == MessageType.poll &&
-                              msg.refId != null) {
-                            WidgetsBinding.instance.addPostFrameCallback(
-                              (_) => _loadEventPollData(msg),
-                            );
-                            return MessageBubble(
-                              content: msg.content,
-                              isMe: isMe,
-                              senderName: isMe
-                                  ? null
-                                  : (isFirstInGroup
-                                        ? _getDisplayName(
-                                            msg.senderId,
-                                            msg.senderName,
-                                          )
-                                        : null),
-                              time: formatChatTime(msg.createdAt),
-                              poll: _polls[msg.refId],
-                              currentUid: _currentUser?.uid,
-                              theme: t,
-                              isFirstInGroup: isFirstInGroup,
-                              isLastInGroup: isLastInGroup,
-                              createdAt: msg.createdAt,
-                            );
-                          }
+                      if (msg.type == MessageType.poll && msg.refId != null) {
+                        return MessageBubble(
+                          content: msg.content,
+                          isMe: isMe,
+                          senderName: isMe ? null : _getDisplayName(msg.senderId, msg.senderName),
+                          time: formatChatTime(msg.createdAt),
+                          poll: _polls[msg.refId],
+                          currentUid: _currentUser?.uid,
+                          theme: t,
+                        );
+                      }
 
                           final displayName = _getDisplayName(
                             msg.senderId,
