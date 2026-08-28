@@ -178,7 +178,8 @@ service cloud.firestore {
       }
 
       match /participants/{participantUid} {
-        allow read, write: if isSignedIn() && request.auth.uid == participantUid;
+        allow read: if isSignedIn() && isCallMember(callId);
+        allow write: if isSignedIn() && request.auth.uid == participantUid;
       }
     }
   }

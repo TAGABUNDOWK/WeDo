@@ -1,13 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../models/call.dart';
 import '../../services/call/call_manager.dart';
 import '../../services/call/call_service.dart';
-import '../../services/direct/direct_service.dart';
-import '../../services/group/group_service.dart';
-import 'call_screen.dart';
 
 class OutgoingCallScreen extends StatefulWidget {
   final Call call;
@@ -28,9 +24,7 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
   final CallService _callService = CallService();
   final CallManager _callManager = CallManager();
   final AudioPlayer _ringtonePlayer = AudioPlayer();
-  final _currentUser = FirebaseAuth.instance.currentUser;
   StreamSubscription? _callSub;
-  bool _callWasActive = false;
 
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
@@ -72,96 +66,16 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
   void _listenForCallStatus() {
     _callSub = _callService.getCallStream(widget.call.id).listen((call) {
       if (call == null || call.status == CallStatus.ended) {
-        if (!_callWasActive) {
-          _sendMissedCallMessage();
-        }
         _endCall();
         return;
       }
-
-      if (call.status == CallStatus.active) {
-        _callWasActive = true;
-        _ringtonePlayer.stop();
-        _startCallInManager(call);
-      }
     });
-  }
-
-  void _startCallInManager(Call call) async {
-    try {
-      await _callManager.startNewCall(
-        callData: ActiveCallData(
-          callId: call.id,
-          callName: widget.callName,
-          callType: call.type,
-          members: call.members,
-          createdBy: call.createdBy,
-          isGroup: call.groupId != null,
-          chatId: call.chatId,
-          groupId: call.groupId,
-          startedAt: DateTime.now(),
-        ),
-        audioOnly: call.type == CallType.audio,
-      );
-
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => CallScreen(
-              callId: call.id,
-            callName: widget.callName,
-            callType: call.type,
-            members: call.members,
-            createdBy: call.createdBy,
-            isGroup: call.groupId != null,
-            chatId: call.chatId,
-            groupId: call.groupId,
-          ),
-        ),
-      );
-      }
-    } catch (e) {
-      debugPrint('Error starting call in manager: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to join call: $e')),
-        );
-        _endCall();
-      }
-    }
-  }
-
-  void _sendMissedCallMessage() {
-    if (_currentUser == null) return;
-
-    final callTypeStr = widget.call.type == CallType.video ? 'video' : 'audio';
-
-    if (widget.call.groupId != null) {
-      GroupService().sendCallMessage(
-        groupId: widget.call.groupId!,
-        senderId: _currentUser.uid,
-        senderName: _currentUser.displayName ?? _currentUser.email ?? 'Unknown',
-        callType: callTypeStr,
-        callStatus: 'missed',
-        durationSeconds: 0,
-      );
-    } else if (widget.call.chatId != null) {
-      DirectService().sendCallMessage(
-        chatId: widget.call.chatId!,
-        senderId: _currentUser.uid,
-        senderName: _currentUser.displayName ?? _currentUser.email ?? 'Unknown',
-        callType: callTypeStr,
-        callStatus: 'missed',
-        durationSeconds: 0,
-      );
-    }
   }
 
   void _endCall() {
     _callSub?.cancel();
     _ringtonePlayer.stop();
     _callManager.cancelOutgoingCall();
-    _callService.endCall(widget.call.id);
     if (mounted) Navigator.of(context).pop();
   }
 

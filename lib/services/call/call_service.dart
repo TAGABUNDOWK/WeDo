@@ -71,14 +71,22 @@ class CallService {
       'status': 'left',
     });
 
+    final callDoc = await _calls.doc(callId).get();
+    final callData = callDoc.data();
+    final groupId = callData?['groupId'] as String?;
+
+    final isGroupCall = groupId != null && groupId.isNotEmpty;
+
+    if (!isGroupCall) {
+      await endCall(callId);
+      return;
+    }
+
     final activeParticipants = await _participants(callId)
         .where('status', isEqualTo: 'active')
         .get();
 
-    final callDoc = await _calls.doc(callId).get();
-    final createdBy = callDoc.data()?['createdBy'] as String?;
-
-    if (activeParticipants.docs.isEmpty || uid == createdBy) {
+    if (activeParticipants.docs.isEmpty) {
       await endCall(callId);
     }
   }
