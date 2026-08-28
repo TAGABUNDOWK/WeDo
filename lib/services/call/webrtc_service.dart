@@ -15,14 +15,16 @@ class WebRTCService {
 
   final StreamController<MediaStream> _localStreamController =
       StreamController<MediaStream>.broadcast();
-  final StreamController<MediaStream> _remoteStreamController =
-      StreamController<MediaStream>.broadcast();
+  final StreamController<(String peerId, MediaStream stream)>
+      _remoteStreamController =
+      StreamController<(String peerId, MediaStream stream)>.broadcast();
   final StreamController<(String peerId, RTCPeerConnectionState state)>
       _connectionStateController =
       StreamController<(String peerId, RTCPeerConnectionState state)>.broadcast();
 
   Stream<MediaStream> get onLocalStream => _localStreamController.stream;
-  Stream<MediaStream> get onRemoteStream => _remoteStreamController.stream;
+  Stream<(String peerId, MediaStream stream)> get onRemoteStream =>
+      _remoteStreamController.stream;
   Stream<(String peerId, RTCPeerConnectionState state)> get onConnectionState =>
       _connectionStateController.stream;
 
@@ -190,7 +192,7 @@ class WebRTCService {
         if (event.streams.isNotEmpty) {
           final stream = event.streams.first;
           _remoteStreams[peerId] = stream;
-          _remoteStreamController.add(stream);
+          _remoteStreamController.add((peerId, stream));
         }
       };
 

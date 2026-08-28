@@ -62,7 +62,7 @@ class CallManager extends ChangeNotifier {
   final _currentUser = FirebaseAuth.instance.currentUser;
 
   RTCVideoRenderer? _localRenderer;
-  RTCVideoRenderer? _remoteRenderer;
+  final Map<String, RTCVideoRenderer> _remoteRenderers = {};
 
   ActiveCallData? get activeCall => _activeCall;
   ActiveCallData? get outgoingCall => _outgoingCall;
@@ -74,7 +74,10 @@ class CallManager extends ChangeNotifier {
   bool get isVideoOff => _isVideoOff;
   bool get isSpeakerOn => _isSpeakerOn;
   RTCVideoRenderer? get localRenderer => _localRenderer;
-  RTCVideoRenderer? get remoteRenderer => _remoteRenderer;
+  Map<String, RTCVideoRenderer> get remoteRenderers => _remoteRenderers;
+  RTCVideoRenderer? get remoteRenderer =>
+      _remoteRenderers.isNotEmpty ? _remoteRenderers.values.first : null;
+  int get remoteParticipantCount => _remoteRenderers.length;
 
   StreamController<MediaStream>? _localStreamController;
   StreamController<MediaStream>? _remoteStreamController;
@@ -292,18 +295,32 @@ class CallManager extends ChangeNotifier {
     _localRenderer = RTCVideoRenderer();
     await _localRenderer!.initialize();
 
-    _remoteRenderer = RTCVideoRenderer();
-    await _remoteRenderer!.initialize();
-
     _webrtcService!.onLocalStream.listen((stream) {
       _localStreamController?.add(stream);
       _localRenderer?.srcObject = stream;
       notifyListeners();
     });
 
-    _webrtcService!.onRemoteStream.listen((stream) {
+    _webrtcService!.onRemoteStream.listen((pair) {
+      final (peerId, stream) = pair;
       _remoteStreamController?.add(stream);
-      _remoteRenderer?.srcObject = stream;
+      if (stream.getTracks().isEmpty) {
+        final renderer = _remoteRenderers.remove(peerId);
+        renderer?.srcObject = null;
+        renderer?.dispose();
+      } else {
+        var renderer = _remoteRenderers[peerId];
+        if (renderer == null) {
+          renderer = RTCVideoRenderer();
+          renderer.initialize().then((_) {
+            renderer!.srcObject = stream;
+            notifyListeners();
+          });
+          _remoteRenderers[peerId] = renderer;
+        } else {
+          renderer.srcObject = stream;
+        }
+      }
       notifyListeners();
     });
 
@@ -327,6 +344,11 @@ class CallManager extends ChangeNotifier {
 
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
           state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+        final renderer = _remoteRenderers.remove(peerId);
+        renderer?.srcObject = null;
+        renderer?.dispose();
+        notifyListeners();
+
         if (!callData.isGroup && _reconnectTimer == null) {
           _reconnectTimer = Timer(const Duration(seconds: 5), () {
             _reconnectTimer = null;
@@ -521,11 +543,14 @@ class CallManager extends ChangeNotifier {
     _remoteStreamController = null;
 
     _localRenderer?.srcObject = null;
-    _remoteRenderer?.srcObject = null;
     _localRenderer?.dispose();
-    _remoteRenderer?.dispose();
     _localRenderer = null;
-    _remoteRenderer = null;
+
+    for (final renderer in _remoteRenderers.values) {
+      renderer.srcObject = null;
+      renderer.dispose();
+    }
+    _remoteRenderers.clear();
 
     _activeCall = null;
     _callDuration = 0;
