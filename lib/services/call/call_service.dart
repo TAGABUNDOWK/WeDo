@@ -76,9 +76,15 @@ class CallService {
         .get();
 
     final callDoc = await _calls.doc(callId).get();
-    final createdBy = callDoc.data()?['createdBy'] as String?;
+    final callData = callDoc.data();
+    final createdBy = callData?['createdBy'] as String?;
+    final groupId = callData?['groupId'] as String?;
 
-    if (activeParticipants.docs.isEmpty || uid == createdBy) {
+    final isGroupCall = groupId != null && groupId.isNotEmpty;
+
+    if (activeParticipants.docs.isEmpty) {
+      await endCall(callId);
+    } else if (!isGroupCall && uid == createdBy) {
       await endCall(callId);
     }
   }
