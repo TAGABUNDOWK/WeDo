@@ -98,6 +98,7 @@ class _IncomingCallListener extends StatefulWidget {
 class _IncomingCallListenerState extends State<_IncomingCallListener> {
   final _callService = CallService();
   StreamSubscription<Call?>? _callSub;
+  bool _navigated = false;
 
   @override
   void initState() {
@@ -117,7 +118,8 @@ class _IncomingCallListenerState extends State<_IncomingCallListener> {
         return;
       }
 
-      if (call.status.name == 'ringing' && mounted) {
+      if (call.status.name == 'ringing' && mounted && !_navigated) {
+        _navigated = true;
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (_) => IncomingCallScreen(
