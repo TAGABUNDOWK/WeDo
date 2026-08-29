@@ -58,8 +58,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   AppChatTheme _chatTheme = ChatThemeResolver.defaultTheme;
   int _newMessageCount = 0;
   bool _isAtBottom = true;
-  List<ChatMessage> _previousMessages = [];
-  StreamSubscription<List<ChatMessage>>? _messagesSub;
+  int _lastMessageCount = 0;
   late Stream<List<ChatMessage>> _messagesStream;
 
   @override
@@ -71,23 +70,6 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       _directService.markMessagesAsRead(widget.chatId, _currentUser.uid);
     }
     _scrollCtrl.addListener(_onScroll);
-    _messagesSub = _messagesStream.listen((messages) {
-      final prevLength = _previousMessages.length;
-      final newMessageArrived = messages.length > prevLength;
-      final wasAtBottom = _isAtBottom;
-
-      _previousMessages = messages;
-
-      if (!mounted) return;
-
-      if (wasAtBottom && newMessageArrived) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_scrollCtrl.hasClients) _scrollCtrl.jumpTo(0);
-        });
-      } else if (!wasAtBottom && newMessageArrived) {
-        setState(() => _newMessageCount += messages.length - prevLength);
-      }
-    });
   }
 
   Future<void> _loadData() async {
@@ -135,7 +117,6 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
 
   @override
   void dispose() {
-    _messagesSub?.cancel();
     _messageCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
@@ -492,7 +473,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                 Container(
                   color: t.background,
                   child: StreamBuilder<List<ChatMessage>>(
-                stream: _directService.getMessagesStream(widget.chatId),
+                stream: _messagesStream,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
@@ -505,6 +486,22 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                         style: TextStyle(color: t.textSecondary),
                       ),
                     );
+                  }
+
+                  final newMessageCount = messages.length - _lastMessageCount;
+                  if (newMessageCount > 0) {
+                    _lastMessageCount = messages.length;
+                    if (_isAtBottom) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (_scrollCtrl.hasClients) _scrollCtrl.jumpTo(0);
+                      });
+                    } else {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) {
+                          setState(() => _newMessageCount += newMessageCount);
+                        }
+                      });
+                    }
                   }
 
                   WidgetsBinding.instance.addPostFrameCallback((_) {

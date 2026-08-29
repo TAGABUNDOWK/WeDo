@@ -56,8 +56,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   AppChatTheme _chatTheme = ChatThemeResolver.defaultTheme;
   int _newMessageCount = 0;
   bool _isAtBottom = true;
-  List<ChatMessage> _previousMessages = [];
-  StreamSubscription<List<ChatMessage>>? _messagesSub;
+  int _lastMessageCount = 0;
   late Stream<List<ChatMessage>> _messagesStream;
 
   @override
@@ -70,23 +69,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       _groupService.markMessagesAsRead(widget.groupId, _currentUser.uid);
     }
     _scrollCtrl.addListener(_onScroll);
-    _messagesSub = _messagesStream.listen((messages) {
-      final prevLength = _previousMessages.length;
-      final newMessageArrived = messages.length > prevLength;
-      final wasAtBottom = _isAtBottom;
-
-      _previousMessages = messages;
-
-      if (!mounted) return;
-
-      if (wasAtBottom && newMessageArrived) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_scrollCtrl.hasClients) _scrollCtrl.jumpTo(0);
-        });
-      } else if (!wasAtBottom && newMessageArrived) {
-        setState(() => _newMessageCount += messages.length - prevLength);
-      }
-    });
   }
 
   Future<void> _loadGroupInfo() async {
@@ -142,7 +124,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   @override
   void dispose() {
-    _messagesSub?.cancel();
     _messageCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
@@ -516,7 +497,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 Container(
                   color: t.background,
                   child: StreamBuilder<List<ChatMessage>>(
-                stream: _groupService.getMessagesStream(widget.groupId),
+                stream: _messagesStream,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
@@ -529,6 +510,22 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                         style: TextStyle(color: t.textSecondary),
                       ),
                     );
+                  }
+
+                  final newMessageCount = messages.length - _lastMessageCount;
+                  if (newMessageCount > 0) {
+                    _lastMessageCount = messages.length;
+                    if (_isAtBottom) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (_scrollCtrl.hasClients) _scrollCtrl.jumpTo(0);
+                      });
+                    } else {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) {
+                          setState(() => _newMessageCount += newMessageCount);
+                        }
+                      });
+                    }
                   }
 
                   WidgetsBinding.instance.addPostFrameCallback((_) {
