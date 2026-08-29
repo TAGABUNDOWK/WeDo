@@ -63,28 +63,29 @@ class RaceScreen extends StatefulWidget {
   State<RaceScreen> createState() => _RaceScreenState();
 }
 
-class _RaceScreenState extends State<RaceScreen> with SingleTickerProviderStateMixin {
+class _RaceScreenState extends State<RaceScreen>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final _service = TriRaceService();
   late final AnimationController _ticker;
 
   List<TriRaceParticipant> _participants = [];
   DateTime? _raceStartedAt;
   int _raceDurationMs = 14000;
-  Timer? _statusPollTimer;
+  StreamSubscription<TriRace?>? _raceSub;
+  StreamSubscription<List<TriRaceParticipant>>? _participantsSub;
 
   final Set<String> _arrived = {};
   bool _finishHandled = false;
   bool _showingResults = false;
-  bool _bannerDismissed = false;
   bool _isLoading = true;
   bool _countdownDone = false;
   int _countdown = 3;
   String? _loadError;
+  Timer? _landscapeKeeper;
 
   // Cached data — rebuilt only when participants change
   final Map<String, Color> _colors = {};
   final Map<String, List<_Segment>> _segments = {};
-  final Map<String, String> _displayNames = {};
 
   // Rotation state — updated every frame from ticker, no separate timers
   final Map<String, double> _rotations = {};
@@ -99,16 +100,28 @@ class _RaceScreenState extends State<RaceScreen> with SingleTickerProviderStateM
   static const double _cameraLeadFactor = 0.45;
   static const double _cameraDamping = 6.0;
   double _cameraX = 0;
-  late final double _screenW;
+  double _screenW = 0;
   double _lastCameraTick = 0;
+  int _epoch = 0;
 
   @override
   void initState() {
     super.initState();
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
+    WidgetsBinding.instance.addObserver(this);
+    _setLandscape();
+    // Re-assert once the first frame renders and again after the route
+    // transition settles — guards against the OS snapping back to portrait.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _setLandscape();
+    });
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (mounted) _setLandscape();
+    });
+    // Keep the orientation request "fresh" — re-assert once per second so the
+    // OS has no chance to fall back to portrait (rotation-lock snap-back).
+    _landscapeKeeper = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) _setLandscape();
+    });
     WakelockPlus.enable();
 
     _ticker = AnimationController(vsync: this, duration: const Duration(days: 365))
@@ -116,18 +129,67 @@ class _RaceScreenState extends State<RaceScreen> with SingleTickerProviderStateM
       ..repeat();
 
     _initRace();
-    _showBanner();
   }
 
-  void _showBanner() {
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) setState(() => _bannerDismissed = true);
-    });
+  void _setLandscape() {
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
   }
 
-  // ── One-time data fetch ─────────────────────────────────────────────────
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Rotation sensor state can be re-applied by the OS on resume; re-assert.
+    if (state == AppLifecycleState.resumed) {
+      if (mounted) _setLandscape();
+    }
+  }
+
+  @override
+  void didChangeMetrics() {
+    // Fires whenever the OS changes window size/orientation — exactly the
+    // moment it would snap back to portrait. Immediately re-assert landscape.
+    if (mounted) {
+      final size = MediaQuery.of(context).size;
+      debugPrint('RaceScreen orientation metric changed: '
+          '${size.width.toStringAsFixed(0)}x${size.height.toStringAsFixed(0)} '
+          '-> re-asserting landscape');
+      _setLandscape();
+    }
+  }
+
+  // ── Data init + live subscriptions ─────────────────────────────────────
 
   Future<void> _initRace() async {
+    // Subscribe to race doc — keeps raceStartedAt, raceDurationMs fresh; detects finished
+    _raceSub = _service.getTriRaceStream(widget.raceId).listen((race) {
+      if (!mounted || race == null) return;
+      setState(() {
+        _raceDurationMs = race.raceDurationMs ?? _raceDurationMs;
+        if (race.raceStartedAt != null) _raceStartedAt = race.raceStartedAt;
+      });
+      if (race.status == TriRaceStatus.finished && !_finishHandled) {
+        _finishHandled = true;
+        _showRaceFinished();
+      }
+    });
+
+    // Subscribe to participants — single source of truth for triangle data.
+    // finishTimeMs / speedSeed / placement arrive when the start batch lands.
+    _participantsSub = _service.getParticipantsStream(widget.raceId).listen((list) {
+      if (!mounted) return;
+      setState(() {
+        _participants = list;
+        _rebuildCaches();
+      });
+      // First emission after data loaded → clear spinner and start cosmetic countdown
+      if (!_countdownDone && !_isLoading && list.isNotEmpty) {
+        _startCountdown();
+      }
+    });
+
+    // One-shot fetch for immediate race doc data (raceStartedAt, raceDurationMs)
     try {
       final race = await _service.fetchTriRace(widget.raceId);
       if (race == null) {
@@ -135,28 +197,35 @@ class _RaceScreenState extends State<RaceScreen> with SingleTickerProviderStateM
         return;
       }
 
-      _raceDurationMs = race.raceDurationMs ?? 14000;
-
-final participants = await _service.fetchParticipants(widget.raceId);
-      _participants = participants;
-      _rebuildCaches();
-
-      try {
-        final names = await _service
-            .fetchDisplayNames(participants.map((p) => p.userId).toList());
-        if (mounted) _displayNames.addAll(names);
-      } catch (_) {}
+      // Already over? Go straight to results instead of showing a race that
+      // would instantly finish and snap the screen back to portrait.
+      final startTime = race.raceStartedAt;
+      final duration = race.raceDurationMs ?? _raceDurationMs;
+      final alreadyOver = race.status == TriRaceStatus.finished ||
+          (startTime != null &&
+              DateTime.now().difference(startTime).inMilliseconds >= duration);
+      if (alreadyOver && mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => TriRaceResultsScreen(raceId: widget.raceId),
+          ),
+        );
+        return;
+      }
 
       if (mounted) {
-        setState(() => _isLoading = false);
-        _startCountdown();
+        setState(() {
+          _raceDurationMs = duration;
+          _raceStartedAt = startTime;
+          _isLoading = false;
+        });
       }
     } catch (e) {
       if (mounted) setState(() { _isLoading = false; _loadError = 'Failed to load race'; });
     }
   }
 
-  // ── Countdown before race starts ───────────────────────────────────────
+  // ── Cosmetic countdown overlay (does NOT gate race movement) ──────────
 
   void _startCountdown() {
     _countdown = 3;
@@ -169,27 +238,9 @@ final participants = await _service.fetchParticipants(widget.raceId);
 
       if (_countdown <= 0) {
         timer.cancel();
-        _raceStartedAt = DateTime.now();
         _countdownDone = true;
-        _startStatusPolling();
         setState(() {});
       }
-    });
-  }
-
-  // ── Status polling — lightweight check every 3s ─────────────────────────
-
-  void _startStatusPolling() {
-    _statusPollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
-      if (!mounted || _finishHandled) return;
-      try {
-        final race = await _service.fetchTriRace(widget.raceId);
-        if (race?.status == TriRaceStatus.finished && mounted) {
-          _finishHandled = true;
-          _statusPollTimer?.cancel();
-          _showRaceFinished();
-        }
-      } catch (_) {}
     });
   }
 
@@ -211,7 +262,8 @@ final participants = await _service.fetchParticipants(widget.raceId);
   // ── Frame-driven update — runs every frame at 60fps ──────────────────────
 
   void _onTick() {
-    if (!mounted || _raceStartedAt == null || _showingResults || !_countdownDone) return;
+    if (!mounted || _raceStartedAt == null || _showingResults) return;
+    _epoch++;
 
     // Update rotations in batch
     final now = _ticker.lastElapsedDuration?.inMilliseconds.toDouble() ?? 0;
@@ -238,11 +290,14 @@ final participants = await _service.fetchParticipants(widget.raceId);
       }
     }
 
-    // When all arrived — mark finished (idempotent, any device can call)
-    if (_arrived.length == _participants.length && !_finishHandled) {
-      _finishHandled = true;
-      _service.markTriRaceFinished(widget.raceId);
-      _showRaceFinished();
+    // When all arrived OR elapsed past raceDurationMs — mark finished
+    if (_participants.isNotEmpty && !_finishHandled) {
+      final elapsed = DateTime.now().difference(_raceStartedAt!).inMilliseconds;
+      if (_arrived.length == _participants.length || elapsed >= _raceDurationMs) {
+        _finishHandled = true;
+        _service.markTriRaceFinished(widget.raceId);
+        _showRaceFinished();
+      }
     }
 
     // Reactive camera — tracks whoever is currently FIRST, live every frame.
@@ -306,7 +361,10 @@ final participants = await _service.fetchParticipants(widget.raceId);
 
   @override
   void dispose() {
-    _statusPollTimer?.cancel();
+    _landscapeKeeper?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _raceSub?.cancel();
+    _participantsSub?.cancel();
     _ticker.removeListener(_onTick);
     _ticker.dispose();
     SystemChrome.setPreferredOrientations([
@@ -319,6 +377,8 @@ final participants = await _service.fetchParticipants(widget.raceId);
 
   @override
   Widget build(BuildContext context) {
+    _screenW = MediaQuery.of(context).size.width;
+
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: Color(0xFF0D0221),
@@ -435,12 +495,12 @@ final participants = await _service.fetchParticipants(widget.raceId);
                 colors: _colors,
                 segments: _segments,
                 rotations: _rotations,
-                names: _displayNames,
                 computeProgress: _computeProgress,
                 worldWidth: worldWidth,
                 screenH: screenH,
                 cameraX: cameraX,
                 finishLineOffset: _finishLineOffset,
+                epoch: _epoch,
               ),
             ),
           ),
@@ -496,60 +556,59 @@ final participants = await _service.fetchParticipants(widget.raceId);
                 participants: _participants,
                 arrived: _arrived,
                 colors: _colors,
-                names: _displayNames,
                 visualProgress: _visualProgress,
               ),
             ),
           ),
 
-          // ── Landscape reminder banner ──
-          if (!_bannerDismissed)
-            Positioned(
-              bottom: 20,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.7),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.screen_rotation, color: Color(0xFF4ECDC4), size: 18),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Rotate your device for the best experience',
-                        style: TextStyle(
-                          fontFamily: _fontFamily,
-                          fontSize: 13,
-                          color: Colors.white.withValues(alpha: 0.9),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-          // ── Countdown overlay ──
-          if (!_countdownDone && !_isLoading && _loadError == null)
+          // ── Countdown overlay with landscape prompt (cosmetic, fades out after GO) ──
+          if (!_isLoading && _loadError == null)
             Positioned.fill(
-              child: Container(
-                color: Colors.black.withValues(alpha: 0.8),
-                child: Center(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    child: Text(
-                      _countdown > 0 ? '$_countdown' : 'GO!',
-                      key: ValueKey(_countdown),
-                      style: TextStyle(
-                        fontFamily: _fontFamily,
-                        fontSize: 72,
-                        fontWeight: FontWeight.w800,
-                        color: _countdown > 0 ? Colors.white : const Color(0xFF4ECDC4),
+              child: IgnorePointer(
+                ignoring: _countdownDone,
+                child: AnimatedOpacity(
+                  opacity: _countdownDone ? 0.0 : 1.0,
+                  duration: const Duration(milliseconds: 500),
+                  child: Container(
+                    color: Colors.black.withValues(alpha: 0.8),
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 300),
+                            child: Text(
+                              _countdown > 0 ? '$_countdown' : 'GO!',
+                              key: ValueKey(_countdown),
+                              style: TextStyle(
+                                fontFamily: _fontFamily,
+                                fontSize: 72,
+                                fontWeight: FontWeight.w800,
+                                color: _countdown > 0
+                                    ? Colors.white
+                                    : const Color(0xFF4ECDC4),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 32),
+                          Icon(
+                            Icons.screen_rotation,
+                            color: Colors.white.withValues(alpha: 0.7),
+                            size: 28,
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'Hold your device in landscape\nfor the best experience',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontFamily: _fontFamily,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white.withValues(alpha: 0.7),
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -570,24 +629,24 @@ class _TriangleLayerPainter extends CustomPainter {
   final Map<String, Color> colors;
   final Map<String, List<_Segment>> segments;
   final Map<String, double> rotations;
-  final Map<String, String> names;
   final double Function(TriRaceParticipant) computeProgress;
   final double worldWidth;
   final double screenH;
   final double cameraX;
   final double finishLineOffset;
+  final int epoch;
 
   _TriangleLayerPainter({
     required this.participants,
     required this.colors,
     required this.segments,
     required this.rotations,
-    required this.names,
     required this.computeProgress,
     required this.worldWidth,
     required this.screenH,
     required this.cameraX,
     this.finishLineOffset = 100,
+    this.epoch = 0,
   });
 
   @override
@@ -636,8 +695,8 @@ class _TriangleLayerPainter extends CustomPainter {
       canvas.restore();
 
       final textPainter = TextPainter(
-        text: TextSpan(
-          text: names[p.userId] ?? p.username,
+          text: TextSpan(
+            text: p.username,
           style: TextStyle(
             fontFamily: _fontFamily,
             fontSize: 11,
@@ -659,7 +718,8 @@ class _TriangleLayerPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _TriangleLayerPainter old) {
-    return old.participants != participants ||
+    return old.epoch != epoch ||
+        old.participants != participants ||
         old.cameraX != cameraX ||
         !mapEquals(old.rotations, rotations);
   }
@@ -758,14 +818,12 @@ class _LeaderboardPanel extends StatelessWidget {
   final List<TriRaceParticipant> participants;
   final Set<String> arrived;
   final Map<String, Color> colors;
-  final Map<String, String> names;
   final double Function(TriRaceParticipant) visualProgress;
 
   const _LeaderboardPanel({
     required this.participants,
     required this.arrived,
     required this.colors,
-    required this.names,
     required this.visualProgress,
   });
 
@@ -849,7 +907,7 @@ class _LeaderboardPanel extends StatelessWidget {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        names[p.userId] ?? p.username,
+                        p.username,
                         style: TextStyle(
                           fontFamily: _fontFamily,
                           fontSize: 10,

@@ -21,7 +21,6 @@ import '../../../widgets/tri_race_invite_message_card.dart';
 import '../../../widgets/group_invite_message_card.dart';
 import '../../../widgets/composer_option.dart';
 import '../../../widgets/audio_recorder_button.dart';
-import '../../../widgets/chat_background_painter.dart';
 import '../../call/outgoing_call_screen.dart';
 import '../event/create_event_screen.dart';
 import '../event/event_detail_screen.dart';
@@ -488,9 +487,11 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
           if (_isUploading)
             const LinearProgressIndicator(backgroundColor: Colors.transparent),
           Expanded(
-            child: Container(
-              color: t.background,
-              child: StreamBuilder<List<ChatMessage>>(
+            child: Stack(
+              children: [
+                Container(
+                  color: t.background,
+                  child: StreamBuilder<List<ChatMessage>>(
                 stream: _directService.getMessagesStream(widget.chatId),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
@@ -743,9 +744,10 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                     );
                   },
                 ),
-                if (_newMessageCount > 0)
-                  Positioned(
-                    bottom: 16,
+              ),
+              if (_newMessageCount > 0)
+                Positioned(
+                  bottom: 16,
                     left: 0,
                     right: 0,
                     child: Center(

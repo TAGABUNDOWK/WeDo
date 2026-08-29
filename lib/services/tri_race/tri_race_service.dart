@@ -288,10 +288,9 @@ class TriRaceService {
       }
 
       // Update main race doc
-      final now = DateTime.now();
       batch.update(_triRaces.doc(raceId), {
         'status': TriRaceStatus.started.value,
-        'raceStartedAt': Timestamp.fromDate(now),
+        'raceStartedAt': FieldValue.serverTimestamp(),
         'raceDurationMs': maxFinishMs,
       });
 
