@@ -2,12 +2,11 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../../widgets/animated_background.dart';
 import '../models/wheel_option.dart';
-import '../data/wheel_history_repository.dart';
+import '../data/wheel_options_store.dart';
 import '../widgets/spin_wheel_painter.dart';
 import '../widgets/wheel_option_chip.dart';
 import '../widgets/options_editor_sheet.dart';
 import '../widgets/spin_result_sheet.dart';
-import 'wheel_history_screen.dart';
 
 class WheelScreen extends StatefulWidget {
   const WheelScreen({super.key});
@@ -18,7 +17,7 @@ class WheelScreen extends StatefulWidget {
 
 class _WheelScreenState extends State<WheelScreen>
     with SingleTickerProviderStateMixin {
-  final _repository = WheelHistoryRepository();
+  final _optionsStore = WheelOptionsStore();
   late AnimationController _spinController;
   late Animation<double> _spinAnimation;
 
@@ -41,12 +40,7 @@ class _WheelScreenState extends State<WheelScreen>
   void initState() {
     super.initState();
 
-    _options = [
-      const WheelOption(label: 'Option 1', color: Color(0xFF6D28D9)),
-      const WheelOption(label: 'Option 2', color: Color(0xFF7C3AED)),
-      const WheelOption(label: 'Option 3', color: Color(0xFF8B5CF6)),
-      const WheelOption(label: 'Option 4', color: Color(0xFFA78BFA)),
-    ];
+    _options = _defaultOptions();
 
     _spinController = AnimationController(
       vsync: this,
@@ -69,6 +63,30 @@ class _WheelScreenState extends State<WheelScreen>
         _onSpinComplete();
       }
     });
+
+    _loadSavedOptions();
+  }
+
+  List<WheelOption> _defaultOptions() {
+    return [
+      const WheelOption(label: 'Option 1', color: Color(0xFF6D28D9)),
+      const WheelOption(label: 'Option 2', color: Color(0xFF7C3AED)),
+      const WheelOption(label: 'Option 3', color: Color(0xFF8B5CF6)),
+      const WheelOption(label: 'Option 4', color: Color(0xFFA78BFA)),
+    ];
+  }
+
+  Future<void> _loadSavedOptions() async {
+    final saved = await _optionsStore.loadOptions();
+    if (saved == null || saved.isEmpty) return;
+    if (!mounted) return;
+    setState(() {
+      _options = saved;
+    });
+  }
+
+  Future<void> _persistOptions() async {
+    await _optionsStore.saveOptions(_options);
   }
 
   @override
@@ -89,6 +107,7 @@ class _WheelScreenState extends State<WheelScreen>
           color: _getColorForIndex(_options.length),
         ));
       }
+      _persistOptions();
     }
   }
 
@@ -143,13 +162,6 @@ class _WheelScreenState extends State<WheelScreen>
     final winningOption = _options[_pendingWinningIndex!];
     _currentRotation = _spinAnimation.value;
 
-    // Save to Firestore
-    _repository.saveSpin(
-      options: _options,
-      winningOption: winningOption,
-      winningIndex: _pendingWinningIndex!,
-    );
-
     setState(() => _isSpinning = false);
 
     // Capture index before clearing
@@ -167,6 +179,7 @@ class _WheelScreenState extends State<WheelScreen>
           setState(() {
             _options.removeAt(winnerIdx);
           });
+          _persistOptions();
         },
       );
     }
@@ -181,6 +194,7 @@ class _WheelScreenState extends State<WheelScreen>
           _options = newOptions;
           _addDefaultOptions();
         });
+        _persistOptions();
       },
     );
   }
@@ -190,6 +204,7 @@ class _WheelScreenState extends State<WheelScreen>
     setState(() {
       _options.removeAt(index);
     });
+    _persistOptions();
   }
 
   @override
@@ -226,21 +241,7 @@ class _WheelScreenState extends State<WheelScreen>
                         textAlign: TextAlign.center,
                       ),
                     ),
-                    IconButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const WheelHistoryScreen(),
-                          ),
-                        );
-                      },
-                      icon: const Icon(
-                        Icons.history,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                    ),
+                    const SizedBox(width: 48),
                   ],
                 ),
               ),

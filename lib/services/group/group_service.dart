@@ -163,6 +163,40 @@ class GroupService {
     await batch.commit();
   }
 
+  Future<void> sendTriRaceInviteMessage({
+    required String groupId,
+    required String senderId,
+    required String senderName,
+    required String raceId,
+    required String hostName,
+  }) async {
+    final batch = _db.batch();
+
+    batch.set(_messages(groupId).doc(), {
+      'sender_id': senderId,
+      'senderName': senderName,
+      'type': 'invite',
+      'content': '\ud83d\udce7 $hostName started a TriRace!',
+      'activityId': raceId,
+      'activityType': 'triRace',
+      'reactions': {},
+      'read_by': [senderId],
+      'created_at': FieldValue.serverTimestamp(),
+      'createdAtLocal': DateTime.now().toIso8601String(),
+      'edited': false,
+    });
+
+    const previewText = '\ud83d\udce7 TriRace';
+    batch.update(_groups.doc(groupId), {
+      'lastMessage': previewText,
+      'lastMessageSenderId': senderId,
+      'lastMessageAt': FieldValue.serverTimestamp(),
+      'lastMessageReadBy': [senderId],
+    });
+
+    await batch.commit();
+  }
+
   Future<void> sendImageMessage({
     required String groupId,
     required String senderId,

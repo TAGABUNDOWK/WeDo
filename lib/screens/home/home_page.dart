@@ -7,6 +7,7 @@ import '../friends/friends_page.dart';
 import '../session/session_entry_screen.dart';
 import '../session/create_session_screen.dart';
 import '../../features/spin_wheel/screens/wheel_screen.dart';
+import '../tri_race/tri_race_entry_screen.dart';
 import '../chat/chat_tab.dart';
 import '../../widgets/animated_background.dart';
 import '../../services/auth/user_service.dart';
@@ -302,8 +303,8 @@ class _BlobNavBarState extends State<BlobNavBar>
 
               Positioned(
                 bottom: 54,
-                left: centerX + centerDiameter / 2 - 90,
-                width: 180,
+                left: centerX + centerDiameter / 2 - 120,
+                width: 240,
                 child: AnimatedBuilder(
                   animation: _menuCtrl,
                   builder: (context, _) {
@@ -315,7 +316,7 @@ class _BlobNavBarState extends State<BlobNavBar>
                           clipBehavior: Clip.none,
                           children: [
                             Positioned(
-                              left: 14,
+                              left: 8,
                               bottom: 20 * _menuScale.value,
                               child: Transform.translate(
                                 offset: Offset(0, 30 * (1 - _menuScale.value)),
@@ -326,7 +327,7 @@ class _BlobNavBarState extends State<BlobNavBar>
                               ),
                             ),
                             Positioned(
-                              left: (180 - 52) / 2,
+                              left: 68,
                               bottom: 40 * _menuScale.value,
                               child: Transform.translate(
                                 offset: Offset(0, 20 * (1 - _menuScale.value)),
@@ -344,7 +345,25 @@ class _BlobNavBarState extends State<BlobNavBar>
                               ),
                             ),
                             Positioned(
-                              right: 14,
+                              left: 128,
+                              bottom: 40 * _menuScale.value,
+                              child: Transform.translate(
+                                offset: Offset(0, 20 * (1 - _menuScale.value)),
+                                child: _PopupCircle(
+                                  icon: 'assets/icons/cards.png', // TODO: replace with trirace.png
+                                  onTap: () => _onChoiceTap(() {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const TriRaceEntryScreen(),
+                                      ),
+                                    );
+                                  }),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              right: 8,
                               bottom: 20 * _menuScale.value,
                               child: Transform.translate(
                                 offset: Offset(0, 30 * (1 - _menuScale.value)),

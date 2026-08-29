@@ -152,6 +152,42 @@ class DirectService {
     await batch.commit();
   }
 
+  Future<void> sendTriRaceInviteMessage({
+    required String chatId,
+    required String senderId,
+    required String senderName,
+    required String raceId,
+    required String hostName,
+  }) async {
+    final batch = _db.batch();
+
+    batch.set(_messages(chatId).doc(), {
+      'sender_id': senderId,
+      'senderName': senderName,
+      'type': 'invite',
+      'content': '\ud83d\udce7 $hostName started a TriRace!',
+      'activityId': raceId,
+      'activityType': 'triRace',
+      'read_by': [senderId],
+      'created_at': FieldValue.serverTimestamp(),
+      'createdAtLocal': DateTime.now().toIso8601String(),
+      'edited': false,
+    });
+
+    const previewText = '\ud83d\udce7 TriRace';
+    batch.update(_chats.doc(chatId), {
+      'last_message': {
+        'text': previewText,
+        'senderId': senderId,
+        'sentAt': FieldValue.serverTimestamp(),
+      },
+      'lastMessageAt': FieldValue.serverTimestamp(),
+      'lastMessageReadBy': [senderId],
+    });
+
+    await batch.commit();
+  }
+
   Future<void> sendImageMessage({
     required String chatId,
     required String senderId,
