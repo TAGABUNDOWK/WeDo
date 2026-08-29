@@ -92,7 +92,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   Future<void> _loadGroupInfo() async {
     final group = await _groupService.getGroup(widget.groupId);
     final nicknames = await _groupService.getMemberNicknames(widget.groupId);
-    final theme = await ChatThemeResolver().resolve(widget.groupId, 'group_chats');
+    final theme = await ChatThemeResolver().resolve(
+      widget.groupId,
+      'group_chats',
+    );
     if (group != null && mounted) {
       setState(() {
         _groupName = group.name;
@@ -174,7 +177,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     _groupService.sendMessage(
       groupId: widget.groupId,
       senderId: _currentUser.uid,
-      senderName: _getDisplayName(_currentUser.uid, _currentUser.displayName ?? _currentUser.email ?? 'Unknown'),
+      senderName: _getDisplayName(
+        _currentUser.uid,
+        _currentUser.displayName ?? _currentUser.email ?? 'Unknown',
+      ),
       text: text,
     );
 
@@ -222,7 +228,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete for everyone?'),
-        content: const Text('This message will be deleted for everyone in this group.'),
+        content: const Text(
+          'This message will be deleted for everyone in this group.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -274,7 +282,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
     if (source == null) return;
 
-    final picked = await _imagePicker.pickImage(source: source, imageQuality: 80);
+    final picked = await _imagePicker.pickImage(
+      source: source,
+      imageQuality: 80,
+    );
     if (picked == null || _currentUser == null) return;
 
     setState(() => _isUploading = true);
@@ -283,14 +294,17 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       await _groupService.sendImageMessage(
         groupId: widget.groupId,
         senderId: _currentUser.uid,
-        senderName: _getDisplayName(_currentUser.uid, _currentUser.displayName ?? _currentUser.email ?? 'Unknown'),
+        senderName: _getDisplayName(
+          _currentUser.uid,
+          _currentUser.displayName ?? _currentUser.email ?? 'Unknown',
+        ),
         imageFile: File(picked.path),
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send photo: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to send photo: $e')));
       }
     } finally {
       if (mounted) setState(() => _isUploading = false);
@@ -306,7 +320,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       await _groupService.sendAudioMessage(
         groupId: widget.groupId,
         senderId: _currentUser.uid,
-        senderName: _getDisplayName(_currentUser.uid, _currentUser.displayName ?? _currentUser.email ?? 'Unknown'),
+        senderName: _getDisplayName(
+          _currentUser.uid,
+          _currentUser.displayName ?? _currentUser.email ?? 'Unknown',
+        ),
         audioFile: audioFile,
         durationSeconds: durationSeconds,
       );
@@ -346,10 +363,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => OutgoingCallScreen(
-          call: call,
-          callName: _groupName,
-        ),
+        builder: (_) => OutgoingCallScreen(call: call, callName: _groupName),
       ),
     );
   }
@@ -395,9 +409,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                       final result = await Navigator.push<bool>(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => CreateEventScreen(
-                            groupId: widget.groupId,
-                          ),
+                          builder: (_) =>
+                              CreateEventScreen(groupId: widget.groupId),
                         ),
                       );
                       if (result == true) _loadGroupInfo();
@@ -412,9 +425,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                       final result = await Navigator.push<bool>(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => CreatePollScreen(
-                            groupId: widget.groupId,
-                          ),
+                          builder: (_) =>
+                              CreatePollScreen(groupId: widget.groupId),
                         ),
                       );
                       if (result == true) _loadGroupInfo();
@@ -458,7 +470,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 Expanded(
                   child: Text(
                     group?.name ?? _groupName,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -481,7 +496,11 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           IconButton(
             icon: const Icon(Icons.info_outline),
             onPressed: () async {
-              await Navigator.pushNamed(context, '/group-info', arguments: widget.groupId);
+              await Navigator.pushNamed(
+                context,
+                '/group-info',
+                arguments: widget.groupId,
+              );
               _loadGroupInfo();
             },
           ),
@@ -492,282 +511,324 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           if (_isUploading)
             const LinearProgressIndicator(backgroundColor: Colors.transparent),
           Expanded(
-            child: Stack(
-              children: [
-                Container(color: t.background),
-                ChatBackground(
-                  style: t.backgroundStyle,
-                  color: t.accent,
-                  opacity: t.backgroundOpacity,
-                ),
-                StreamBuilder<List<ChatMessage>>(
-                    stream: _messagesStream,
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
+            child: Container(
+              color: t.background,
+              child: StreamBuilder<List<ChatMessage>>(
+                stream: _groupService.getMessagesStream(widget.groupId),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final messages = snapshot.data ?? [];
+                  if (messages.isEmpty) {
+                    return Center(
+                      child: Text(
+                        'No messages yet',
+                        style: TextStyle(color: t.textSecondary),
+                      ),
+                    );
+                  }
+
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    for (final m in messages) {
+                      if ((m.type == MessageType.event || m.type == MessageType.poll) &&
+                          m.refId != null) {
+                        _loadEventPollData(m);
                       }
-                      final messages = (snapshot.data ?? [])
-                          .where((m) => !m.deletedFor.contains(_currentUser?.uid))
-                          .toList();
-                      if (messages.isEmpty) {
-                        return Center(
-                          child: Text(
-                            'No messages yet',
-                            style: TextStyle(color: t.textSecondary),
-                          ),
-                        );
-                      }
+                    }
+                  });
 
-                  return ListView.builder(
-                    reverse: true,
-                    controller: _scrollCtrl,
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-                    itemCount: messages.length,
-                    itemBuilder: (context, index) {
-                      final msg = messages[index];
-                      final isMe = msg.senderId == _currentUser?.uid;
-                      final isSystem = msg.type == MessageType.system;
+                    return ListView.builder(
+                      reverse: true,
+                      controller: _scrollCtrl,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 8,
+                      ),
+                      itemCount: messages.length,
+                      itemBuilder: (context, index) {
+                        final msg = messages[index];
+                        final isMe = msg.senderId == _currentUser?.uid;
+                        final isSystem = msg.type == MessageType.system;
 
-                      final sameSenderAsNextOlder = index + 1 < messages.length &&
-                          messages[index + 1].senderId == msg.senderId &&
-                          isSameDay(msg.createdAt, messages[index + 1].createdAt);
-                      final sameSenderAsPrevNewer = index - 1 >= 0 &&
-                          messages[index - 1].senderId == msg.senderId &&
-                          isSameDay(msg.createdAt, messages[index - 1].createdAt);
-                      final isFirstInGroup = !sameSenderAsNextOlder;
-                      final isLastInGroup = !sameSenderAsPrevNewer;
+                        final sameSenderAsNextOlder =
+                            index + 1 < messages.length &&
+                            messages[index + 1].senderId == msg.senderId &&
+                            isSameDay(
+                              msg.createdAt,
+                              messages[index + 1].createdAt,
+                            );
+                        final sameSenderAsPrevNewer =
+                            index - 1 >= 0 &&
+                            messages[index - 1].senderId == msg.senderId &&
+                            isSameDay(
+                              msg.createdAt,
+                              messages[index - 1].createdAt,
+                            );
+                        final isFirstInGroup = !sameSenderAsNextOlder;
+                        final isLastInGroup = !sameSenderAsPrevNewer;
 
-                      final showDateSeparator = index == 0 ||
-                          !isSameDay(
-                            messages[index].createdAt,
-                            messages[index - 1].createdAt,
-                          );
+                        final showDateSeparator =
+                            index == 0 ||
+                            !isSameDay(
+                              messages[index].createdAt,
+                              messages[index - 1].createdAt,
+                            );
 
-                      Widget buildMessage() {
-                        if (isSystem) {
-                          return MessageBubble(
-                            content: msg.content,
-                            isMe: false,
-                            senderName: msg.senderName.isNotEmpty ? msg.senderName : null,
-                            time: formatChatTime(msg.createdAt),
-                            isSystem: true,
-                            theme: t,
-                            isFirstInGroup: isFirstInGroup,
-                            isLastInGroup: isLastInGroup,
-                            createdAt: msg.createdAt,
-                          );
-                        }
-
-                        if (msg.type == MessageType.event && msg.refId != null) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) => _loadEventPollData(msg));
-                          final evt = _events[msg.refId];
-                          return MessageBubble(
-                            content: msg.content,
-                            isMe: isMe,
-                            senderName: isMe ? null : (isFirstInGroup ? _getDisplayName(msg.senderId, msg.senderName) : null),
-                            time: formatChatTime(msg.createdAt),
-                            event: evt,
-                            currentUid: _currentUser?.uid,
-                            theme: t,
-                            isFirstInGroup: isFirstInGroup,
-                            isLastInGroup: isLastInGroup,
-                            createdAt: msg.createdAt,
-                            onEventTap: evt != null
-                                ? () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => EventDetailScreen(
-                                          eventId: evt.id,
-                                          groupId: widget.groupId,
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                : null,
-                          );
-                        }
-
-                        if (msg.type == MessageType.poll && msg.refId != null) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) => _loadEventPollData(msg));
-                          return MessageBubble(
-                            content: msg.content,
-                            isMe: isMe,
-                            senderName: isMe ? null : (isFirstInGroup ? _getDisplayName(msg.senderId, msg.senderName) : null),
-                            time: formatChatTime(msg.createdAt),
-                            poll: _polls[msg.refId],
-                            currentUid: _currentUser?.uid,
-                            theme: t,
-                            isFirstInGroup: isFirstInGroup,
-                            isLastInGroup: isLastInGroup,
-                            createdAt: msg.createdAt,
-                          );
-                        }
-
-                        final displayName = _getDisplayName(
-                          msg.senderId,
-                          msg.senderName,
-                        );
-
-                        if (!isMe && !_memberPhotos.containsKey(msg.senderId)) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) => _loadMemberPhoto(msg.senderId));
-                        }
-
-                        if (msg.type == MessageType.invite && msg.activityId != null) {
-                          return InviteMessageCard(
-                            sessionId: msg.activityId!,
-                            content: msg.content,
-                            isMe: isMe,
-                            senderName: isMe ? null : displayName,
-                            time: formatChatTime(msg.createdAt),
-                          );
-                        }
-
-                        if (msg.type == MessageType.image && msg.imageUrl != null) {
-                          return MessageBubble(
-                            content: msg.content,
-                            imageUrl: msg.imageUrl,
-                            isMe: isMe,
-                            senderName: isMe ? null : (isFirstInGroup ? displayName : null),
-                            time: formatChatTime(msg.createdAt),
-                            theme: t,
-                            isFirstInGroup: isFirstInGroup,
-                            isLastInGroup: isLastInGroup,
-                            createdAt: msg.createdAt,
-                            edited: msg.edited,
-                            onEdit: isMe ? () => _editMessage(msg) : null,
-                            onDeleteForEveryone: isMe ? () => _deleteMessageForEveryone(msg) : null,
-                            onDeleteForMe: () => _deleteMessageForMe(msg),
-                            senderPhotoUrl: !isMe ? (_memberPhotos[msg.senderId] ?? '') : null,
-                            isRead: isMe && msg.isRead,
-                          );
-                        }
-
-                        if (msg.type == MessageType.audio && msg.audioUrl != null) {
-                          return MessageBubble(
-                            content: msg.content,
-                            audioUrl: msg.audioUrl,
-                            durationSeconds: msg.durationSeconds,
-                            isMe: isMe,
-                            senderName: isMe ? null : (isFirstInGroup ? displayName : null),
-                            time: formatChatTime(msg.createdAt),
-                            theme: t,
-                            isFirstInGroup: isFirstInGroup,
-                            isLastInGroup: isLastInGroup,
-                            createdAt: msg.createdAt,
-                            edited: msg.edited,
-                            onEdit: isMe ? () => _editMessage(msg) : null,
-                            onDeleteForEveryone: isMe ? () => _deleteMessageForEveryone(msg) : null,
-                            onDeleteForMe: () => _deleteMessageForMe(msg),
-                            senderPhotoUrl: !isMe ? (_memberPhotos[msg.senderId] ?? '') : null,
-                            isRead: isMe && msg.isRead,
-                          );
-                        }
-
-                        if (msg.type == MessageType.call) {
-                          return CallMessageBubble(
-                            callType: msg.callType ?? 'audio',
-                            callStatus: msg.callStatus ?? 'active',
-                            durationSeconds: msg.durationSeconds,
-                            time: formatCallBubbleTime(msg.createdAt),
-                            isMe: isMe,
-                            senderId: msg.senderId,
-                            senderName: isMe ? 'You' : displayName,
-                            currentUserId: _currentUser?.uid ?? '',
-                            groupId: widget.groupId,
-                            members: _members,
-                            theme: t,
-                            isFirstInGroup: isFirstInGroup,
-                            isLastInGroup: isLastInGroup,
-                          );
-                        }
-
-                        if (msg.type == MessageType.text) {
-                          final groupLinkMatch = RegExp(r'wedo://group/([^\s]+)').firstMatch(msg.content);
-                          if (groupLinkMatch != null) {
-                            return GroupInviteMessageCard(
-                              groupId: groupLinkMatch.group(1)!,
-                              isMe: isMe,
-                              senderName: isMe ? null : displayName,
+                        Widget buildMessage() {
+                          if (isSystem) {
+                            return MessageBubble(
+                              content: msg.content,
+                              isMe: false,
+                              senderName: msg.senderName.isNotEmpty
+                                  ? msg.senderName
+                                  : null,
                               time: formatChatTime(msg.createdAt),
-                              groupInviteData: msg.groupInviteData,
+                              isSystem: true,
+                              theme: t,
+                              isFirstInGroup: isFirstInGroup,
+                              isLastInGroup: isLastInGroup,
+                              createdAt: msg.createdAt,
                             );
                           }
-                        }
 
+                      if (msg.type == MessageType.event && msg.refId != null) {
+                        final evt = _events[msg.refId];
                         return MessageBubble(
                           content: msg.content,
                           isMe: isMe,
-                          senderName: isMe ? null : (isFirstInGroup ? displayName : null),
+                          senderName: _getDisplayName(msg.senderId, msg.senderName),
                           time: formatChatTime(msg.createdAt),
+                          event: evt,
+                          currentUid: _currentUser?.uid,
                           theme: t,
-                          isFirstInGroup: isFirstInGroup,
-                          isLastInGroup: isLastInGroup,
-                          createdAt: msg.createdAt,
-                          edited: msg.edited,
-                          onEdit: isMe ? () => _editMessage(msg) : null,
-                          onDeleteForEveryone: isMe ? () => _deleteMessageForEveryone(msg) : null,
-                          onDeleteForMe: () => _deleteMessageForMe(msg),
-                          senderPhotoUrl: !isMe ? (_memberPhotos[msg.senderId] ?? '') : null,
-                          isRead: isMe && msg.isRead,
+                          onEventTap: evt != null
+                              ? () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => EventDetailScreen(
+                                        eventId: evt.id,
+                                        groupId: widget.groupId,
+                                      ),
+                                    ),
+                                  );
+                                }
+                              : null,
                         );
                       }
 
-                      if (showDateSeparator) {
-                        return Column(
-                          children: [
-                            DateSeparator(timestamp: msg.createdAt),
-                            buildMessage(),
-                          ],
+                      if (msg.type == MessageType.poll && msg.refId != null) {
+                        return MessageBubble(
+                          content: msg.content,
+                          isMe: isMe,
+                          senderName: isMe ? null : _getDisplayName(msg.senderId, msg.senderName),
+                          time: formatChatTime(msg.createdAt),
+                          poll: _polls[msg.refId],
+                          currentUid: _currentUser?.uid,
+                          theme: t,
                         );
                       }
-                      return buildMessage();
-                    },
-                  );
-                },
-              ),
-              if (_newMessageCount > 0)
-                Positioned(
-                  bottom: 16,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: GestureDetector(
-                      onTap: _scrollToBottom,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFE4EF0),
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFFFE4EF0).withValues(alpha: 0.3),
-                              blurRadius: 8,
-                              spreadRadius: 1,
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.arrow_downward, color: Colors.white, size: 16),
-                            const SizedBox(width: 6),
-                            Text(
-                              '$_newMessageCount New Message${_newMessageCount > 1 ? 's' : ''}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
+
+                          final displayName = _getDisplayName(
+                            msg.senderId,
+                            msg.senderName,
+                          );
+
+                          if (!isMe &&
+                              !_memberPhotos.containsKey(msg.senderId)) {
+                            WidgetsBinding.instance.addPostFrameCallback(
+                              (_) => _loadMemberPhoto(msg.senderId),
+                            );
+                          }
+
+                          if (msg.type == MessageType.invite &&
+                              msg.activityId != null) {
+                            return InviteMessageCard(
+                              sessionId: msg.activityId!,
+                              content: msg.content,
+                              isMe: isMe,
+                              senderName: isMe ? null : displayName,
+                              time: formatChatTime(msg.createdAt),
+                            );
+                          }
+
+                          if (msg.type == MessageType.image &&
+                              msg.imageUrl != null) {
+                            return MessageBubble(
+                              content: msg.content,
+                              imageUrl: msg.imageUrl,
+                              isMe: isMe,
+                              senderName: isMe
+                                  ? null
+                                  : (isFirstInGroup ? displayName : null),
+                              time: formatChatTime(msg.createdAt),
+                              theme: t,
+                              isFirstInGroup: isFirstInGroup,
+                              isLastInGroup: isLastInGroup,
+                              createdAt: msg.createdAt,
+                              edited: msg.edited,
+                              onEdit: isMe ? () => _editMessage(msg) : null,
+                              onDeleteForEveryone: isMe
+                                  ? () => _deleteMessageForEveryone(msg)
+                                  : null,
+                              onDeleteForMe: () => _deleteMessageForMe(msg),
+                              senderPhotoUrl: !isMe
+                                  ? (_memberPhotos[msg.senderId] ?? '')
+                                  : null,
+                              isRead: isMe && msg.isRead,
+                            );
+                          }
+
+                          if (msg.type == MessageType.audio &&
+                              msg.audioUrl != null) {
+                            return MessageBubble(
+                              content: msg.content,
+                              audioUrl: msg.audioUrl,
+                              durationSeconds: msg.durationSeconds,
+                              isMe: isMe,
+                              senderName: isMe
+                                  ? null
+                                  : (isFirstInGroup ? displayName : null),
+                              time: formatChatTime(msg.createdAt),
+                              theme: t,
+                              isFirstInGroup: isFirstInGroup,
+                              isLastInGroup: isLastInGroup,
+                              createdAt: msg.createdAt,
+                              edited: msg.edited,
+                              onEdit: isMe ? () => _editMessage(msg) : null,
+                              onDeleteForEveryone: isMe
+                                  ? () => _deleteMessageForEveryone(msg)
+                                  : null,
+                              onDeleteForMe: () => _deleteMessageForMe(msg),
+                              senderPhotoUrl: !isMe
+                                  ? (_memberPhotos[msg.senderId] ?? '')
+                                  : null,
+                              isRead: isMe && msg.isRead,
+                            );
+                          }
+
+                          if (msg.type == MessageType.call) {
+                            return CallMessageBubble(
+                              callType: msg.callType ?? 'audio',
+                              callStatus: msg.callStatus ?? 'active',
+                              durationSeconds: msg.durationSeconds,
+                              time: formatCallBubbleTime(msg.createdAt),
+                              isMe: isMe,
+                              senderId: msg.senderId,
+                              senderName: isMe ? 'You' : displayName,
+                              currentUserId: _currentUser?.uid ?? '',
+                              groupId: widget.groupId,
+                              members: _members,
+                              theme: t,
+                              isFirstInGroup: isFirstInGroup,
+                              isLastInGroup: isLastInGroup,
+                            );
+                          }
+
+                          if (msg.type == MessageType.text) {
+                            final groupLinkMatch = RegExp(
+                              r'wedo://group/([^\s]+)',
+                            ).firstMatch(msg.content);
+                            if (groupLinkMatch != null) {
+                              return GroupInviteMessageCard(
+                                groupId: groupLinkMatch.group(1)!,
+                                isMe: isMe,
+                                senderName: isMe ? null : displayName,
+                                time: formatChatTime(msg.createdAt),
+                                groupInviteData: msg.groupInviteData,
+                              );
+                            }
+                          }
+
+                          return MessageBubble(
+                            content: msg.content,
+                            isMe: isMe,
+                            senderName: isMe
+                                ? null
+                                : (isFirstInGroup ? displayName : null),
+                            time: formatChatTime(msg.createdAt),
+                            theme: t,
+                            isFirstInGroup: isFirstInGroup,
+                            isLastInGroup: isLastInGroup,
+                            createdAt: msg.createdAt,
+                            edited: msg.edited,
+                            onEdit: isMe ? () => _editMessage(msg) : null,
+                            onDeleteForEveryone: isMe
+                                ? () => _deleteMessageForEveryone(msg)
+                                : null,
+                            onDeleteForMe: () => _deleteMessageForMe(msg),
+                            senderPhotoUrl: !isMe
+                                ? (_memberPhotos[msg.senderId] ?? '')
+                                : null,
+                            isRead: isMe && msg.isRead,
+                          );
+                        }
+
+                        if (showDateSeparator) {
+                          return Column(
+                            children: [
+                              DateSeparator(timestamp: msg.createdAt),
+                              buildMessage(),
+                            ],
+                          );
+                        }
+                        return buildMessage();
+                      },
+                    );
+                  },
+                ),
+                if (_newMessageCount > 0)
+                  Positioned(
+                    bottom: 16,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: GestureDetector(
+                        onTap: _scrollToBottom,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFE4EF0),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(
+                                  0xFFFE4EF0,
+                                ).withValues(alpha: 0.3),
+                                blurRadius: 8,
+                                spreadRadius: 1,
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.arrow_downward,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                '$_newMessageCount New Message${_newMessageCount > 1 ? 's' : ''}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-            ],
-          ),
+              ],
+            ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
@@ -776,7 +837,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
               child: Row(
                 children: [
                   IconButton(
-                    icon: Icon(Icons.add_circle_outline, color: t.textSecondary),
+                    icon: Icon(
+                      Icons.add_circle_outline,
+                      color: t.textSecondary,
+                    ),
                     onPressed: _showComposerMenu,
                   ),
                   AudioRecorderButton(onRecordingComplete: _onAudioRecorded),
@@ -794,7 +858,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                         ),
                         filled: true,
                         fillColor: t.inputBackground,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
                       ),
                     ),
                   ),
@@ -806,7 +873,11 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                     ),
                     child: IconButton(
                       onPressed: _sendMessage,
-                      icon: const Icon(Icons.send, color: Colors.white, size: 20),
+                      icon: const Icon(
+                        Icons.send,
+                        color: Colors.white,
+                        size: 20,
+                      ),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(
                         minWidth: 40,

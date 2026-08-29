@@ -124,13 +124,14 @@ class DirectService {
     required String topic,
     required String hostName,
   }) async {
+    final content = '$hostName invited you to $topic';
     final batch = _db.batch();
 
     batch.set(_messages(chatId).doc(), {
       'sender_id': senderId,
       'senderName': senderName,
       'type': 'invite',
-      'content': '\ud83e\udd4a $hostName started a PickFight: "$topic"',
+      'content': content,
       'activityId': sessionId,
       'read_by': [senderId],
       'created_at': FieldValue.serverTimestamp(),
@@ -138,10 +139,9 @@ class DirectService {
       'edited': false,
     });
 
-    final previewText = '\ud83e\udd4a PickFight: $topic';
     batch.update(_chats.doc(chatId), {
       'last_message': {
-        'text': previewText,
+        'text': content,
         'senderId': senderId,
         'sentAt': FieldValue.serverTimestamp(),
       },
@@ -205,7 +205,7 @@ class DirectService {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final ref = FirebaseStorage.instance
         .ref('chat_audio/direct/$chatId/$timestamp.m4a');
-    await ref.putFile(audioFile, SettableMetadata(contentType: 'audio/mp4'));
+    await ref.putFile(audioFile);
     final url = await ref.getDownloadURL();
 
     final batch = _db.batch();
