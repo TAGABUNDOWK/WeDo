@@ -162,6 +162,14 @@ service cloud.firestore {
       }
     }
 
+    match /triRaces/{raceId} {
+      allow read, write: if isSignedIn();
+
+      match /participants/{userId} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
     match /calls/{callId} {
       allow read: if isSignedIn()
         && request.auth.uid in resource.data.members;

@@ -18,6 +18,7 @@ import '../../../utils/time_format.dart';
 import '../../../widgets/message_bubble.dart';
 import '../../../widgets/date_separator.dart';
 import '../../../widgets/invite_message_card.dart';
+import '../../../widgets/tri_race_invite_message_card.dart';
 import '../../../widgets/group_invite_message_card.dart';
 import '../../../widgets/composer_option.dart';
 import '../../../widgets/audio_recorder_button.dart';
@@ -644,7 +645,16 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
                           if (msg.type == MessageType.invite &&
                               msg.activityId != null) {
-                            return InviteMessageCard(
+                            if (msg.activityType == 'triRace') {
+                            return TriRaceInviteMessageCard(
+                              raceId: msg.activityId!,
+                              content: msg.content,
+                              isMe: isMe,
+                              senderName: isMe ? null : displayName,
+                              time: formatChatTime(msg.createdAt),
+                            );
+                          }
+                          return InviteMessageCard(
                               sessionId: msg.activityId!,
                               content: msg.content,
                               isMe: isMe,

@@ -461,6 +461,102 @@ async function sendReminderForEvent(eventRef, eventData, chatId, chatType, messa
 
 exports.scheduledEventReminders = functions.pubsub
   .schedule('every 5 minutes')
+  .timeZone('Asia/Manila')
   .onRun(async (context) => {
     await sendEventReminders();
+  });
+
+// ──────────────────── TriRace Cleanup (runs every 2 days) ────────────────────
+
+async function cleanupExpiredTriRaces() {
+  const now = new Date();
+  const triRacesRef = db.collection('triRaces');
+  const expiredSnap = await triRacesRef
+    .where('status', 'in', ['finished', 'cancelled'])
+    .limit(100)
+    .get();
+
+  if (expiredSnap.empty) return;
+
+  const batch = db.batch();
+  let count = 0;
+
+  for (const raceDoc of expiredSnap.docs) {
+    const data = raceDoc.data();
+    const createdAt = data.createdAt?.toDate?.() || new Date(data.createdAt);
+    const ageMs = now.getTime() - createdAt.getTime();
+    const ageDays = ageMs / (1000 * 60 * 60 * 24);
+
+    // Delete after 30 days
+    if (ageDays < 30) continue;
+
+    const participantsSnap = await raceDoc.ref.collection('participants').get();
+    participantsSnap.docs.forEach((pDoc) => batch.delete(pDoc.ref));
+    batch.delete(raceDoc.ref);
+    count++;
+  }
+
+  if (count > 0) {
+    await batch.commit();
+    console.log(`Cleaned up ${count} expired TriRaces`);
+  }
+}
+
+exports.scheduledTriRaceCleanup = functions.pubsub
+  .schedule('0 0 */2 * *')
+  .timeZone('Asia/Manila')
+  .onRun(async (context) => {
+    await cleanupExpiredTriRaces();
+  });
+
+// ──────────────────── TriRace Cancelled Notification ────────────────────
+
+exports.onTriRaceCancelled = functions.firestore
+  .document('triRaces/{raceId}')
+  .onUpdate(async (change, context) => {
+    const before = change.before.data();
+    const after = change.after.data();
+
+    if (before.status === after.status) return;
+    if (after.status !== 'cancelled') return;
+
+    const raceId = context.params.raceId;
+    const hostId = after.hostId;
+    const invitedUserIds = after.invitedUserIds || [];
+    const participantUids = after.participantUids || [];
+
+    const recipientUids = [...new Set([...invitedUserIds, ...participantUids])]
+      .filter(uid => uid !== hostId);
+
+    if (recipientUids.length === 0) return;
+
+    const hostDoc = await db.collection('users').doc(hostId).get();
+    const hostName = hostDoc.data()?.display_name || hostDoc.data()?.displayName || 'Host';
+
+    const tokens = [];
+    for (const uid of recipientUids) {
+      const userDoc = await db.collection('users').doc(uid).get();
+      const token = userDoc.data()?.fcm_token;
+      if (token) tokens.push(token);
+    }
+
+    if (tokens.length === 0) return;
+
+    const { getMessaging } = require('firebase-admin/messaging');
+    const messaging = getMessaging();
+
+    const results = await messaging.sendEachForMulticast({
+      tokens,
+      data: {
+        raceId,
+        type: 'tri_race_cancelled',
+      },
+      notification: {
+        title: 'TriRace Cancelled',
+        body: `${hostName} cancelled the TriRace`,
+      },
+      android: { priority: 'high' },
+    });
+
+    console.log(`TriRace cancel notification sent to ${tokens.length} devices, ${results.successCount} succeeded`);
   });
