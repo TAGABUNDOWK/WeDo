@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/session_entity.dart';
@@ -27,6 +28,25 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
   final _currentUser = FirebaseAuth.instance.currentUser;
 
   bool _isConfirmingLeave = false;
+  Timer? _hostPresenceTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isHost) {
+      _service.updateHostLastSeen(widget.sessionId);
+      _hostPresenceTimer = Timer.periodic(
+        const Duration(seconds: 30),
+        (_) => _service.updateHostLastSeen(widget.sessionId),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _hostPresenceTimer?.cancel();
+    super.dispose();
+  }
 
   Future<void> _onPopInvoked(bool didPop, dynamic result) async {
     if (didPop || _isConfirmingLeave) return;
@@ -167,6 +187,12 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
                   child: Text('Session was cancelled by the host'),
                 );
               }
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _showHostCancelledDialog();
+              });
+              return const Center(
+                child: Text('Session was cancelled'),
+              );
             }
 
             if (session.status == SessionStatus.completed) {
@@ -499,6 +525,27 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
       builder: (context) => AlertDialog(
         title: const Text('PickFight Cancelled'),
         content: const Text('The host closed the lobby.'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pop(context);
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showHostCancelledDialog() {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('PickFight Cancelled'),
+        content: const Text('Your PickFight session has been closed.'),
         actions: [
           TextButton(
             onPressed: () {
