@@ -60,7 +60,7 @@ exports.scheduledSessionCleanup = functions.pubsub
 
 async function cleanupAbandonedLobbies() {
   const now = new Date();
-  const staleThreshold = new Date(now.getTime() - 2 * 60 * 1000); // 2 minutes ago
+  const staleThreshold = new Date(now.getTime() - 5 * 60 * 1000); // 5 minutes ago
 
   const staleLobbies = await db.collection('sessions')
     .where('status', '==', 'lobby')
