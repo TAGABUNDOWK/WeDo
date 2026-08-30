@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/session_entity.dart';
 import '../../services/session/session_service.dart';
+import '../../services/session/lobby_return_store.dart';
 import 'swiping_screen.dart';
 import 'results_screen.dart';
 import 'invite_picker_screen.dart';
@@ -30,17 +31,19 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
   Future<void> _onPopInvoked(bool didPop, dynamic result) async {
     if (didPop || _isConfirmingLeave) return;
 
+    // The host's back action leaves to the app temporarily (no cancel).
+    if (widget.isHost) {
+      _leaveToApp();
+      return;
+    }
+
     _isConfirmingLeave = true;
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Leave Lobby?'),
-        content: Text(
-          widget.isHost
-              ? 'This will cancel the PickFight for all players.'
-              : 'Are you sure you want to leave?',
-        ),
+        content: const Text('Are you sure you want to leave?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -48,9 +51,9 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text(
-              widget.isHost ? 'Cancel PickFight' : 'Leave',
-              style: const TextStyle(color: Colors.redAccent),
+            child: const Text(
+              'Leave',
+              style: TextStyle(color: Colors.redAccent),
             ),
           ),
         ],
@@ -59,13 +62,58 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
 
     if (confirmed == true && mounted) {
       try {
-        if (widget.isHost) {
-          await _service.cancelSession(widget.sessionId, _currentUser!.uid);
-        } else {
-          await _service.removeParticipant(widget.sessionId, _currentUser!.uid);
-        }
+        await _service.removeParticipant(widget.sessionId, _currentUser!.uid);
       } catch (_) {}
 
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    }
+
+    _isConfirmingLeave = false;
+  }
+
+  /// Leaves the lobby temporarily without cancelling. The session stays in
+  /// "lobby" status and remains joinable; the host's participant document is
+  /// kept so their avatar stays visible to friends. A global "Back to Lobby"
+  /// button is parked so the host can come back.
+  void _leaveToApp() {
+    LobbyReturnStore.instance.park(sessionId: widget.sessionId);
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  Future<void> _confirmCancel() async {
+    if (_isConfirmingLeave) return;
+    _isConfirmingLeave = true;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel PickFight?'),
+        content: const Text(
+          'This will cancel the PickFight for all players. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Stay'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'Cancel PickFight',
+              style: TextStyle(color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      LobbyReturnStore.instance.clear();
+      try {
+        await _service.cancelSession(widget.sessionId, _currentUser!.uid);
+      } catch (_) {}
       if (mounted) {
         Navigator.of(context).pop();
       }
@@ -94,9 +142,12 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
             style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
           ),
         ),
-        body: StreamBuilder<SessionEntity?>(
-          stream: _service.getSessionStream(widget.sessionId),
-          builder: (context, sessionSnapshot) {
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: StreamBuilder<SessionEntity?>(
+                stream: _service.getSessionStream(widget.sessionId),
+                builder: (context, sessionSnapshot) {
             if (sessionSnapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
@@ -108,12 +159,14 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
             }
 
             if (session.status == SessionStatus.cancelled) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                _showCancelledDialog();
-              });
-              return const Center(
-                child: Text('Session was cancelled by the host'),
-              );
+              if (!widget.isHost) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _showCancelledDialog();
+                });
+                return const Center(
+                  child: Text('Session was cancelled by the host'),
+                );
+              }
             }
 
             if (session.status == SessionStatus.completed) {
@@ -144,7 +197,10 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
             }
 
             return _buildLobby(session);
-          },
+              },
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -218,6 +274,8 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
           if (widget.isHost) ...[
             const SizedBox(height: 16),
             _buildStartButton(),
+            const SizedBox(height: 12),
+            _buildCancelButton(),
           ],
           if (!widget.isHost) ...[
             const SizedBox(height: 16),
@@ -387,8 +445,42 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
     );
   }
 
+  Widget _buildCancelButton() {
+    return GestureDetector(
+      onTap: _confirmCancel,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.redAccent.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: Colors.redAccent.withValues(alpha: 0.5),
+            width: 1,
+          ),
+        ),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.cancel_outlined, size: 16, color: Colors.redAccent),
+            SizedBox(width: 6),
+            Text(
+              'Cancel PickFight',
+              style: TextStyle(
+                color: Colors.redAccent,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _startSession() async {
     if (_currentUser == null) return;
+    LobbyReturnStore.instance.clear();
     try {
       await _service.startSession(widget.sessionId, _currentUser.uid);
     } catch (e) {

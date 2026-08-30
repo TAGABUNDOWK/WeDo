@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../account/account_screen.dart';
 import '../friends/friends_page.dart';
 import '../session/session_entry_screen.dart';
-import '../session/create_session_screen.dart';
 import '../../features/spin_wheel/screens/wheel_screen.dart';
 import '../tri_race/tri_race_entry_screen.dart';
 import '../chat/chat_tab.dart';
@@ -333,14 +332,7 @@ class _BlobNavBarState extends State<BlobNavBar>
                                 offset: Offset(0, 20 * (1 - _menuScale.value)),
                                 child: _PopupCircle(
                                   icon: 'assets/icons/punch.png',
-                                  onTap: () => _onChoiceTap(() {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            const CreateSessionScreen(),
-                                      ),
-                                    );
-                                  }),
+                                  onTap: () => _onChoiceTap(() => widget.onTap(3)),
                                 ),
                               ),
                             ),
