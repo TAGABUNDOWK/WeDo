@@ -72,7 +72,7 @@ class InviteMessageCard extends StatelessWidget {
                 final isCancelled = status == SessionStatus.cancelled;
 
                 return GestureDetector(
-                  onTap: isActive
+                  onTap: isActive && !isMe
                       ? () {
                           Navigator.push(
                             context,
@@ -146,28 +146,59 @@ class InviteMessageCard extends StatelessWidget {
                             if (isActive) ...[
                               const SizedBox(height: 10),
                               Center(
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 20, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    gradient: const LinearGradient(
-                                      colors: [
-                                        Color(0xFFFE4EF0),
-                                        Color(0xFF800DD8),
-                                      ],
-                                    ),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: const Text(
-                                    'Join',
-                                    style: TextStyle(
-                                      fontFamily: _fontFamily,
-                                      color: Colors.white,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
+                                child: isMe
+                                    ? Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 20, vertical: 8),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF4CAF50).withValues(alpha: 0.15),
+                                          borderRadius: BorderRadius.circular(20),
+                                          border: Border.all(
+                                            color: const Color(0xFF4CAF50).withValues(alpha: 0.4),
+                                          ),
+                                        ),
+                                        child: const Text(
+                                          "You're the host",
+                                          style: TextStyle(
+                                            fontFamily: _fontFamily,
+                                            color: Color(0xFF4CAF50),
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      )
+                                    : GestureDetector(
+                                        onTap: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => SessionPreviewScreen(sessionId: sessionId),
+                                            ),
+                                          );
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 20, vertical: 8),
+                                          decoration: BoxDecoration(
+                                            gradient: const LinearGradient(
+                                              colors: [
+                                                Color(0xFFFE4EF0),
+                                                Color(0xFF800DD8),
+                                              ],
+                                            ),
+                                            borderRadius: BorderRadius.circular(20),
+                                          ),
+                                          child: const Text(
+                                            'Join',
+                                            style: TextStyle(
+                                              fontFamily: _fontFamily,
+                                              color: Colors.white,
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
                               ),
                             ],
                           ],
