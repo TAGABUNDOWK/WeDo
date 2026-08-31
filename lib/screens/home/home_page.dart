@@ -7,6 +7,7 @@ import '../friends/friends_page.dart';
 import '../session/session_entry_screen.dart';
 import '../../features/spin_wheel/screens/wheel_screen.dart';
 import '../tri_race/tri_race_entry_screen.dart';
+import '../games/all_games_screen.dart';
 import '../chat/chat_tab.dart';
 import '../../widgets/animated_background.dart';
 import '../../services/auth/user_service.dart';
@@ -30,6 +31,7 @@ class _HomePageState extends State<HomePage> {
     FriendsPage(),
     SessionEntryScreen(),
     AccountScreen(),
+    AllGamesScreen(),
   ];
 
   static const _activeColor = Color(0xFFFE4EF0);
@@ -295,7 +297,7 @@ class _BlobNavBarState extends State<BlobNavBar>
                   isMenuOpen: _isMenuOpen,
                   activeColor: widget.activeColor,
                   inactiveColor: widget.inactiveColor,
-                  onTap: () => widget.onTap(3),
+                  onTap: () => widget.onTap(5),
                   onLongPress: _toggleMenu,
                 ),
               ),
@@ -339,7 +341,14 @@ class _BlobNavBarState extends State<BlobNavBar>
                                 offset: Offset(0, 20 * (1 - _menuScale.value)),
                                 child: _PopupCircle(
                                   icon: 'assets/icons/punch.png',
-                                  onTap: () => _onChoiceTap(() => widget.onTap(3)),
+                                  onTap: () => _onChoiceTap(() {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const SessionEntryScreen(),
+                                      ),
+                                    );
+                                  }),
                                 ),
                               ),
                             ),
@@ -1602,7 +1611,13 @@ class _NowPlayingSection extends StatelessWidget {
                 ),
               ),
               GestureDetector(
-                onTap: () {},
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const AllGamesScreen(),
+                    ),
+                  );
+                },
                 child: const Text(
                   'See all',
                   style: TextStyle(
