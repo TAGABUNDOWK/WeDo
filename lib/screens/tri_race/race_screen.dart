@@ -78,13 +78,12 @@ class _RaceScreenState extends State<RaceScreen>
   bool _finishHandled = false;
   bool _showingResults = false;
   bool _isLoading = true;
-  bool _countdownDone = false;
-  int _countdown = 3;
   String? _loadError;
   Timer? _landscapeKeeper;
 
   // Cached data — rebuilt only when participants change
   final Map<String, Color> _colors = {};
+  final Map<String, Color?> _colorEnds = {};
   final Map<String, List<_Segment>> _segments = {};
 
   // Rotation state — updated every frame from ticker, no separate timers
@@ -183,10 +182,6 @@ class _RaceScreenState extends State<RaceScreen>
         _participants = list;
         _rebuildCaches();
       });
-      // First emission after data loaded → clear spinner and start cosmetic countdown
-      if (!_countdownDone && !_isLoading && list.isNotEmpty) {
-        _startCountdown();
-      }
     });
 
     // One-shot fetch for immediate race doc data (raceStartedAt, raceDurationMs)
@@ -225,25 +220,6 @@ class _RaceScreenState extends State<RaceScreen>
     }
   }
 
-  // ── Cosmetic countdown overlay (does NOT gate race movement) ──────────
-
-  void _startCountdown() {
-    _countdown = 3;
-    setState(() {});
-
-    Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) { timer.cancel(); return; }
-      _countdown--;
-      setState(() {});
-
-      if (_countdown <= 0) {
-        timer.cancel();
-        _countdownDone = true;
-        setState(() {});
-      }
-    });
-  }
-
   // ── Race finished — brief pause then navigate to results ─────────────────
 
   void _showRaceFinished() {
@@ -257,6 +233,15 @@ class _RaceScreenState extends State<RaceScreen>
         );
       }
     });
+  }
+
+  Future<void> _handleFinish() async {
+    try {
+      await _service.markTriRaceFinished(widget.raceId);
+    } catch (e) {
+      debugPrint('markTriRaceFinished failed: $e');
+    }
+    _showRaceFinished();
   }
 
   // ── Frame-driven update — runs every frame at 60fps ──────────────────────
@@ -295,8 +280,7 @@ class _RaceScreenState extends State<RaceScreen>
       final elapsed = DateTime.now().difference(_raceStartedAt!).inMilliseconds;
       if (_arrived.length == _participants.length || elapsed >= _raceDurationMs) {
         _finishHandled = true;
-        _service.markTriRaceFinished(widget.raceId);
-        _showRaceFinished();
+        _handleFinish();
       }
     }
 
@@ -330,9 +314,13 @@ class _RaceScreenState extends State<RaceScreen>
 
   void _rebuildCaches() {
     _colors.clear();
+    _colorEnds.clear();
     _segments.clear();
     for (final p in _participants) {
       _colors[p.userId] = Color(int.parse(p.avatarColor.replaceFirst('#', '0xFF')));
+      _colorEnds[p.userId] = p.avatarColorEnd != null
+          ? Color(int.parse(p.avatarColorEnd!.replaceFirst('#', '0xFF')))
+          : null;
       _segments[p.userId] = _buildSegments(p.speedSeed ?? 0.5);
 
       if (!_rotRngs.containsKey(p.userId)) {
@@ -493,6 +481,7 @@ class _RaceScreenState extends State<RaceScreen>
               painter: _TriangleLayerPainter(
                 participants: _participants,
                 colors: _colors,
+                colorEnds: _colorEnds,
                 segments: _segments,
                 rotations: _rotations,
                 computeProgress: _computeProgress,
@@ -561,61 +550,6 @@ class _RaceScreenState extends State<RaceScreen>
             ),
           ),
 
-          // ── Countdown overlay with landscape prompt (cosmetic, fades out after GO) ──
-          if (!_isLoading && _loadError == null)
-            Positioned.fill(
-              child: IgnorePointer(
-                ignoring: _countdownDone,
-                child: AnimatedOpacity(
-                  opacity: _countdownDone ? 0.0 : 1.0,
-                  duration: const Duration(milliseconds: 500),
-                  child: Container(
-                    color: Colors.black.withValues(alpha: 0.8),
-                    child: Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 300),
-                            child: Text(
-                              _countdown > 0 ? '$_countdown' : 'GO!',
-                              key: ValueKey(_countdown),
-                              style: TextStyle(
-                                fontFamily: _fontFamily,
-                                fontSize: 72,
-                                fontWeight: FontWeight.w800,
-                                color: _countdown > 0
-                                    ? Colors.white
-                                    : const Color(0xFF4ECDC4),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 32),
-                          Icon(
-                            Icons.screen_rotation,
-                            color: Colors.white.withValues(alpha: 0.7),
-                            size: 28,
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            'Hold your device in landscape\nfor the best experience',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontFamily: _fontFamily,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.white.withValues(alpha: 0.7),
-                              height: 1.4,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
         ],
       ),
     );
@@ -627,6 +561,7 @@ class _RaceScreenState extends State<RaceScreen>
 class _TriangleLayerPainter extends CustomPainter {
   final List<TriRaceParticipant> participants;
   final Map<String, Color> colors;
+  final Map<String, Color?> colorEnds;
   final Map<String, List<_Segment>> segments;
   final Map<String, double> rotations;
   final double Function(TriRaceParticipant) computeProgress;
@@ -639,6 +574,7 @@ class _TriangleLayerPainter extends CustomPainter {
   _TriangleLayerPainter({
     required this.participants,
     required this.colors,
+    required this.colorEnds,
     required this.segments,
     required this.rotations,
     required this.computeProgress,
@@ -682,8 +618,23 @@ class _TriangleLayerPainter extends CustomPainter {
         ..close();
 
       final fillPaint = Paint()
-        ..color = color
         ..style = PaintingStyle.fill;
+
+      final colorEnd = colorEnds[p.userId];
+      if (colorEnd != null) {
+        fillPaint.shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [color, colorEnd],
+        ).createShader(Rect.fromLTWH(
+          -triangleSize.width / 2,
+          -triangleSize.height / 2,
+          triangleSize.width,
+          triangleSize.height,
+        ));
+      } else {
+        fillPaint.color = color;
+      }
       canvas.drawPath(path, fillPaint);
 
       final borderPaint = Paint()

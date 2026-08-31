@@ -10,6 +10,7 @@ import '../../widgets/animated_background.dart';
 import 'create_tri_race_screen.dart';
 import 'waiting_lobby_screen.dart';
 import 'tri_race_results_screen.dart';
+import 'all_tri_races_screen.dart';
 
 const _fontFamily = 'PlusJakartaSans';
 
@@ -346,7 +347,15 @@ class _TriRaceEntryScreenState extends State<TriRaceEntryScreen> {
                       ),
                       if (_recentRaces.length >= 3)
                         TextButton(
-                          onPressed: () {},
+                          onPressed: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const AllTriRacesScreen(),
+                              ),
+                            );
+                            _loadSessions();
+                          },
                           child: const Text(
                             'View all',
                             style: TextStyle(
