@@ -560,12 +560,21 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           if (_isUploading)
             const LinearProgressIndicator(backgroundColor: Colors.transparent),
           Expanded(
+<<<<<<< HEAD
             child: Stack(
               children: [
                 Container(
                   color: t.background,
                   child: StreamBuilder<List<ChatMessage>>(
                 stream: _messagesStream,
+=======
+            child: Container(
+              color: t.background,
+              child: Stack(
+                children: [
+                  StreamBuilder<List<ChatMessage>>(
+                    stream: _groupService.getMessagesStream(widget.groupId),
+>>>>>>> f10003a (Phase 10: Fixes)
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
@@ -945,6 +954,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                   ),
               ],
             ),
+          ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),

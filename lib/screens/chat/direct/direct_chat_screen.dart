@@ -525,12 +525,21 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
           if (_isUploading)
             const LinearProgressIndicator(backgroundColor: Colors.transparent),
           Expanded(
+<<<<<<< HEAD
             child: Stack(
               children: [
                 Container(
                   color: t.background,
                   child: StreamBuilder<List<ChatMessage>>(
                 stream: _messagesStream,
+=======
+            child: Container(
+              color: t.background,
+              child: Stack(
+                children: [
+                  StreamBuilder<List<ChatMessage>>(
+                    stream: _directService.getMessagesStream(widget.chatId),
+>>>>>>> f10003a (Phase 10: Fixes)
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
@@ -883,6 +892,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                   ),
               ],
             ),
+          ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
