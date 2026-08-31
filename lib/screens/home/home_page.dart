@@ -315,34 +315,12 @@ class _BlobNavBarState extends State<BlobNavBar>
                           clipBehavior: Clip.none,
                           children: [
                             Positioned(
-                              left: 8,
+                              left: 36,
                               bottom: 20 * _menuScale.value,
                               child: Transform.translate(
                                 offset: Offset(0, 30 * (1 - _menuScale.value)),
                                 child: _PopupCircle(
-                                  icon: 'assets/icons/bolt.png',
-                                  onTap: () => _onChoiceTap(null),
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              left: 68,
-                              bottom: 40 * _menuScale.value,
-                              child: Transform.translate(
-                                offset: Offset(0, 20 * (1 - _menuScale.value)),
-                                child: _PopupCircle(
-                                  icon: 'assets/icons/punch.png',
-                                  onTap: () => _onChoiceTap(() => widget.onTap(3)),
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              left: 128,
-                              bottom: 40 * _menuScale.value,
-                              child: Transform.translate(
-                                offset: Offset(0, 20 * (1 - _menuScale.value)),
-                                child: _PopupCircle(
-                                  icon: 'assets/icons/cards.png', // TODO: replace with trirace.png
+                                  icon: 'assets/icons/racing-flag.png',
                                   onTap: () => _onChoiceTap(() {
                                     Navigator.of(context).push(
                                       MaterialPageRoute(
@@ -355,7 +333,18 @@ class _BlobNavBarState extends State<BlobNavBar>
                               ),
                             ),
                             Positioned(
-                              right: 8,
+                              left: 94,
+                              bottom: 40 * _menuScale.value,
+                              child: Transform.translate(
+                                offset: Offset(0, 20 * (1 - _menuScale.value)),
+                                child: _PopupCircle(
+                                  icon: 'assets/icons/punch.png',
+                                  onTap: () => _onChoiceTap(() => widget.onTap(3)),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              right: 36,
                               bottom: 20 * _menuScale.value,
                               child: Transform.translate(
                                 offset: Offset(0, 30 * (1 - _menuScale.value)),
