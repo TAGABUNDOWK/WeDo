@@ -140,45 +140,67 @@ class _SessionEntryScreenState extends State<SessionEntryScreen> {
       backgroundColor: Colors.transparent,
       body: AnimatedBackground(
         showStars: false,
-        child: CustomScrollView(
-          slivers: [
-            const SliverAppBar(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              pinned: true,
-              foregroundColor: Colors.white,
-              expandedHeight: 100,
-              flexibleSpace: FlexibleSpaceBar(
-                title: Text(
-                  'PickFight',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontStyle: FontStyle.italic,
-                    color: Color(0xFFFE4EF0),
-                    fontSize: 22,
+        child: Stack(
+          children: [
+            Positioned(
+              top: 100,
+              left: -150,
+              child: Transform(
+                alignment: Alignment.center,
+                transform: Matrix4.identity()
+                  ..scaleByDouble(-1.0, 1.0, 1.0, 1.0)
+                  ..rotateZ(-0.55),
+                child: Opacity(
+                  opacity: 0.05,
+                  child: Image.asset(
+                    'assets/images/Ears-overlay1.png',
+                    width: 900,
+                    fit: BoxFit.contain,
                   ),
                 ),
-                centerTitle: false,
-                titlePadding: EdgeInsets.only(left: 16, bottom: 12),
               ),
             ),
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPadding + 100),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate([
-                  _buildTagline(),
-                  const SizedBox(height: 20),
-                  _buildCreateCard(),
-                  const SizedBox(height: 12),
-                  _buildJoinCard(),
-                  const SizedBox(height: 24),
-                  _buildRecentSessionsSection(),
-                  const SizedBox(height: 24),
-                  _buildHowItWorks(),
-                  const SizedBox(height: 24),
-                  _buildTipSection(),
-                ]),
-              ),
+            CustomScrollView(
+              slivers: [
+                const SliverAppBar(
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                  pinned: true,
+                  foregroundColor: Colors.white,
+                  expandedHeight: 100,
+                  flexibleSpace: FlexibleSpaceBar(
+                    title: Text(
+                      'PickFight',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontStyle: FontStyle.italic,
+                        color: Color(0xFFFE4EF0),
+                        fontSize: 22,
+                      ),
+                    ),
+                    centerTitle: false,
+                    titlePadding: EdgeInsets.only(left: 16, bottom: 12),
+                  ),
+                ),
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPadding + 100),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
+                      _buildTagline(),
+                      const SizedBox(height: 20),
+                      _buildCreateCard(),
+                      const SizedBox(height: 12),
+                      _buildJoinCard(),
+                      const SizedBox(height: 24),
+                      _buildRecentSessionsSection(),
+                      const SizedBox(height: 24),
+                      _buildHowItWorks(),
+                      const SizedBox(height: 24),
+                      _buildTipSection(),
+                    ]),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

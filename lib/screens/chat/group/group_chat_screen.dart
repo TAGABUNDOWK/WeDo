@@ -560,184 +560,170 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           if (_isUploading)
             const LinearProgressIndicator(backgroundColor: Colors.transparent),
           Expanded(
-<<<<<<< HEAD
             child: Stack(
               children: [
                 Container(
                   color: t.background,
                   child: StreamBuilder<List<ChatMessage>>(
-                stream: _messagesStream,
-=======
-            child: Container(
-              color: t.background,
-              child: Stack(
-                children: [
-                  StreamBuilder<List<ChatMessage>>(
-                    stream: _groupService.getMessagesStream(widget.groupId),
->>>>>>> f10003a (Phase 10: Fixes)
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  final messages = snapshot.data ?? [];
-                  if (messages.isEmpty) {
-                    return Center(
-                      child: Text(
-                        'No messages yet',
-                        style: TextStyle(color: t.textSecondary),
-                      ),
-                    );
-                  }
+                    stream: _messagesStream,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      final messages = snapshot.data ?? [];
+                      if (messages.isEmpty) {
+                        return Center(
+                          child: Text(
+                            'No messages yet',
+                            style: TextStyle(color: t.textSecondary),
+                          ),
+                        );
+                      }
 
-                  final newMessageCount = messages.length - _lastMessageCount;
-                  if (newMessageCount > 0) {
-                    _lastMessageCount = messages.length;
-                    if (_isAtBottom) {
+                      final newMessageCount =
+                          messages.length - _lastMessageCount;
+                      if (newMessageCount > 0) {
+                        _lastMessageCount = messages.length;
+                        if (_isAtBottom) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (_scrollCtrl.hasClients) _scrollCtrl.jumpTo(0);
+                          });
+                        } else {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) {
+                              setState(
+                                () => _newMessageCount += newMessageCount,
+                              );
+                            }
+                          });
+                        }
+                      }
+
                       WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (_scrollCtrl.hasClients) _scrollCtrl.jumpTo(0);
-                      });
-                    } else {
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (mounted) {
-                          setState(() => _newMessageCount += newMessageCount);
+                        for (final m in messages) {
+                          if ((m.type == MessageType.event ||
+                                  m.type == MessageType.poll) &&
+                              m.refId != null) {
+                            _loadEventPollData(m);
+                          }
                         }
                       });
-                    }
-                  }
 
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    for (final m in messages) {
-                      if ((m.type == MessageType.event || m.type == MessageType.poll) &&
-                          m.refId != null) {
-                        _loadEventPollData(m);
-                      }
-                    }
-                  });
+                      return ListView.builder(
+                        reverse: true,
+                        controller: _scrollCtrl,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 8,
+                        ),
+                        itemCount: messages.length,
+                        itemBuilder: (context, index) {
+                          final msg = messages[index];
+                          final isMe = msg.senderId == _currentUser?.uid;
+                          final isSystem = msg.type == MessageType.system;
 
-                    return ListView.builder(
-                      reverse: true,
-                      controller: _scrollCtrl,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 8,
-                      ),
-                      itemCount: messages.length,
-                      itemBuilder: (context, index) {
-                        final msg = messages[index];
-                        final isMe = msg.senderId == _currentUser?.uid;
-                        final isSystem = msg.type == MessageType.system;
+                          final sameSenderAsNextOlder =
+                              index + 1 < messages.length &&
+                              messages[index + 1].senderId == msg.senderId &&
+                              isSameDay(
+                                msg.createdAt,
+                                messages[index + 1].createdAt,
+                              );
+                          final sameSenderAsPrevNewer =
+                              index - 1 >= 0 &&
+                              messages[index - 1].senderId == msg.senderId &&
+                              isSameDay(
+                                msg.createdAt,
+                                messages[index - 1].createdAt,
+                              );
+                          final isFirstInGroup = !sameSenderAsNextOlder;
+                          final isLastInGroup = !sameSenderAsPrevNewer;
 
-                        final sameSenderAsNextOlder =
-                            index + 1 < messages.length &&
-                            messages[index + 1].senderId == msg.senderId &&
-                            isSameDay(
-                              msg.createdAt,
-                              messages[index + 1].createdAt,
-                            );
-                        final sameSenderAsPrevNewer =
-                            index - 1 >= 0 &&
-                            messages[index - 1].senderId == msg.senderId &&
-                            isSameDay(
-                              msg.createdAt,
-                              messages[index - 1].createdAt,
-                            );
-                        final isFirstInGroup = !sameSenderAsNextOlder;
-                        final isLastInGroup = !sameSenderAsPrevNewer;
+                          final showDateSeparator =
+                              index == 0 ||
+                              !isSameDay(
+                                messages[index].createdAt,
+                                messages[index - 1].createdAt,
+                              );
 
-                        final showDateSeparator =
-                            index == 0 ||
-                            !isSameDay(
-                              messages[index].createdAt,
-                              messages[index - 1].createdAt,
-                            );
+                          Widget buildMessage() {
+                            if (isSystem) {
+                              return MessageBubble(
+                                content: msg.content,
+                                isMe: false,
+                                senderName: msg.senderName.isNotEmpty
+                                    ? msg.senderName
+                                    : null,
+                                time: formatChatTime(msg.createdAt),
+                                isSystem: true,
+                                theme: t,
+                                isFirstInGroup: isFirstInGroup,
+                                isLastInGroup: isLastInGroup,
+                                createdAt: msg.createdAt,
+                              );
+                            }
 
-                        Widget buildMessage() {
-                          if (isSystem) {
-                            return MessageBubble(
-                              content: msg.content,
-                              isMe: false,
-                              senderName: msg.senderName.isNotEmpty
-                                  ? msg.senderName
-                                  : null,
-                              time: formatChatTime(msg.createdAt),
-                              isSystem: true,
-                              theme: t,
-                              isFirstInGroup: isFirstInGroup,
-                              isLastInGroup: isLastInGroup,
-                              createdAt: msg.createdAt,
-                            );
-                          }
+                            if (msg.type == MessageType.event &&
+                                msg.refId != null) {
+                              final evt = _events[msg.refId];
+                              return MessageBubble(
+                                content: msg.content,
+                                isMe: isMe,
+                                senderName: _getDisplayName(
+                                  msg.senderId,
+                                  msg.senderName,
+                                ),
+                                time: formatChatTime(msg.createdAt),
+                                event: evt,
+                                currentUid: _currentUser?.uid,
+                                theme: t,
+                                onEventTap: evt != null
+                                    ? () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => EventDetailScreen(
+                                              eventId: evt.id,
+                                              groupId: widget.groupId,
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    : null,
+                              );
+                            }
 
-                      if (msg.type == MessageType.event && msg.refId != null) {
-                        final evt = _events[msg.refId];
-                        return MessageBubble(
-                          content: msg.content,
-                          isMe: isMe,
-                          senderName: _getDisplayName(msg.senderId, msg.senderName),
-                          time: formatChatTime(msg.createdAt),
-                          event: evt,
-                          currentUid: _currentUser?.uid,
-                          theme: t,
-                          onEventTap: evt != null
-                              ? () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => EventDetailScreen(
-                                        eventId: evt.id,
-                                        groupId: widget.groupId,
+                            if (msg.type == MessageType.poll &&
+                                msg.refId != null) {
+                              return MessageBubble(
+                                content: msg.content,
+                                isMe: isMe,
+                                senderName: isMe
+                                    ? null
+                                    : _getDisplayName(
+                                        msg.senderId,
+                                        msg.senderName,
                                       ),
-                                    ),
-                                  );
-                                }
-                              : null,
-                        );
-                      }
+                                time: formatChatTime(msg.createdAt),
+                                poll: _polls[msg.refId],
+                                currentUid: _currentUser?.uid,
+                                theme: t,
+                              );
+                            }
 
-                      if (msg.type == MessageType.poll && msg.refId != null) {
-                        return MessageBubble(
-                          content: msg.content,
-                          isMe: isMe,
-                          senderName: isMe ? null : _getDisplayName(msg.senderId, msg.senderName),
-                          time: formatChatTime(msg.createdAt),
-                          poll: _polls[msg.refId],
-                          currentUid: _currentUser?.uid,
-                          theme: t,
-                        );
-                      }
-
-                          final displayName = _getDisplayName(
-                            msg.senderId,
-                            msg.senderName,
-                          );
-
-                          if (!isMe &&
-                              !_memberPhotos.containsKey(msg.senderId)) {
-                            WidgetsBinding.instance.addPostFrameCallback(
-                              (_) => _loadMemberPhoto(msg.senderId),
+                            final displayName = _getDisplayName(
+                              msg.senderId,
+                              msg.senderName,
                             );
-                          }
 
-                          if (msg.type == MessageType.invite &&
-                              msg.activityId != null) {
-                            if (msg.activityType == 'triRace') {
-                            return TriRaceInviteMessageCard(
-                              raceId: msg.activityId!,
-                              content: msg.content,
-                              isMe: isMe,
-                              senderName: isMe ? null : displayName,
-                              time: formatChatTime(msg.createdAt),
-                            );
-                          }
-                          return InviteMessageCard(
-                              sessionId: msg.activityId!,
-                              content: msg.content,
-                              isMe: isMe,
-                              senderName: isMe ? null : displayName,
-                              time: formatChatTime(msg.createdAt),
-                            );
-                          }
+                            if (!isMe &&
+                                !_memberPhotos.containsKey(msg.senderId)) {
+                              WidgetsBinding.instance.addPostFrameCallback(
+                                (_) => _loadMemberPhoto(msg.senderId),
+                              );
+                            }
 
+<<<<<<< HEAD
                           if (msg.type == MessageType.image &&
                               msg.imageUrl != null) {
                             return MessageBubble(
@@ -836,14 +822,141 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             if (groupLinkMatch != null) {
                               return GroupInviteMessageCard(
                                 groupId: groupLinkMatch.group(1)!,
+=======
+                            if (msg.type == MessageType.invite &&
+                                msg.activityId != null) {
+                              if (msg.activityType == 'triRace') {
+                                return TriRaceInviteMessageCard(
+                                  raceId: msg.activityId!,
+                                  content: msg.content,
+                                  isMe: isMe,
+                                  senderName: isMe ? null : displayName,
+                                  time: formatChatTime(msg.createdAt),
+                                );
+                              }
+                              return InviteMessageCard(
+                                sessionId: msg.activityId!,
+                                content: msg.content,
+>>>>>>> 392a151 (Phase 11: Topic Frame and Minor Fixes)
                                 isMe: isMe,
                                 senderName: isMe ? null : displayName,
                                 time: formatChatTime(msg.createdAt),
-                                groupInviteData: msg.groupInviteData,
                               );
                             }
+
+                            if (msg.type == MessageType.image &&
+                                msg.imageUrl != null) {
+                              return MessageBubble(
+                                content: msg.content,
+                                imageUrl: msg.imageUrl,
+                                isMe: isMe,
+                                senderName: isMe
+                                    ? null
+                                    : (isFirstInGroup ? displayName : null),
+                                time: formatChatTime(msg.createdAt),
+                                theme: t,
+                                isFirstInGroup: isFirstInGroup,
+                                isLastInGroup: isLastInGroup,
+                                createdAt: msg.createdAt,
+                                edited: msg.edited,
+                                onEdit: isMe ? () => _editMessage(msg) : null,
+                                onDeleteForEveryone: isMe
+                                    ? () => _deleteMessageForEveryone(msg)
+                                    : null,
+                                onDeleteForMe: () => _deleteMessageForMe(msg),
+                                senderPhotoUrl: !isMe
+                                    ? (_memberPhotos[msg.senderId] ?? '')
+                                    : null,
+                                isRead: isMe && msg.isRead,
+                              );
+                            }
+
+                            if (msg.type == MessageType.audio &&
+                                msg.audioUrl != null) {
+                              return MessageBubble(
+                                content: msg.content,
+                                audioUrl: msg.audioUrl,
+                                durationSeconds: msg.durationSeconds,
+                                isMe: isMe,
+                                senderName: isMe
+                                    ? null
+                                    : (isFirstInGroup ? displayName : null),
+                                time: formatChatTime(msg.createdAt),
+                                theme: t,
+                                isFirstInGroup: isFirstInGroup,
+                                isLastInGroup: isLastInGroup,
+                                createdAt: msg.createdAt,
+                                edited: msg.edited,
+                                onEdit: isMe ? () => _editMessage(msg) : null,
+                                onDeleteForEveryone: isMe
+                                    ? () => _deleteMessageForEveryone(msg)
+                                    : null,
+                                onDeleteForMe: () => _deleteMessageForMe(msg),
+                                senderPhotoUrl: !isMe
+                                    ? (_memberPhotos[msg.senderId] ?? '')
+                                    : null,
+                                isRead: isMe && msg.isRead,
+                              );
+                            }
+
+                            if (msg.type == MessageType.call) {
+                              return CallMessageBubble(
+                                callType: msg.callType ?? 'audio',
+                                callStatus: msg.callStatus ?? 'active',
+                                durationSeconds: msg.durationSeconds,
+                                time: formatCallBubbleTime(msg.createdAt),
+                                isMe: isMe,
+                                senderId: msg.senderId,
+                                senderName: isMe ? 'You' : displayName,
+                                currentUserId: _currentUser?.uid ?? '',
+                                groupId: widget.groupId,
+                                members: _members,
+                                theme: t,
+                                isFirstInGroup: isFirstInGroup,
+                                isLastInGroup: isLastInGroup,
+                              );
+                            }
+
+                            if (msg.type == MessageType.text) {
+                              final groupLinkMatch = RegExp(
+                                r'wedo://group/([^\s]+)',
+                              ).firstMatch(msg.content);
+                              if (groupLinkMatch != null) {
+                                return GroupInviteMessageCard(
+                                  groupId: groupLinkMatch.group(1)!,
+                                  isMe: isMe,
+                                  senderName: isMe ? null : displayName,
+                                  time: formatChatTime(msg.createdAt),
+                                  groupInviteData: msg.groupInviteData,
+                                );
+                              }
+                            }
+
+                            return MessageBubble(
+                              content: msg.content,
+                              isMe: isMe,
+                              senderName: isMe
+                                  ? null
+                                  : (isFirstInGroup ? displayName : null),
+                              time: formatChatTime(msg.createdAt),
+                              theme: t,
+                              isFirstInGroup: isFirstInGroup,
+                              isLastInGroup: isLastInGroup,
+                              createdAt: msg.createdAt,
+                              edited: msg.edited,
+                              onEdit: isMe ? () => _editMessage(msg) : null,
+                              onDeleteForEveryone: isMe
+                                  ? () => _deleteMessageForEveryone(msg)
+                                  : null,
+                              onDeleteForMe: () => _deleteMessageForMe(msg),
+                              senderPhotoUrl: !isMe
+                                  ? (_memberPhotos[msg.senderId] ?? '')
+                                  : null,
+                              isRead: isMe && msg.isRead,
+                            );
                           }
 
+<<<<<<< HEAD
                           return MessageBubble(
                             content: msg.content,
                             isMe: isMe,
@@ -901,11 +1014,25 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                       },
                     );
                   },
+=======
+                          if (showDateSeparator) {
+                            return Column(
+                              children: [
+                                DateSeparator(timestamp: msg.createdAt),
+                                buildMessage(),
+                              ],
+                            );
+                          }
+                          return buildMessage();
+                        },
+                      );
+                    },
+                  ),
+>>>>>>> 392a151 (Phase 11: Topic Frame and Minor Fixes)
                 ),
-              ),
-              if (_newMessageCount > 0)
-                Positioned(
-                  bottom: 16,
+                if (_newMessageCount > 0)
+                  Positioned(
+                    bottom: 16,
                     left: 0,
                     right: 0,
                     child: Center(
@@ -954,7 +1081,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                   ),
               ],
             ),
-          ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
