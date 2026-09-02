@@ -24,6 +24,7 @@ class TriRace {
   final String hostId;
   final TriRaceStatus status;
   final int maxPlayers;
+  final String colorTheme;
   final DateTime? raceStartedAt;
   final int? raceDurationMs;
   final DateTime createdAt;
@@ -37,6 +38,7 @@ class TriRace {
     required this.hostId,
     required this.status,
     this.maxPlayers = 4,
+    this.colorTheme = 'solid',
     this.raceStartedAt,
     this.raceDurationMs,
     required this.createdAt,
@@ -52,6 +54,7 @@ class TriRace {
       hostId: map['hostId'] as String? ?? '',
       status: TriRaceStatus.fromString(map['status'] as String?),
       maxPlayers: map['maxPlayers'] as int? ?? 4,
+      colorTheme: map['colorTheme'] as String? ?? 'solid',
       raceStartedAt: map['raceStartedAt'] != null
           ? _parseTimestamp(map['raceStartedAt'])
           : null,
@@ -69,6 +72,7 @@ class TriRace {
       'hostId': hostId,
       'status': status.value,
       'maxPlayers': maxPlayers,
+      'colorTheme': colorTheme,
       if (raceStartedAt != null) 'raceStartedAt': Timestamp.fromDate(raceStartedAt!),
       if (raceDurationMs != null) 'raceDurationMs': raceDurationMs,
       'createdAt': Timestamp.fromDate(createdAt),
@@ -84,6 +88,7 @@ class TriRace {
     String? hostId,
     TriRaceStatus? status,
     int? maxPlayers,
+    String? colorTheme,
     DateTime? raceStartedAt,
     int? raceDurationMs,
     DateTime? createdAt,
@@ -100,6 +105,7 @@ class TriRace {
       hostId: hostId ?? this.hostId,
       status: status ?? this.status,
       maxPlayers: maxPlayers ?? this.maxPlayers,
+      colorTheme: colorTheme ?? this.colorTheme,
       raceStartedAt: clearRaceStartedAt ? null : (raceStartedAt ?? this.raceStartedAt),
       raceDurationMs: clearRaceDurationMs ? null : (raceDurationMs ?? this.raceDurationMs),
       createdAt: createdAt ?? this.createdAt,
@@ -138,6 +144,7 @@ class TriRaceParticipant {
   final String username;
   final DateTime joinedAt;
   final String avatarColor;
+  final String? avatarColorEnd;
   final double? speedSeed;
   final int? finishTimeMs;
   final int? placement;
@@ -148,6 +155,7 @@ class TriRaceParticipant {
     required this.username,
     required this.joinedAt,
     required this.avatarColor,
+    this.avatarColorEnd,
     this.speedSeed,
     this.finishTimeMs,
     this.placement,
@@ -160,6 +168,7 @@ class TriRaceParticipant {
       username: map['username'] as String? ?? '',
       joinedAt: _parseTimestamp(map['joinedAt']),
       avatarColor: map['avatarColor'] as String? ?? '#FFFFFF',
+      avatarColorEnd: map['avatarColorEnd'] as String?,
       speedSeed: (map['speedSeed'] as num?)?.toDouble(),
       finishTimeMs: map['finishTimeMs'] as int?,
       placement: map['placement'] as int?,
@@ -172,6 +181,7 @@ class TriRaceParticipant {
       'username': username,
       'joinedAt': Timestamp.fromDate(joinedAt),
       'avatarColor': avatarColor,
+      if (avatarColorEnd != null) 'avatarColorEnd': avatarColorEnd,
       if (speedSeed != null) 'speedSeed': speedSeed,
       if (finishTimeMs != null) 'finishTimeMs': finishTimeMs,
       if (placement != null) 'placement': placement,
@@ -184,12 +194,14 @@ class TriRaceParticipant {
     String? username,
     DateTime? joinedAt,
     String? avatarColor,
+    String? avatarColorEnd,
     double? speedSeed,
     int? finishTimeMs,
     int? placement,
     bool clearSpeedSeed = false,
     bool clearFinishTimeMs = false,
     bool clearPlacement = false,
+    bool clearAvatarColorEnd = false,
   }) {
     return TriRaceParticipant(
       id: id ?? this.id,
@@ -197,6 +209,7 @@ class TriRaceParticipant {
       username: username ?? this.username,
       joinedAt: joinedAt ?? this.joinedAt,
       avatarColor: avatarColor ?? this.avatarColor,
+      avatarColorEnd: clearAvatarColorEnd ? null : (avatarColorEnd ?? this.avatarColorEnd),
       speedSeed: clearSpeedSeed ? null : (speedSeed ?? this.speedSeed),
       finishTimeMs: clearFinishTimeMs ? null : (finishTimeMs ?? this.finishTimeMs),
       placement: clearPlacement ? null : (placement ?? this.placement),

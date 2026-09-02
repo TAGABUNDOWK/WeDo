@@ -56,6 +56,35 @@ exports.scheduledSessionCleanup = functions.pubsub
     await cleanupExpiredSessions();
   });
 
+// ──────────────────── Abandoned Lobby Cleanup (runs every 1 minute) ────────────────────
+
+async function cleanupAbandonedLobbies() {
+  const now = new Date();
+  const staleThreshold = new Date(now.getTime() - 5 * 60 * 1000); // 5 minutes ago
+
+  const staleLobbies = await db.collection('sessions')
+    .where('status', '==', 'lobby')
+    .where('hostLastSeen', '<=', staleThreshold)
+    .limit(50)
+    .get();
+
+  if (staleLobbies.empty) return;
+
+  const batch = db.batch();
+  for (const doc of staleLobbies.docs) {
+    batch.update(doc.ref, { status: 'cancelled' });
+  }
+  await batch.commit();
+  console.log(`Auto-cancelled ${staleLobbies.size} abandoned lobbies`);
+}
+
+exports.scheduledLobbyCleanup = functions.pubsub
+  .schedule('every 1 minutes')
+  .timeZone('Asia/Manila')
+  .onRun(async (context) => {
+    await cleanupAbandonedLobbies();
+  });
+
 // ──────────────────── Session Cancelled Notification (sends FCM when session is cancelled) ────────────────────
 
 exports.onSessionCancelled = functions.firestore

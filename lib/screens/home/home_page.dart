@@ -5,9 +5,9 @@ import 'package:flutter/material.dart';
 import '../account/account_screen.dart';
 import '../friends/friends_page.dart';
 import '../session/session_entry_screen.dart';
-import '../session/create_session_screen.dart';
 import '../../features/spin_wheel/screens/wheel_screen.dart';
 import '../tri_race/tri_race_entry_screen.dart';
+import '../games/all_games_screen.dart';
 import '../chat/chat_tab.dart';
 import '../../widgets/animated_background.dart';
 import '../../services/auth/user_service.dart';
@@ -31,6 +31,7 @@ class _HomePageState extends State<HomePage> {
     FriendsPage(),
     SessionEntryScreen(),
     AccountScreen(),
+    AllGamesScreen(),
   ];
 
   static const _activeColor = Color(0xFFFE4EF0);
@@ -296,7 +297,7 @@ class _BlobNavBarState extends State<BlobNavBar>
                   isMenuOpen: _isMenuOpen,
                   activeColor: widget.activeColor,
                   inactiveColor: widget.inactiveColor,
-                  onTap: () => widget.onTap(3),
+                  onTap: () => widget.onTap(5),
                   onLongPress: _toggleMenu,
                 ),
               ),
@@ -316,41 +317,12 @@ class _BlobNavBarState extends State<BlobNavBar>
                           clipBehavior: Clip.none,
                           children: [
                             Positioned(
-                              left: 8,
+                              left: 36,
                               bottom: 20 * _menuScale.value,
                               child: Transform.translate(
                                 offset: Offset(0, 30 * (1 - _menuScale.value)),
                                 child: _PopupCircle(
-                                  icon: 'assets/icons/bolt.png',
-                                  onTap: () => _onChoiceTap(null),
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              left: 68,
-                              bottom: 40 * _menuScale.value,
-                              child: Transform.translate(
-                                offset: Offset(0, 20 * (1 - _menuScale.value)),
-                                child: _PopupCircle(
-                                  icon: 'assets/icons/punch.png',
-                                  onTap: () => _onChoiceTap(() {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            const CreateSessionScreen(),
-                                      ),
-                                    );
-                                  }),
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              left: 128,
-                              bottom: 40 * _menuScale.value,
-                              child: Transform.translate(
-                                offset: Offset(0, 20 * (1 - _menuScale.value)),
-                                child: _PopupCircle(
-                                  icon: 'assets/icons/cards.png', // TODO: replace with trirace.png
+                                  icon: 'assets/icons/racing-flag.png',
                                   onTap: () => _onChoiceTap(() {
                                     Navigator.of(context).push(
                                       MaterialPageRoute(
@@ -363,7 +335,25 @@ class _BlobNavBarState extends State<BlobNavBar>
                               ),
                             ),
                             Positioned(
-                              right: 8,
+                              left: 94,
+                              bottom: 40 * _menuScale.value,
+                              child: Transform.translate(
+                                offset: Offset(0, 20 * (1 - _menuScale.value)),
+                                child: _PopupCircle(
+                                  icon: 'assets/icons/punch.png',
+                                  onTap: () => _onChoiceTap(() {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const SessionEntryScreen(),
+                                      ),
+                                    );
+                                  }),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              right: 36,
                               bottom: 20 * _menuScale.value,
                               child: Transform.translate(
                                 offset: Offset(0, 30 * (1 - _menuScale.value)),
@@ -1621,7 +1611,13 @@ class _NowPlayingSection extends StatelessWidget {
                 ),
               ),
               GestureDetector(
-                onTap: () {},
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const AllGamesScreen(),
+                    ),
+                  );
+                },
                 child: const Text(
                   'See all',
                   style: TextStyle(

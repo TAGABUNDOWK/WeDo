@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import '../../models/tri_race_entity.dart';
 import '../../utils/constants.dart';
 
@@ -7,14 +8,25 @@ class TriRaceService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   static const _palette = [
-    '#FF6B6B',
-    '#4ECDC4',
-    '#45B7D1',
-    '#96CEB4',
-    '#FFEAA7',
-    '#DDA0DD',
-    '#98D8C8',
-    '#F7DC6F',
+    '#FF4444',
+    '#3366FF',
+    '#33AA33',
+    '#FF8800',
+    '#9933FF',
+    '#FFD700',
+    '#FF3399',
+    '#00BBDD',
+  ];
+
+  static const _gradientPalette = [
+    ['#FF6B6B', '#FF8E53'],
+    ['#4ECDC4', '#44B09E'],
+    ['#45B7D1', '#667eea'],
+    ['#96CEB4', '#88D8B0'],
+    ['#FFEAA7', '#FDCB6E'],
+    ['#DDA0DD', '#C77DFF'],
+    ['#98D8C8', '#7FDBDA'],
+    ['#F7DC6F', '#F39C12'],
   ];
 
   CollectionReference get _triRaces =>
@@ -45,6 +57,7 @@ class TriRaceService {
     required String hostId,
     required String hostName,
     int maxPlayers = 4,
+    String colorTheme = 'solid',
   }) async {
     try {
       final code = await _generateUniqueCode();
@@ -55,6 +68,7 @@ class TriRaceService {
         'hostId': hostId,
         'status': TriRaceStatus.lobby.value,
         'maxPlayers': maxPlayers,
+        'colorTheme': colorTheme,
         'createdAt': Timestamp.fromDate(now),
         'invitedUserIds': [],
         'participantUids': [],
@@ -103,17 +117,27 @@ class TriRaceService {
       if (!raceDoc.exists) throw const TriRaceException('Race not found.');
       final raceData = raceDoc.data() as Map<String, dynamic>;
       final participantUids = (raceData['participantUids'] as List?)?.cast<String>() ?? [];
+      final colorTheme = raceData['colorTheme'] as String? ?? 'solid';
       final colorIndex = participantUids.length % _palette.length;
+
       final avatarColor = _palette[colorIndex];
+      final String? avatarColorEnd = colorTheme == 'gradient'
+          ? _gradientPalette[colorIndex][1]
+          : null;
 
       final batch = _db.batch();
 
-      batch.set(participantDoc, {
+      final participantData = <String, dynamic>{
         'userId': userId,
         'username': userName,
         'joinedAt': FieldValue.serverTimestamp(),
         'avatarColor': avatarColor,
-      });
+      };
+      if (avatarColorEnd != null) {
+        participantData['avatarColorEnd'] = avatarColorEnd;
+      }
+
+      batch.set(participantDoc, participantData);
 
       batch.update(_triRaces.doc(raceId), {
         'participantUids': FieldValue.arrayUnion([userId]),
@@ -229,7 +253,8 @@ class TriRaceService {
 
       results.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return results.take(limit).toList();
-    } catch (_) {
+    } catch (e) {
+      debugPrint('getUserCompletedTriRaces error: $e');
       return [];
     }
   }
@@ -328,17 +353,26 @@ class TriRaceService {
       final botNumber = participantUids.where((uid) => uid.startsWith('bot_')).length + 1;
       final botId = 'bot_${DateTime.now().millisecondsSinceEpoch.toRadixString(36).substring(0, 6)}';
       final botName = 'Bot $botNumber';
+      final colorTheme = raceData['colorTheme'] as String? ?? 'solid';
       final colorIndex = participantUids.length % _palette.length;
       final avatarColor = _palette[colorIndex];
+      final String? avatarColorEnd = colorTheme == 'gradient'
+          ? _gradientPalette[colorIndex][1]
+          : null;
 
       final batch = _db.batch();
 
-      batch.set(_participants(raceId).doc(botId), {
+      final botData = <String, dynamic>{
         'userId': botId,
         'username': botName,
         'joinedAt': FieldValue.serverTimestamp(),
         'avatarColor': avatarColor,
-      });
+      };
+      if (avatarColorEnd != null) {
+        botData['avatarColorEnd'] = avatarColorEnd;
+      }
+
+      batch.set(_participants(raceId).doc(botId), botData);
 
       batch.update(_triRaces.doc(raceId), {
         'participantUids': FieldValue.arrayUnion([botId]),

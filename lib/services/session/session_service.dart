@@ -91,6 +91,7 @@ class SessionService {
         'createdAt': Timestamp.fromDate(now),
         'expiresAt': Timestamp.fromDate(expiresAt),
         'deleteAfter': Timestamp.fromDate(deleteAfter),
+        'hostLastSeen': FieldValue.serverTimestamp(),
       };
 
       await _sessions.doc(code).set(sessionData);
@@ -293,6 +294,15 @@ class SessionService {
     } on FirebaseException catch (e) {
       throw SessionException('Failed to cancel session: ${e.message}');
     }
+  }
+
+  /// Updates the host's last-seen timestamp so participants know the host is present.
+  Future<void> updateHostLastSeen(String sessionId) async {
+    try {
+      await _sessions.doc(sessionId).update({
+        'hostLastSeen': FieldValue.serverTimestamp(),
+      });
+    } on FirebaseException catch (_) {}
   }
 
   /// Writes a participant's completion data when they finish the swiping game.
