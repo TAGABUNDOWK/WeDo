@@ -723,7 +723,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                               );
                             }
 
-<<<<<<< HEAD
                           if (msg.type == MessageType.image &&
                               msg.imageUrl != null) {
                             return MessageBubble(
@@ -822,7 +821,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             if (groupLinkMatch != null) {
                               return GroupInviteMessageCard(
                                 groupId: groupLinkMatch.group(1)!,
-=======
                             if (msg.type == MessageType.invite &&
                                 msg.activityId != null) {
                               if (msg.activityType == 'triRace') {
@@ -837,7 +835,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                               return InviteMessageCard(
                                 sessionId: msg.activityId!,
                                 content: msg.content,
->>>>>>> 392a151 (Phase 11: Topic Frame and Minor Fixes)
                                 isMe: isMe,
                                 senderName: isMe ? null : displayName,
                                 time: formatChatTime(msg.createdAt),
@@ -956,7 +953,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             );
                           }
 
-<<<<<<< HEAD
                           return MessageBubble(
                             content: msg.content,
                             isMe: isMe,
@@ -1014,21 +1010,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                       },
                     );
                   },
-=======
-                          if (showDateSeparator) {
-                            return Column(
-                              children: [
-                                DateSeparator(timestamp: msg.createdAt),
-                                buildMessage(),
-                              ],
-                            );
-                          }
-                          return buildMessage();
-                        },
-                      );
-                    },
-                  ),
->>>>>>> 392a151 (Phase 11: Topic Frame and Minor Fixes)
                 ),
                 if (_newMessageCount > 0)
                   Positioned(

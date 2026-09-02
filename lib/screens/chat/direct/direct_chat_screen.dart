@@ -657,7 +657,6 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                               );
                             }
 
-<<<<<<< HEAD
                       if (msg.type == MessageType.event && msg.refId != null) {
                         final evt = _events[msg.refId];
                         return MessageBubble(
@@ -805,12 +804,6 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                             if (groupLinkMatch != null) {
                               return GroupInviteMessageCard(
                                 groupId: groupLinkMatch.group(1)!,
-=======
-                            if (msg.type == MessageType.poll &&
-                                msg.refId != null) {
-                              return MessageBubble(
-                                content: msg.content,
->>>>>>> 392a151 (Phase 11: Topic Frame and Minor Fixes)
                                 isMe: isMe,
                                 senderName: null,
                                 time: formatChatTime(msg.createdAt),
@@ -943,7 +936,6 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                             );
                           }
 
-<<<<<<< HEAD
                           return MessageBubble(
                             content: msg.content,
                             isMe: isMe,
@@ -995,21 +987,6 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                       },
                     );
                   },
-=======
-                          if (showDateSeparator) {
-                            return Column(
-                              children: [
-                                DateSeparator(timestamp: msg.createdAt),
-                                buildMessage(),
-                              ],
-                            );
-                          }
-                          return buildMessage();
-                        },
-                      );
-                    },
-                  ),
->>>>>>> 392a151 (Phase 11: Topic Frame and Minor Fixes)
                 ),
                 if (_newMessageCount > 0)
                   Positioned(
