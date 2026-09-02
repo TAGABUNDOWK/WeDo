@@ -27,9 +27,9 @@ final _games = [
     title: 'PickFight',
     imagePath: 'assets/images/Flashcards.png',
     instructions:
-        'Compete head-to-head by swiping through flashcards. Each round, both players '
-        'pick their favorite card. The card with the most votes wins the round. '
-        'The player who wins the most rounds takes the victory!',
+        'Swipe away the card you don’t want! '
+        'Be quick—your choice needs to be protected! '
+        'PickFight is a fun and interactive card-swiping game that helps you decide.',
     screenBuilder: _pickFightBuilder,
   ),
   _GameData(
@@ -77,7 +77,7 @@ class AllGamesScreen extends StatelessWidget {
                   style: TextStyle(
                     fontFamily: _fontFamily,
                     fontSize: 26,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     color: Colors.white,
                   ),
                 ),
@@ -231,8 +231,9 @@ class _GameDetailPopupContent extends StatelessWidget {
               style: const TextStyle(
                 fontFamily: _fontFamily,
                 fontSize: 20,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 color: Colors.white,
+                decoration: TextDecoration.none,
               ),
             ),
             const SizedBox(height: 12),
@@ -308,13 +309,14 @@ class _GameDetailPopupContent extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
+                            Text(
                               'Game instructions:',
                               style: TextStyle(
                                 fontFamily: _fontFamily,
                                 fontSize: 14,
-                                fontWeight: FontWeight.w700,
+                                fontWeight: FontWeight.w500,
                                 color: Colors.white,
+                                decoration: TextDecoration.none,
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -326,6 +328,7 @@ class _GameDetailPopupContent extends StatelessWidget {
                                 fontWeight: FontWeight.w400,
                                 color: Colors.white.withValues(alpha: 0.8),
                                 height: 1.5,
+                                decoration: TextDecoration.none,
                               ),
                             ),
                           ],
@@ -368,8 +371,8 @@ class _GameDetailPopupContent extends StatelessWidget {
                             style: TextStyle(
                               fontFamily: _fontFamily,
                               fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.2,
+fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
                             ),
                           ),
                         ),
