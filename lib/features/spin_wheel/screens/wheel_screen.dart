@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../widgets/animated_background.dart';
 import '../models/wheel_option.dart';
 import '../data/wheel_options_store.dart';
+import '../data/wheel_palette.dart';
 import '../widgets/spin_wheel_painter.dart';
 import '../widgets/wheel_option_chip.dart';
 import '../widgets/options_editor_sheet.dart';
@@ -16,25 +17,22 @@ class WheelScreen extends StatefulWidget {
 }
 
 class _WheelScreenState extends State<WheelScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final _optionsStore = WheelOptionsStore();
   late AnimationController _spinController;
   late Animation<double> _spinAnimation;
+  late AnimationController _bounceController;
+  late Animation<double> _bounceAnimation;
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
 
   List<WheelOption> _options = [];
   bool _isSpinning = false;
   double _currentRotation = 0;
 
-  static const _wheelColors = [
-    Color(0xFF6D28D9),
-    Color(0xFF7C3AED),
-    Color(0xFF8B5CF6),
-    Color(0xFFA78BFA),
-    Color(0xFF9333EA),
-    Color(0xFFC026D3),
-    Color(0xFFD946EF),
-    Color(0xFF5B21B6),
-  ];
+  Color _getColorForIndex(int index) {
+    return WheelPalette.colorForIndex(index, total: _options.length);
+  }
 
   @override
   void initState() {
@@ -64,6 +62,37 @@ class _WheelScreenState extends State<WheelScreen>
       }
     });
 
+    // Pointer bounce animation
+    _bounceController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
+    _bounceAnimation = Tween<double>(begin: 1.0, end: 1.3).animate(
+      CurvedAnimation(
+        parent: _bounceController,
+        curve: Curves.elasticOut,
+      ),
+    );
+    _bounceController.addListener(() {
+      setState(() {});
+    });
+
+    // Hub idle pulse animation
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.08).animate(
+      CurvedAnimation(
+        parent: _pulseController,
+        curve: Curves.easeInOut,
+      ),
+    );
+    _pulseController.addListener(() {
+      setState(() {});
+    });
+    _pulseController.repeat(reverse: true);
+
     _loadSavedOptions();
   }
 
@@ -92,11 +121,9 @@ class _WheelScreenState extends State<WheelScreen>
   @override
   void dispose() {
     _spinController.dispose();
+    _bounceController.dispose();
+    _pulseController.dispose();
     super.dispose();
-  }
-
-  Color _getColorForIndex(int index) {
-    return _wheelColors[index % _wheelColors.length];
   }
 
   void _addDefaultOptions() {
@@ -115,6 +142,9 @@ class _WheelScreenState extends State<WheelScreen>
     if (_isSpinning || _options.length <= 1) return;
 
     setState(() => _isSpinning = true);
+
+    // Pause idle pulse during spin
+    _pulseController.stop();
 
     // Pick winner first
     final winningIndex = math.Random().nextInt(_options.length);
@@ -163,6 +193,14 @@ class _WheelScreenState extends State<WheelScreen>
     _currentRotation = _spinAnimation.value;
 
     setState(() => _isSpinning = false);
+
+    // Trigger pointer bounce
+    _bounceController.forward(from: 0).then((_) {
+      _bounceController.reverse();
+    });
+
+    // Resume idle pulse
+    _pulseController.repeat(reverse: true);
 
     // Capture index before clearing
     final winnerIdx = _pendingWinningIndex!;
@@ -255,17 +293,38 @@ class _WheelScreenState extends State<WheelScreen>
                   child: GestureDetector(
                     onTap: (_isSpinning || _options.length <= 1) ? null : _spin,
                     child: AnimatedBuilder(
-                      animation: _spinAnimation,
+                      animation: Listenable.merge([
+                        _spinAnimation,
+                        _bounceAnimation,
+                        _pulseAnimation,
+                      ]),
                       builder: (context, _) {
-                        return SizedBox(
+                        return Container(
                           width: 320,
                           height: 320,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+                                blurRadius: 40,
+                                spreadRadius: 8,
+                              ),
+                              BoxShadow(
+                                color: const Color(0xFFFE4EF0).withValues(alpha: 0.15),
+                                blurRadius: 60,
+                                spreadRadius: 4,
+                              ),
+                            ],
+                          ),
                           child: CustomPaint(
                             painter: SpinWheelPainter(
                               options: _options,
                               rotation: _isSpinning
                                   ? _spinAnimation.value
                                   : _currentRotation,
+                              pointerScale: _bounceAnimation.value,
+                              hubScale: _pulseAnimation.value,
                             ),
                           ),
                         );

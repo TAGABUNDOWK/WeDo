@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/wheel_option.dart';
+import '../data/wheel_palette.dart';
 
 class SpinResultSheet extends StatefulWidget {
   final WheelOption winningOption;
@@ -64,16 +65,9 @@ class _SpinResultSheetState extends State<SpinResultSheet>
 
     _particles = List.generate(24, (i) {
       final rng = math.Random(i);
+      final palette = WheelPalette.generate(7);
       return _Particle(
-        color: [
-          const Color(0xFF6D28D9),
-          const Color(0xFF7C3AED),
-          const Color(0xFF8B5CF6),
-          const Color(0xFFA78BFA),
-          const Color(0xFFC026D3),
-          const Color(0xFFD946EF),
-          const Color(0xFFFE4EF0),
-        ][rng.nextInt(7)],
+        color: palette[rng.nextInt(7)],
         angle: rng.nextDouble() * 2 * math.pi,
         speed: 80 + rng.nextDouble() * 160,
         size: 4 + rng.nextDouble() * 8,

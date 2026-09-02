@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/wheel_option.dart';
+import '../data/wheel_palette.dart';
 
 class OptionsEditorSheet extends StatefulWidget {
   final List<WheelOption> initialOptions;
@@ -36,17 +37,6 @@ class _OptionsEditorSheetState extends State<OptionsEditorSheet> {
   final _addController = TextEditingController();
   final _addFocusNode = FocusNode();
 
-  static const _wheelColors = [
-    Color(0xFF6D28D9),
-    Color(0xFF7C3AED),
-    Color(0xFF8B5CF6),
-    Color(0xFFA78BFA),
-    Color(0xFF9333EA),
-    Color(0xFFC026D3),
-    Color(0xFFD946EF),
-    Color(0xFF5B21B6),
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -61,7 +51,7 @@ class _OptionsEditorSheetState extends State<OptionsEditorSheet> {
   }
 
   Color _getColorForIndex(int index) {
-    return _wheelColors[index % _wheelColors.length];
+    return WheelPalette.colorForIndex(index, total: _options.length);
   }
 
   void _addOption() {
