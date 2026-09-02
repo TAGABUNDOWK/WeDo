@@ -86,7 +86,6 @@ class CallService {
         .where('status', isEqualTo: 'active')
         .get();
 
-    final callDoc = await _calls.doc(callId).get();
     final createdBy = callDoc.data()?['createdBy'] as String?;
 
     if (activeParticipants.docs.isEmpty || uid == createdBy) {
