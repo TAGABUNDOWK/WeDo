@@ -10,6 +10,7 @@ import '../../services/profile/profile_service.dart';
 import '../../models/user_entity.dart';
 import '../../widgets/animated_background.dart';
 import '../../widgets/arc_avatar_picker.dart';
+import 'edit_profile_page.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -287,6 +288,60 @@ class _AccountScreenState extends State<AccountScreen>
                           _buildTopDecisionsCard(context),
                           const SizedBox(height: 12),
                           _buildAchievementsCard(context),
+                          const SizedBox(height: 24),
+                          SizedBox(
+                            width: double.infinity,
+                            child: GestureDetector(
+                              onTap: () async {
+                                final confirmed = await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    backgroundColor: const Color(0xFF1E1233),
+                                    title: const Text('Log out',
+                                        style: TextStyle(color: Colors.white)),
+                                    content: const Text('Are you sure you want to log out?',
+                                        style: TextStyle(color: Colors.white70)),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(ctx, false),
+                                        child: const Text('Cancel',
+                                            style: TextStyle(color: Colors.white54)),
+                                      ),
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(ctx, true),
+                                        child: const Text('Log out',
+                                            style: TextStyle(color: Color(0xFFFF6B6B))),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (confirmed == true) {
+                                  await _auth.signOut();
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFF6B6B).withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: const Color(0xFFFF6B6B).withValues(alpha: 0.25),
+                                  ),
+                                ),
+                                child: const Center(
+                                  child: Text(
+                                    'Log out',
+                                    style: TextStyle(
+                                      fontFamily: 'PlusJakartaSans',
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFFFF6B6B),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -508,14 +563,43 @@ class _AccountScreenState extends State<AccountScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                _user!.displayName,
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                  fontFamily: 'Poppins',
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _user!.displayName,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                        fontFamily: 'Poppins',
+                      ),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () async {
+                      final updated = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const EditProfilePage(),
+                        ),
+                      );
+                      if (updated == true) _loadUser();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.edit,
+                        color: Color(0xFFFE4EF0),
+                        size: 16,
+                      ),
+                    ),
+                  ),
+                ],
               ),
               if (_user!.username.isNotEmpty) ...[
                 const SizedBox(height: 0),

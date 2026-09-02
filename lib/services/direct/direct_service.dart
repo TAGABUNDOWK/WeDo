@@ -26,6 +26,12 @@ class DirectService {
     return UserEntity.fromJson(doc.data()!);
   }
 
+  Stream<UserEntity?> getUserStream(String uid) {
+    return _db.collection(AppConstants.usersCollection).doc(uid).snapshots().map(
+      (doc) => doc.exists ? UserEntity.fromJson(doc.data()!) : null,
+    );
+  }
+
   static String chatIdFor(String uidA, String uidB) {
     final ids = [uidA, uidB]..sort();
     return ids.join('_');

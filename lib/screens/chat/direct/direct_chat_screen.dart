@@ -8,6 +8,7 @@ import '../../../models/event.dart';
 import '../../../models/chat_theme.dart';
 import '../../../models/message.dart';
 import '../../../models/poll.dart';
+import '../../../models/user_entity.dart';
 import '../../../services/direct/direct_service.dart';
 import '../../../services/event/event_service.dart';
 import '../../../services/poll/poll_service.dart';
@@ -51,6 +52,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   final _imagePicker = ImagePicker();
   String _otherName = '';
   String? _otherPhotoUrl;
+  String? _otherAvatarAsset;
   Map<String, String> _nicknames = {};
   bool _isUploading = false;
   final Map<String, ChatEvent> _events = {};
@@ -60,11 +62,21 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   bool _isAtBottom = true;
   int _lastMessageCount = 0;
   late Stream<List<ChatMessage>> _messagesStream;
+  late Stream<UserEntity?> _otherUserStream;
 
   @override
   void initState() {
     super.initState();
     _messagesStream = _directService.getMessagesStream(widget.chatId);
+    _otherUserStream = _directService.getUserStream(widget.otherUid);
+    _otherUserStream.listen((user) {
+      if (!mounted) return;
+      setState(() {
+        _otherName = user?.displayName ?? widget.otherUid;
+        _otherPhotoUrl = user?.photoUrl;
+        _otherAvatarAsset = user?.avatarAsset;
+      });
+    });
     _loadData();
     if (_currentUser != null) {
       _directService.markMessagesAsRead(widget.chatId, _currentUser.uid);
@@ -73,7 +85,6 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   }
 
   Future<void> _loadData() async {
-    final user = await _directService.getUser(widget.otherUid);
     final nicknames = await _directService.getNicknames(widget.chatId);
     final theme = await ChatThemeResolver().resolve(
       widget.chatId,
@@ -81,8 +92,6 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     );
     if (mounted) {
       setState(() {
-        _otherName = user?.displayName ?? widget.otherUid;
-        _otherPhotoUrl = user?.photoUrl;
         _nicknames = nicknames;
         _chatTheme = theme;
       });
@@ -408,31 +417,40 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       backgroundColor: t.background,
       appBar: AppBar(
         backgroundColor: t.appBarBackground,
-        title: Row(
-          children: [
-            CircleAvatar(
-              radius: 14,
-              backgroundColor: Colors.white.withValues(alpha: 0.2),
-              backgroundImage:
-                  _otherPhotoUrl != null && _otherPhotoUrl!.isNotEmpty
-                  ? NetworkImage(_otherPhotoUrl!)
-                  : null,
-              child: _otherPhotoUrl == null || _otherPhotoUrl!.isEmpty
-                  ? const Icon(Icons.person, color: Colors.white, size: 16)
-                  : null,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                _getDisplayName(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
+        title: StreamBuilder<UserEntity?>(
+          stream: _otherUserStream,
+          builder: (context, snapshot) {
+            final user = snapshot.data;
+            final name = _nicknames[widget.otherUid] ??
+                user?.displayName ??
+                widget.otherUid;
+            final photoUrl = user?.photoUrl;
+            return Row(
+              children: [
+                CircleAvatar(
+                  radius: 14,
+                  backgroundColor: Colors.white.withValues(alpha: 0.2),
+                  backgroundImage: photoUrl != null && photoUrl.isNotEmpty
+                      ? NetworkImage(photoUrl)
+                      : null,
+                  child: photoUrl == null || photoUrl.isEmpty
+                      ? const Icon(Icons.person, color: Colors.white, size: 16)
+                      : null,
                 ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            );
+          },
         ),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
@@ -644,6 +662,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                                   : null,
                               onDeleteForMe: () => _deleteMessageForMe(msg),
                               senderPhotoUrl: !isMe ? _otherPhotoUrl : null,
+                              senderAvatarAsset: !isMe ? _otherAvatarAsset : null,
                               isRead: isMe && msg.isRead,
                             );
                           }
@@ -668,6 +687,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                                   : null,
                               onDeleteForMe: () => _deleteMessageForMe(msg),
                               senderPhotoUrl: !isMe ? _otherPhotoUrl : null,
+                              senderAvatarAsset: !isMe ? _otherAvatarAsset : null,
                               isRead: isMe && msg.isRead,
                             );
                           }
@@ -724,6 +744,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                                 : null,
                             onDeleteForMe: () => _deleteMessageForMe(msg),
                             senderPhotoUrl: !isMe ? _otherPhotoUrl : null,
+                              senderAvatarAsset: !isMe ? _otherAvatarAsset : null,
                             isRead: isMe && msg.isRead,
                           );
                         }

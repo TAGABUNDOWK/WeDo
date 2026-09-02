@@ -11,6 +11,14 @@ class AppColors {
   static const Color divider = Color(0x1AFFFFFF);
   static const Color neonMagenta = Color(0xFFd100d1);
   static const Color eventCardBg = Color(0xCC211635);
+
+  // Midnight Pulse design system
+  static const Color deepIndigo = Color(0xFF180D2C);
+  static const Color electricViolet = Color(0xFF7D56F5);
+  static const Color softLavender = Color(0xFFB8A0FF);
+  static const Color glassSurface = Color(0x33211635);
+  static const Color glassSurfaceLight = Color(0x1AFFFFFF);
+  static const Color textLightGrey = Color(0xFFB8A9D4);
 }
 
 class AppConstants {

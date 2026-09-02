@@ -16,6 +16,12 @@ class GroupService {
     return UserEntity.fromJson(doc.data()!);
   }
 
+  Stream<UserEntity?> getUserStream(String uid) {
+    return _db.collection(AppConstants.usersCollection).doc(uid).snapshots().map(
+      (doc) => doc.exists ? UserEntity.fromJson(doc.data()!) : null,
+    );
+  }
+
   CollectionReference<Map<String, dynamic>> get _groups =>
       _db.collection(AppConstants.groupsCollection);
 
