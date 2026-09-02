@@ -50,7 +50,7 @@ class AppChatTheme {
   });
 
   static String _colorToHex(Color c) =>
-      '#${c.value.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
+      '#${c.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
 
   static Color _hexToColor(String hex) {
     hex = hex.replaceFirst('#', '');

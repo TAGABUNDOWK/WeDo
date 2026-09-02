@@ -120,4 +120,35 @@ class UserService {
       'fcm_token': token,
     });
   }
+
+  Future<bool> isUsernameTaken(String username, {String? excludeUid}) async {
+    final snap = await _db
+        .collection('users')
+        .where('username_lower', isEqualTo: username.toLowerCase())
+        .limit(1)
+        .get();
+    if (snap.docs.isEmpty) return false;
+    if (excludeUid != null) {
+      return snap.docs.first.id != excludeUid;
+    }
+    return true;
+  }
+
+  Future<void> updateUserProfile(
+    String userId, {
+    String? username,
+    String? displayName,
+  }) async {
+    final updates = <String, dynamic>{};
+    if (username != null) {
+      updates['username'] = username;
+      updates['username_lower'] = username.toLowerCase();
+    }
+    if (displayName != null) {
+      updates['display_name'] = displayName;
+    }
+    if (updates.isNotEmpty) {
+      await _db.collection('users').doc(userId).update(updates);
+    }
+  }
 }

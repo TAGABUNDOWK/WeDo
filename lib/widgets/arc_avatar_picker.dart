@@ -166,7 +166,7 @@ class _ArcAvatarPickerState extends State<ArcAvatarPicker>
                 builder: (context, constraints) {
                   final centerY = constraints.maxHeight / 2;
                   const centerXLeft = _visibleExtent - _radius;
-                  final frameCenterXLeft = _visibleExtent - _frameRadius;
+                  const frameCenterXLeft = _visibleExtent - _frameRadius;
                   final isRight = widget.side == ArcSide.right;
                   final centerX = isRight
                       ? constraints.maxWidth - frameCenterXLeft

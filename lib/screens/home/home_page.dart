@@ -34,7 +34,7 @@ class _HomePageState extends State<HomePage> {
     AllGamesScreen(),
   ];
 
-  static const _activeColor = Color(0xFFFE4EF0);
+  static const _activeColor = Color(0xFF7D56F5);
   static const _inactiveColor = Color(0x80FFFFFF);
 
   @override
@@ -108,7 +108,7 @@ class BlobNavBar extends StatefulWidget {
     required this.onTap,
   });
 
-  static const _iconColor = Color(0xFF7A4A8A);
+  static const _iconColor = Color(0x80FFFFFF);
 
   @override
   State<BlobNavBar> createState() => _BlobNavBarState();
@@ -189,6 +189,32 @@ class _BlobNavBarState extends State<BlobNavBar>
           child: Stack(
             clipBehavior: Clip.none,
             children: [
+              // ── Floating shadow behind the bar ──
+              Positioned(
+                left: leftX - 4,
+                top: popupSpace + (barH - capsuleH) / 2 - 4,
+                right: (w - rightX - sideW) - 4 + leftX - 4,
+                bottom: 0,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(28),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF7D56F5).withValues(alpha: 0.15),
+                        blurRadius: 30,
+                        spreadRadius: 4,
+                        offset: const Offset(0, 6),
+                      ),
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.25),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
               // ── Left hourglass connector ──
               Positioned(
                 left: leftX + sideW - 21,
@@ -468,14 +494,14 @@ class _CenterLogoButtonState extends State<_CenterLogoButton> {
                     end: Alignment.bottomRight,
                     colors: [
                       widget.isMenuOpen
-                          ? const Color(0xFFFF6BB5)
+                          ? const Color(0xFF9B7AFF)
                           : widget.isActive
-                          ? const Color(0xFFFF6BB5)
+                          ? const Color(0xFF9B7AFF)
                           : const Color(0xFF9A5AB0),
                       widget.isMenuOpen
-                          ? const Color(0xFF800DD8)
+                          ? const Color(0xFF5A3AD4)
                           : widget.isActive
-                          ? const Color(0xFF800DD8)
+                          ? const Color(0xFF5A3AD4)
                           : const Color(0xFF6A3A80),
                     ],
                   ),
@@ -483,9 +509,9 @@ class _CenterLogoButtonState extends State<_CenterLogoButton> {
                     BoxShadow(
                       color:
                           (widget.isMenuOpen
-                                  ? const Color(0xFFFE4EF0)
+                                  ? const Color(0xFF7D56F5)
                                   : widget.isActive
-                                  ? const Color(0xFFFE4EF0)
+                                  ? const Color(0xFF7D56F5)
                                   : const Color(0xFF7A4A8A))
                               .withValues(
                                 alpha: widget.isMenuOpen

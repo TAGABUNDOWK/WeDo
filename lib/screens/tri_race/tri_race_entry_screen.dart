@@ -248,11 +248,11 @@ class _TriRaceEntryScreenState extends State<TriRaceEntryScreen> {
                                 fillColor: Colors.white.withValues(alpha: 0.05),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: AppColors.glassBorder),
+                                  borderSide: const BorderSide(color: AppColors.glassBorder),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: AppColors.glassBorder),
+                                  borderSide: const BorderSide(color: AppColors.glassBorder),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
@@ -324,11 +324,11 @@ class _TriRaceEntryScreenState extends State<TriRaceEntryScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                _HowItWorkStep(number: '1', title: 'Create or Join', subtitle: 'Start a race or enter a 6-digit code'),
+                const _HowItWorkStep(number: '1', title: 'Create or Join', subtitle: 'Start a race or enter a 6-digit code'),
                 const SizedBox(height: 8),
-                _HowItWorkStep(number: '2', title: 'Invite Friends', subtitle: 'Share the code or send invites via chat'),
+                const _HowItWorkStep(number: '2', title: 'Invite Friends', subtitle: 'Share the code or send invites via chat'),
                 const SizedBox(height: 8),
-                _HowItWorkStep(number: '3', title: 'Race!', subtitle: 'Watch your triangles race to the finish'),
+                const _HowItWorkStep(number: '3', title: 'Race!', subtitle: 'Watch your triangles race to the finish'),
                 const SizedBox(height: 24),
 
                 // ── Recent Races ──

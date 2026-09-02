@@ -97,13 +97,13 @@ class _TriRacePreviewScreenState extends State<TriRacePreviewScreen> {
           }
 
           if (race.status == TriRaceStatus.started) {
-            return Center(
+            return const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)),
-                  const SizedBox(height: 12),
-                  const Text(
+                  SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)),
+                  SizedBox(height: 12),
+                  Text(
                     'Race in progress...',
                     style: TextStyle(color: Colors.white54, fontFamily: _fontFamily),
                   ),

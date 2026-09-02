@@ -294,7 +294,7 @@ class _DirectChatInfoScreenState extends State<DirectChatInfoScreen> {
                         trailing: Switch(
                           value: _isMuted,
                           onChanged: (_) => _toggleMute(),
-                          activeColor: const Color(0xFFFE4EF0),
+                          activeThumbColor: const Color(0xFFFE4EF0),
                         ),
                       ),
                     ],

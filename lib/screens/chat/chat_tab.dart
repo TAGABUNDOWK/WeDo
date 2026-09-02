@@ -21,6 +21,14 @@ class ChatTab extends StatefulWidget {
 class _ChatTabState extends State<ChatTab> {
   final _groupService = GroupService();
   final _directService = DirectService();
+  final Map<String, UserEntity?> _userCache = {};
+
+  Future<UserEntity?> _getCachedUser(String uid) async {
+    if (_userCache.containsKey(uid)) return _userCache[uid];
+    final user = await _directService.getUser(uid);
+    if (mounted) _userCache[uid] = user;
+    return user;
+  }
 
   void _showNewChatMenu() {
     showModalBottomSheet(
@@ -260,7 +268,7 @@ class _ChatTabState extends State<ChatTab> {
                               chat.lastMessageSenderId != currentUser.uid &&
                               !chat.lastMessageReadBy.contains(currentUser.uid);
                           return FutureBuilder<UserEntity?>(
-                            future: _directService.getUser(otherUid),
+                            future: _getCachedUser(otherUid),
                             builder: (context, userSnap) {
                               final user = userSnap.data;
                               return ChatTile(
@@ -273,6 +281,7 @@ class _ChatTabState extends State<ChatTab> {
                                 lastSenderId: chat.lastMessageSenderId,
                                 currentUserId: currentUser.uid,
                                 avatarUrl: user?.photoUrl,
+                                avatarAsset: user?.avatarAsset,
                                 onTap: () => _openDirectChat(chat.id, otherUid),
                               );
                             },

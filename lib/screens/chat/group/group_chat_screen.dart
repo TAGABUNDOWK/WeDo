@@ -48,6 +48,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   String? _groupPhotoUrl;
   Map<String, String> _nicknames = {};
   final Map<String, String> _memberPhotos = {};
+  final Map<String, String> _memberNames = {};
+  final Map<String, String> _memberAvatarAssets = {};
   List<String> _members = [];
   late Stream<GroupChat?> _groupStream;
   bool _isUploading = false;
@@ -79,21 +81,53 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       'group_chats',
     );
     if (group != null && mounted) {
+      final members = List<String>.from(group.members);
       setState(() {
         _groupName = group.name;
         _groupPhotoUrl = group.photoUrl;
         _nicknames = nicknames;
-        _members = List<String>.from(group.members);
+        _members = members;
         _chatTheme = theme;
       });
+      _preloadMemberProfiles(members);
     }
   }
 
+  Future<void> _preloadMemberProfiles(List<String> memberUids) async {
+    final futures = memberUids.map((uid) async {
+      final user = await _groupService.getUser(uid);
+      if (user != null && mounted) {
+        if (user.photoUrl != null && user.photoUrl!.isNotEmpty) {
+          _memberPhotos[uid] = user.photoUrl!;
+        }
+        if (user.avatarAsset != null && user.avatarAsset!.isNotEmpty) {
+          _memberAvatarAssets[uid] = user.avatarAsset!;
+        }
+        _memberNames[uid] = user.displayName.isNotEmpty
+            ? user.displayName
+            : user.username;
+      }
+    }).toList();
+    await Future.wait(futures);
+    if (mounted) setState(() {});
+  }
+
   Future<void> _loadMemberPhoto(String uid) async {
-    if (_memberPhotos.containsKey(uid)) return;
+    if (_memberPhotos.containsKey(uid) && _memberAvatarAssets.containsKey(uid)) return;
     final user = await _groupService.getUser(uid);
     if (user != null && mounted) {
-      setState(() => _memberPhotos[uid] = user.photoUrl ?? '');
+      if (user.photoUrl != null && user.photoUrl!.isNotEmpty) {
+        _memberPhotos[uid] = user.photoUrl!;
+      }
+      if (user.avatarAsset != null && user.avatarAsset!.isNotEmpty) {
+        _memberAvatarAssets[uid] = user.avatarAsset!;
+      }
+      if (user.displayName.isNotEmpty) {
+        _memberNames[uid] = user.displayName;
+      } else if (user.username.isNotEmpty) {
+        _memberNames[uid] = user.username;
+      }
+      setState(() {});
     }
   }
 
@@ -119,7 +153,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   String _getDisplayName(String uid, String fallback) {
-    return _nicknames[uid] ?? fallback;
+    return _nicknames[uid] ?? _memberNames[uid] ?? fallback;
   }
 
   @override
@@ -682,7 +716,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                                   : null,
                               onDeleteForMe: () => _deleteMessageForMe(msg),
                               senderPhotoUrl: !isMe
-                                  ? (_memberPhotos[msg.senderId] ?? '')
+                                  ? (_memberPhotos[msg.senderId]?.isNotEmpty == true ? _memberPhotos[msg.senderId] : null)
+                                  : null,
+                              senderAvatarAsset: !isMe
+                                  ? _memberAvatarAssets[msg.senderId]
                                   : null,
                               isRead: isMe && msg.isRead,
                             );
@@ -710,7 +747,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                                   : null,
                               onDeleteForMe: () => _deleteMessageForMe(msg),
                               senderPhotoUrl: !isMe
-                                  ? (_memberPhotos[msg.senderId] ?? '')
+                                  ? (_memberPhotos[msg.senderId]?.isNotEmpty == true ? _memberPhotos[msg.senderId] : null)
+                                  : null,
+                              senderAvatarAsset: !isMe
+                                  ? _memberAvatarAssets[msg.senderId]
                                   : null,
                               isRead: isMe && msg.isRead,
                             );
@@ -767,7 +807,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                                 : null,
                             onDeleteForMe: () => _deleteMessageForMe(msg),
                             senderPhotoUrl: !isMe
-                                ? (_memberPhotos[msg.senderId] ?? '')
+                                ? (_memberPhotos[msg.senderId]?.isNotEmpty == true ? _memberPhotos[msg.senderId] : null)
+                                : null,
+                            senderAvatarAsset: !isMe
+                                ? _memberAvatarAssets[msg.senderId]
                                 : null,
                             isRead: isMe && msg.isRead,
                           );

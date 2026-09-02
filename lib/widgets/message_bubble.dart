@@ -40,6 +40,7 @@ class MessageBubble extends StatefulWidget {
   final VoidCallback? onDeleteForEveryone;
   final VoidCallback? onDeleteForMe;
   final String? senderPhotoUrl;
+  final String? senderAvatarAsset;
   final bool isRead;
 
   const MessageBubble({
@@ -65,6 +66,7 @@ class MessageBubble extends StatefulWidget {
     this.onDeleteForEveryone,
     this.onDeleteForMe,
     this.senderPhotoUrl,
+    this.senderAvatarAsset,
     this.isRead = false,
   });
 
@@ -213,7 +215,9 @@ class _MessageBubbleState extends State<MessageBubble> {
 
     if (widget.audioUrl != null) {
       final showAvatarAudio = !widget.isMe && widget.isFirstInGroup;
+      final hasAssetAudio = widget.senderAvatarAsset != null && widget.senderAvatarAsset!.isNotEmpty;
       final hasPhotoAudio = widget.senderPhotoUrl != null && widget.senderPhotoUrl!.isNotEmpty;
+      final hasAvatarAudio = hasAssetAudio || hasPhotoAudio;
       final senderInitialAudio = (widget.senderName ?? '?').substring(0, 1).toUpperCase();
 
       return GestureDetector(
@@ -239,8 +243,12 @@ class _MessageBubbleState extends State<MessageBubble> {
                       child: CircleAvatar(
                         radius: 14,
                         backgroundColor: accent,
-                        backgroundImage: hasPhotoAudio ? NetworkImage(widget.senderPhotoUrl!) : null,
-                        child: hasPhotoAudio ? null : Text(
+                        backgroundImage: hasAssetAudio
+                            ? AssetImage(widget.senderAvatarAsset!)
+                            : hasPhotoAudio
+                                ? NetworkImage(widget.senderPhotoUrl!)
+                                : null,
+                        child: hasAvatarAudio ? null : Text(
                           senderInitialAudio,
                           style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w600),
                         ),
@@ -302,7 +310,9 @@ class _MessageBubbleState extends State<MessageBubble> {
     }
 
     final showAvatar = !widget.isMe && widget.isFirstInGroup;
+    final hasAsset = widget.senderAvatarAsset != null && widget.senderAvatarAsset!.isNotEmpty;
     final hasPhoto = widget.senderPhotoUrl != null && widget.senderPhotoUrl!.isNotEmpty;
+    final hasAvatar = hasAsset || hasPhoto;
     final senderInitial = (widget.senderName ?? '?').substring(0, 1).toUpperCase();
 
     return GestureDetector(
@@ -328,8 +338,12 @@ class _MessageBubbleState extends State<MessageBubble> {
                     child: CircleAvatar(
                       radius: 14,
                       backgroundColor: accent,
-                      backgroundImage: hasPhoto ? NetworkImage(widget.senderPhotoUrl!) : null,
-                      child: hasPhoto ? null : Text(
+                      backgroundImage: hasAsset
+                          ? AssetImage(widget.senderAvatarAsset!)
+                          : hasPhoto
+                              ? NetworkImage(widget.senderPhotoUrl!)
+                              : null,
+                      child: hasAvatar ? null : Text(
                         senderInitial,
                         style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w600),
                       ),
