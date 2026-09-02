@@ -1,7 +1,10 @@
 import 'dart:ui';
+import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../account/account_screen.dart';
 import '../friends/friends_page.dart';
 import '../session/session_entry_screen.dart';
@@ -1101,6 +1104,7 @@ class _HomeTabState extends State<_HomeTab> {
               const _NowPlayingSection(),
               const SizedBox(height: 28),
               const _StackedCards(),
+              const SizedBox(height: 120),
             ],
           ),
         ),
@@ -1354,7 +1358,7 @@ class _FeatureCarouselState extends State<_FeatureCarousel>
   int _currentIndex = 0;
   late final AnimationController _controller;
 
-  static const _autoScrollInterval = 100;
+  static const _autoScrollInterval = 10;
   static const _animDuration = Duration(milliseconds: 800);
 
   @override
@@ -1391,43 +1395,24 @@ class _FeatureCarouselState extends State<_FeatureCarousel>
   Widget build(BuildContext context) {
     final data = _featureCards[_currentIndex];
 
-    return GestureDetector(
-      onTap: () {
-        if (_currentIndex == 0) {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const SessionEntryScreen()),
-          );
-        } else if (_currentIndex == 1) {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const TriRaceEntryScreen()),
-          );
-        } else if (_currentIndex == 2) {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const WheelScreen()),
-          );
-        } else {
-          _advance();
-        }
+    return AnimatedSwitcher(
+      duration: _animDuration,
+      switchInCurve: Curves.easeInOut,
+      switchOutCurve: Curves.easeInOut,
+      transitionBuilder: (child, animation) {
+        final slideOffset = Tween<Offset>(
+          begin: const Offset(0.15, 0.0),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutQuint));
+        return SlideTransition(
+          position: slideOffset,
+          child: FadeTransition(opacity: animation, child: child),
+        );
       },
-      child: AnimatedSwitcher(
-        duration: _animDuration,
-        switchInCurve: Curves.easeInOut,
-        switchOutCurve: Curves.easeInOut,
-        transitionBuilder: (child, animation) {
-          final slideOffset = Tween<Offset>(
-            begin: const Offset(0.15, 0.0),
-            end: Offset.zero,
-          ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutQuint));
-          return SlideTransition(
-            position: slideOffset,
-            child: FadeTransition(opacity: animation, child: child),
-          );
-        },
-        child: _FeatureCarouselCard(
-          key: ValueKey(_currentIndex),
-          data: data,
-          showActionIcon: _currentIndex == 0,
-        ),
+      child: _FeatureCarouselCard(
+        key: ValueKey(_currentIndex),
+        data: data,
+        showActionIcon: _currentIndex == 0,
       ),
     );
   }
@@ -1801,6 +1786,7 @@ class _StackedCards extends StatefulWidget {
 class _StackedCardsState extends State<_StackedCards>
     with SingleTickerProviderStateMixin {
   int _userCount = 0;
+  int _selectedRating = 0;
   late final AnimationController _swapCtrl;
   late Animation<double> _leftOffsetX;
   late Animation<double> _leftAngle;
@@ -2003,12 +1989,277 @@ class _StackedCardsState extends State<_StackedCards>
       clipper: _SlantedCardClipper(slant: slant, cornerRadius: cornerR),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: CustomPaint(
-          size: cardSize,
-          painter: _BackGlassCardPainter(slant: slant),
+        child: Stack(
+          children: [
+            CustomPaint(
+              size: cardSize,
+              painter: _RateUsBackgroundPainter(slant: slant),
+            ),
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // ── Mascot placeholder ──
+                    _buildMascotPlaceholder(),
+                    const SizedBox(height: 10),
+                    // ── Heading ──
+                    const Text(
+                      'PLEASE RATE US',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    // ── Subtitle ──
+                    Text(
+                      'Enjoying WeDo? Your feedback\nhelps us grow and improve!',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        color: Colors.white.withValues(alpha: 0.75),
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    // ── Star rating ──
+                    _buildStarRating(),
+                    const SizedBox(height: 4),
+                    // ── Tap hint ──
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Transform(
+                          alignment: Alignment.center,
+                          transform: Matrix4.identity()..rotateZ(-math.pi / 4),
+                          child: const Icon(
+                            Icons.arrow_back,
+                            size: 12,
+                            color: Color(0xFFD100D1),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Text(
+                          'Tap a star to rate',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            fontStyle: FontStyle.italic,
+                            color: Color(0xFFD100D1),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    // ── Buttons ──
+                    Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => _launchAppStore(),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(24),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.35),
+                                  width: 1.2,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.edit_outlined,
+                                    size: 14,
+                                    color: Colors.white.withValues(alpha: 0.9),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'WRITE A REVIEW',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white.withValues(alpha: 0.9),
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              HapticFeedback.lightImpact();
+                              _onSwapTap();
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(24),
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFFFE4EF0), Color(0xFF800DD8)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                              ),
+                                child: const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.favorite_border,
+                                      size: 14,
+                                      color: Colors.white,
+                                    ),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      'MAYBE LATER',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    // ── Footer ──
+                    Text(
+                      'Thank you for being awesome! 💜',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 10,
+                        fontWeight: FontWeight.w400,
+                        color: Colors.white.withValues(alpha: 0.55),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  Widget _buildMascotPlaceholder() {
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
+      children: [
+        // Sparkle decorations
+        ...List.generate(5, (i) {
+          final angle = (i * 72) * math.pi / 180;
+          final radius = 28.0 + (i % 2) * 8;
+          return Positioned(
+            left: 40 + radius * math.cos(angle) - 4,
+            top: 20 + radius * math.sin(angle) - 4,
+            child: Icon(
+              i % 2 == 0 ? Icons.star : Icons.auto_awesome,
+              size: i % 2 == 0 ? 8 : 10,
+              color: const Color(0xFFFE4EF0),
+            ),
+          );
+        }),
+        // Heart bubble
+        Positioned(
+          right: 22,
+          top: 8,
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: const BoxDecoration(
+              color: Color(0xFFFE4EF0),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.favorite, size: 8, color: Colors.white),
+          ),
+        ),
+        // Mascot body (WeDo logo as placeholder)
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: const Color(0xFF800DD8),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFD100D1).withValues(alpha: 0.4),
+                blurRadius: 16,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Image.asset(
+            'assets/images/WeDo-Logo.png',
+            width: 28,
+            height: 28,
+            errorBuilder: (context, error, stackTrace) {
+              return const Icon(
+                Icons.casino,
+                color: Colors.white,
+                size: 24,
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStarRating() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(5, (index) {
+        final isSelected = index < _selectedRating;
+        return GestureDetector(
+          onTap: () {
+            HapticFeedback.lightImpact();
+            setState(() => _selectedRating = index + 1);
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Icon(
+              isSelected ? Icons.star_rounded : Icons.star_outline_rounded,
+              size: 40,
+              color: const Color(0xFFD100D1),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
+  Future<void> _launchAppStore() async {
+    const iosUrl = 'https://apps.apple.com/app/id000000000';
+    const androidUrl = 'https://play.google.com/store/apps/details?id=com.choosly.wedo';
+    final url = Theme.of(context).platform == TargetPlatform.iOS
+        ? Uri.parse(iosUrl)
+        : Uri.parse(androidUrl);
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
   }
 
   @override
@@ -2042,7 +2293,6 @@ class _StackedCardsState extends State<_StackedCards>
           child: Transform(
             alignment: Alignment.bottomCenter,
             transform: Matrix4.identity()
-              ..scaleByDouble(-1.0, 1.0, 1.0, 1.0)
               ..rotateZ(rightAng),
             child: _buildRightCard(slant, cornerR, cardSize),
           ),
@@ -2128,33 +2378,35 @@ class _GlassCardPainter extends CustomPainter {
   bool shouldRepaint(covariant _GlassCardPainter old) => old.slant != slant;
 }
 
-// ── Gradient glassmorphism painter (back card) ─────────────────────────────
-
-class _BackGlassCardPainter extends CustomPainter {
+class _RateUsBackgroundPainter extends CustomPainter {
   final double slant;
 
-  const _BackGlassCardPainter({required this.slant});
+  const _RateUsBackgroundPainter({required this.slant});
 
   @override
   void paint(Canvas canvas, Size size) {
     final path = _slantedCardPath(size, slant, 28);
 
-    // Gradient fill: #FE4EF0 → #800DD8 at 30% opacity
+    // Deep purple gradient fill
     final fillPaint = Paint()
       ..shader = const LinearGradient(
-        colors: [Color(0x4DFE4EF0), Color(0x4D800DD8)],
-        begin: Alignment.topRight,
-        end: Alignment.bottomLeft,
+        colors: [Color(0xFF2D1456), Color(0xFF190831)],
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
       ..style = PaintingStyle.fill;
     canvas.drawPath(path, fillPaint);
 
-    // Subtle light border
-    final strokePaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.18)
+    // Neon magenta border glow
+    final glowPaint = Paint()
+      ..shader = const LinearGradient(
+        colors: [Color(0x80D100D1), Color(0x40FE4EF0)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
-    canvas.drawPath(path, strokePaint);
+      ..strokeWidth = 1.5;
+    canvas.drawPath(path, glowPaint);
 
     // Inner highlight along top edge
     final highlightPaint = Paint()
@@ -2162,14 +2414,14 @@ class _BackGlassCardPainter extends CustomPainter {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          Colors.white.withValues(alpha: 0.22),
+          const Color(0xFFFE4EF0).withValues(alpha: 0.15),
           Colors.white.withValues(alpha: 0.0),
         ],
-        stops: const [0.0, 0.35],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height * 0.4));
+        stops: const [0.0, 0.3],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height * 0.35));
     canvas.drawPath(path, highlightPaint);
   }
 
   @override
-  bool shouldRepaint(covariant _BackGlassCardPainter old) => old.slant != slant;
+  bool shouldRepaint(covariant _RateUsBackgroundPainter old) => old.slant != slant;
 }
