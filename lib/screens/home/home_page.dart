@@ -747,13 +747,6 @@ class _FeatureCardData {
 
 const _featureCards = [
   _FeatureCardData(
-    image: 'assets/images/GameTime.jpg',
-    badge: 'NEW UPDATE',
-    title: 'GameTime: Activated',
-    description: 'Turn any moment into a game night.',
-    badgeColor: Color(0xFFFE4EF0),
-  ),
-  _FeatureCardData(
     image: 'assets/images/Flashcards.png',
     badge: 'TRY NOW',
     title: 'Flashcards Mode',
@@ -761,18 +754,11 @@ const _featureCards = [
     badgeColor: Color(0xFF800DD8),
   ),
   _FeatureCardData(
-    image: 'assets/images/SlotMachine.jpg',
-    badge: 'HOT',
-    title: 'Spin the Slot',
-    description: 'Let luck decide what happens next.',
-    badgeColor: Color(0xFFFF6BB5),
-  ),
-  _FeatureCardData(
-    image: 'assets/images/RandomChallenge.png',
-    badge: 'RANDOM PICK',
-    title: "What's the Scene?",
-    description: 'Answer the prompt, act it out, keep the night moving.',
-    badgeColor: Color(0xFF4ECDC4),
+    image: 'assets/images/TriRace.png',
+    badge: 'RACE NOW',
+    title: 'TriRace',
+    description: 'Race your friends in a thrilling tri-challenge.',
+    badgeColor: Color(0xFFFF6B35),
   ),
   _FeatureCardData(
     image: 'assets/images/SpinWheel.png',
@@ -1407,10 +1393,18 @@ class _FeatureCarouselState extends State<_FeatureCarousel>
 
     return GestureDetector(
       onTap: () {
-        if (_currentIndex == 4) {
-          Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const WheelScreen()));
+        if (_currentIndex == 0) {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const SessionEntryScreen()),
+          );
+        } else if (_currentIndex == 1) {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const TriRaceEntryScreen()),
+          );
+        } else if (_currentIndex == 2) {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const WheelScreen()),
+          );
         } else {
           _advance();
         }
@@ -1589,26 +1583,14 @@ const _nowPlayingGames = [
     statusColor: Colors.greenAccent,
   ),
   _NowPlayingCard(
-    imagePath: 'assets/images/Gaming.jpg',
-    title: 'GameTime',
-    statusLabel: '1.2k Online',
-    statusColor: Colors.greenAccent,
-  ),
-  _NowPlayingCard(
-    imagePath: 'assets/images/RandomChallenge.png',
-    title: "What's the Scene?",
-    statusLabel: 'Local Match',
-    statusColor: Colors.pinkAccent,
-  ),
-  _NowPlayingCard(
     imagePath: 'assets/images/SpinWheel.png',
     title: 'Spin the Wheel',
     statusLabel: '1.2k Online',
     statusColor: Colors.greenAccent,
   ),
   _NowPlayingCard(
-    imagePath: 'assets/images/SlotMachine.jpg',
-    title: 'Spin the Slot',
+    imagePath: 'assets/images/TriRace.png',
+    title: 'TriRace',
     statusLabel: 'Local Match',
     statusColor: Colors.pinkAccent,
   ),
@@ -1682,12 +1664,28 @@ class _NowPlayingCardWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 250,
-      height: 160,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        child: DecoratedBox(
+    return GestureDetector(
+      onTap: () {
+        if (data.title == 'Flashcards Mode') {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const SessionEntryScreen()),
+          );
+        } else if (data.title == 'Spin the Wheel') {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const WheelScreen()),
+          );
+        } else if (data.title == 'TriRace') {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const TriRaceEntryScreen()),
+          );
+        }
+      },
+      child: SizedBox(
+        width: 250,
+        height: 160,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: DecoratedBox(
           decoration: BoxDecoration(
             border: Border.all(
               color: Colors.deepPurpleAccent.withValues(alpha: 0.3),
@@ -1768,6 +1766,7 @@ class _NowPlayingCardWidget extends StatelessWidget {
           ),
         ),
       ),
+    ),
     );
   }
 }
