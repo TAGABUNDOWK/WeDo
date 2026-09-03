@@ -294,18 +294,19 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   void _toggleReaction(ChatMessage msg, String emoji) {
-    if (_currentUser == null) return;
+    final user = _currentUser;
+    if (user == null) return;
     if (emoji.isEmpty) {
       _groupService.removeReaction(
         groupId: widget.groupId,
         messageId: msg.id,
-        uid: _currentUser!.uid,
+        uid: user.uid,
       );
     } else {
       _groupService.addReaction(
         groupId: widget.groupId,
         messageId: msg.id,
-        uid: _currentUser!.uid,
+        uid: user.uid,
         emoji: emoji,
       );
     }
@@ -796,31 +797,24 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             );
                           }
 
-                          if (msg.type == MessageType.call) {
-                            return CallMessageBubble(
-                              callType: msg.callType ?? 'audio',
-                              callStatus: msg.callStatus ?? 'active',
-                              durationSeconds: msg.durationSeconds,
-                              time: formatCallBubbleTime(msg.createdAt),
-                              isMe: isMe,
-                              senderId: msg.senderId,
-                              senderName: isMe ? 'You' : displayName,
-                              currentUserId: _currentUser?.uid ?? '',
-                              groupId: widget.groupId,
-                              members: _members,
-                              theme: t,
-                              isFirstInGroup: isFirstInGroup,
-                              isLastInGroup: isLastInGroup,
-                            );
-                          }
+                            if (msg.type == MessageType.call) {
+                              return CallMessageBubble(
+                                callType: msg.callType ?? 'audio',
+                                callStatus: msg.callStatus ?? 'active',
+                                durationSeconds: msg.durationSeconds,
+                                time: formatCallBubbleTime(msg.createdAt),
+                                isMe: isMe,
+                                senderId: msg.senderId,
+                                senderName: isMe ? 'You' : displayName,
+                                currentUserId: _currentUser?.uid ?? '',
+                                groupId: widget.groupId,
+                                members: _members,
+                                theme: t,
+                                isFirstInGroup: isFirstInGroup,
+                                isLastInGroup: isLastInGroup,
+                              );
+                            }
 
-                          if (msg.type == MessageType.text) {
-                            final groupLinkMatch = RegExp(
-                              r'wedo://group/([^\s]+)',
-                            ).firstMatch(msg.content);
-                            if (groupLinkMatch != null) {
-                              return GroupInviteMessageCard(
-                                groupId: groupLinkMatch.group(1)!,
                             if (msg.type == MessageType.invite &&
                                 msg.activityId != null) {
                               if (msg.activityType == 'triRace') {
@@ -841,79 +835,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                               );
                             }
 
-                            if (msg.type == MessageType.image &&
-                                msg.imageUrl != null) {
-                              return MessageBubble(
-                                content: msg.content,
-                                imageUrl: msg.imageUrl,
-                                isMe: isMe,
-                                senderName: isMe
-                                    ? null
-                                    : (isFirstInGroup ? displayName : null),
-                                time: formatChatTime(msg.createdAt),
-                                theme: t,
-                                isFirstInGroup: isFirstInGroup,
-                                isLastInGroup: isLastInGroup,
-                                createdAt: msg.createdAt,
-                                edited: msg.edited,
-                                onEdit: isMe ? () => _editMessage(msg) : null,
-                                onDeleteForEveryone: isMe
-                                    ? () => _deleteMessageForEveryone(msg)
-                                    : null,
-                                onDeleteForMe: () => _deleteMessageForMe(msg),
-                                senderPhotoUrl: !isMe
-                                    ? (_memberPhotos[msg.senderId] ?? '')
-                                    : null,
-                                isRead: isMe && msg.isRead,
-                              );
-                            }
-
-                            if (msg.type == MessageType.audio &&
-                                msg.audioUrl != null) {
-                              return MessageBubble(
-                                content: msg.content,
-                                audioUrl: msg.audioUrl,
-                                durationSeconds: msg.durationSeconds,
-                                isMe: isMe,
-                                senderName: isMe
-                                    ? null
-                                    : (isFirstInGroup ? displayName : null),
-                                time: formatChatTime(msg.createdAt),
-                                theme: t,
-                                isFirstInGroup: isFirstInGroup,
-                                isLastInGroup: isLastInGroup,
-                                createdAt: msg.createdAt,
-                                edited: msg.edited,
-                                onEdit: isMe ? () => _editMessage(msg) : null,
-                                onDeleteForEveryone: isMe
-                                    ? () => _deleteMessageForEveryone(msg)
-                                    : null,
-                                onDeleteForMe: () => _deleteMessageForMe(msg),
-                                senderPhotoUrl: !isMe
-                                    ? (_memberPhotos[msg.senderId] ?? '')
-                                    : null,
-                                isRead: isMe && msg.isRead,
-                              );
-                            }
-
-                            if (msg.type == MessageType.call) {
-                              return CallMessageBubble(
-                                callType: msg.callType ?? 'audio',
-                                callStatus: msg.callStatus ?? 'active',
-                                durationSeconds: msg.durationSeconds,
-                                time: formatCallBubbleTime(msg.createdAt),
-                                isMe: isMe,
-                                senderId: msg.senderId,
-                                senderName: isMe ? 'You' : displayName,
-                                currentUserId: _currentUser?.uid ?? '',
-                                groupId: widget.groupId,
-                                members: _members,
-                                theme: t,
-                                isFirstInGroup: isFirstInGroup,
-                                isLastInGroup: isLastInGroup,
-                              );
-                            }
-
                             if (msg.type == MessageType.text) {
                               final groupLinkMatch = RegExp(
                                 r'wedo://group/([^\s]+)',
@@ -928,30 +849,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                                 );
                               }
                             }
-
-                            return MessageBubble(
-                              content: msg.content,
-                              isMe: isMe,
-                              senderName: isMe
-                                  ? null
-                                  : (isFirstInGroup ? displayName : null),
-                              time: formatChatTime(msg.createdAt),
-                              theme: t,
-                              isFirstInGroup: isFirstInGroup,
-                              isLastInGroup: isLastInGroup,
-                              createdAt: msg.createdAt,
-                              edited: msg.edited,
-                              onEdit: isMe ? () => _editMessage(msg) : null,
-                              onDeleteForEveryone: isMe
-                                  ? () => _deleteMessageForEveryone(msg)
-                                  : null,
-                              onDeleteForMe: () => _deleteMessageForMe(msg),
-                              senderPhotoUrl: !isMe
-                                  ? (_memberPhotos[msg.senderId] ?? '')
-                                  : null,
-                              isRead: isMe && msg.isRead,
-                            );
-                          }
 
                           return MessageBubble(
                             content: msg.content,
@@ -1010,6 +907,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                       },
                     );
                   },
+                ),
                 ),
                 if (_newMessageCount > 0)
                   Positioned(
@@ -1089,8 +987,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  _replyingTo!.senderName?.isNotEmpty == true
-                                      ? _replyingTo!.senderName!
+                                  _replyingTo!.senderName.isNotEmpty
+                                      ? _replyingTo!.senderName
                                       : 'You',
                                   style: TextStyle(
                                     fontSize: 12,

@@ -807,133 +807,9 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                                 isMe: isMe,
                                 senderName: null,
                                 time: formatChatTime(msg.createdAt),
-                                poll: _polls[msg.refId],
-                                currentUid: _currentUser?.uid,
-                                theme: t,
+                                groupInviteData: msg.groupInviteData,
                               );
                             }
-
-                            if (msg.type == MessageType.invite &&
-                                msg.activityId != null) {
-                              if (msg.activityType == 'triRace') {
-                                return TriRaceInviteMessageCard(
-                                  raceId: msg.activityId!,
-                                  content: msg.content,
-                                  isMe: isMe,
-                                  senderName: null,
-                                  time: formatChatTime(msg.createdAt),
-                                );
-                              }
-                              return InviteMessageCard(
-                                sessionId: msg.activityId!,
-                                content: msg.content,
-                                isMe: isMe,
-                                senderName: null,
-                                time: formatChatTime(msg.createdAt),
-                              );
-                            }
-
-                            if (msg.type == MessageType.image &&
-                                msg.imageUrl != null) {
-                              return MessageBubble(
-                                content: msg.content,
-                                imageUrl: msg.imageUrl,
-                                isMe: isMe,
-                                senderName: !isMe ? _otherName : null,
-                                time: formatChatTime(msg.createdAt),
-                                theme: t,
-                                isFirstInGroup: isFirstInGroup,
-                                isLastInGroup: isLastInGroup,
-                                createdAt: msg.createdAt,
-                                edited: msg.edited,
-                                onEdit: isMe ? () => _editMessage(msg) : null,
-                                onDeleteForEveryone: isMe
-                                    ? () => _deleteMessageForEveryone(msg)
-                                    : null,
-                                onDeleteForMe: () => _deleteMessageForMe(msg),
-                                senderPhotoUrl: !isMe ? _otherPhotoUrl : null,
-                                isRead: isMe && msg.isRead,
-                              );
-                            }
-
-                            if (msg.type == MessageType.audio &&
-                                msg.audioUrl != null) {
-                              return MessageBubble(
-                                content: msg.content,
-                                audioUrl: msg.audioUrl,
-                                durationSeconds: msg.durationSeconds,
-                                isMe: isMe,
-                                senderName: !isMe ? _otherName : null,
-                                time: formatChatTime(msg.createdAt),
-                                theme: t,
-                                isFirstInGroup: isFirstInGroup,
-                                isLastInGroup: isLastInGroup,
-                                createdAt: msg.createdAt,
-                                edited: msg.edited,
-                                onEdit: isMe ? () => _editMessage(msg) : null,
-                                onDeleteForEveryone: isMe
-                                    ? () => _deleteMessageForEveryone(msg)
-                                    : null,
-                                onDeleteForMe: () => _deleteMessageForMe(msg),
-                                senderPhotoUrl: !isMe ? _otherPhotoUrl : null,
-                                isRead: isMe && msg.isRead,
-                              );
-                            }
-
-                            if (msg.type == MessageType.call) {
-                              return CallMessageBubble(
-                                callType: msg.callType ?? 'audio',
-                                callStatus: msg.callStatus ?? 'active',
-                                durationSeconds: msg.durationSeconds,
-                                time: formatCallBubbleTime(msg.createdAt),
-                                isMe: isMe,
-                                senderId: msg.senderId,
-                                senderName: _otherName,
-                                currentUserId: _currentUser?.uid ?? '',
-                                chatId: widget.chatId,
-                                members: [
-                                  _currentUser?.uid ?? '',
-                                  widget.otherUid,
-                                ],
-                                theme: t,
-                                isFirstInGroup: isFirstInGroup,
-                                isLastInGroup: isLastInGroup,
-                              );
-                            }
-
-                            if (msg.type == MessageType.text) {
-                              final groupLinkMatch = RegExp(
-                                r'wedo://group/([^\s]+)',
-                              ).firstMatch(msg.content);
-                              if (groupLinkMatch != null) {
-                                return GroupInviteMessageCard(
-                                  groupId: groupLinkMatch.group(1)!,
-                                  isMe: isMe,
-                                  senderName: null,
-                                  time: formatChatTime(msg.createdAt),
-                                  groupInviteData: msg.groupInviteData,
-                                );
-                              }
-                            }
-
-                            return MessageBubble(
-                              content: msg.content,
-                              isMe: isMe,
-                              senderName: !isMe ? _otherName : null,
-                              time: formatChatTime(msg.createdAt),
-                              theme: t,
-                              isFirstInGroup: isFirstInGroup,
-                              isLastInGroup: isLastInGroup,
-                              createdAt: msg.createdAt,
-                              edited: msg.edited,
-                              onEdit: isMe ? () => _editMessage(msg) : null,
-                              onDeleteForEveryone: isMe
-                                  ? () => _deleteMessageForEveryone(msg)
-                                  : null,
-                              onDeleteForMe: () => _deleteMessageForMe(msg),
-                              senderPhotoUrl: !isMe ? _otherPhotoUrl : null,
-                              isRead: isMe && msg.isRead,
-                            );
                           }
 
                           return MessageBubble(
@@ -987,6 +863,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                       },
                     );
                   },
+                ),
                 ),
                 if (_newMessageCount > 0)
                   Positioned(
