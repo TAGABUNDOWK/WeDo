@@ -25,15 +25,9 @@ class _CreateTriRaceScreenState extends State<CreateTriRaceScreen> {
     '#9933FF', '#FFD700', '#FF3399', '#00BBDD',
   ];
 
-  static const _gradientPalette = [
-    ['#FF6B6B', '#FF8E53'],
-    ['#4ECDC4', '#44B09E'],
-    ['#45B7D1', '#667eea'],
-    ['#96CEB4', '#88D8B0'],
-    ['#FFEAA7', '#FDCB6E'],
-    ['#DDA0DD', '#C77DFF'],
-    ['#98D8C8', '#7FDBDA'],
-    ['#F7DC6F', '#F39C12'],
+  static const _neonPalette = [
+    '#00FFFF', '#FF00FF', '#39FF14', '#FFFF00',
+    '#FF6600', '#FF1493', '#BF00FF', '#FF0733',
   ];
 
   Color _hexColor(String hex) => Color(int.parse(hex.replaceFirst('#', '0xFF')));
@@ -191,21 +185,27 @@ class _CreateTriRaceScreenState extends State<CreateTriRaceScreen> {
                 ),
                 const SizedBox(width: 10),
                 _buildThemeOption(
-                  label: 'Gradient',
-                  isSelected: _colorTheme == 'gradient',
-                  onTap: () => setState(() => _colorTheme = 'gradient'),
+                  label: 'Neon',
+                  isSelected: _colorTheme == 'neon',
+                  onTap: () => setState(() => _colorTheme = 'neon'),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
-                    children: _gradientPalette.map((pair) {
+                    children: _neonPalette.map((hex) {
+                      final color = _hexColor(hex);
                       return Container(
                         width: 14,
                         height: 14,
                         margin: const EdgeInsets.symmetric(horizontal: 1.5),
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [_hexColor(pair[0]), _hexColor(pair[1])],
-                          ),
+                          color: color,
                           shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: color.withValues(alpha: 0.7),
+                              blurRadius: 6,
+                              spreadRadius: 1,
+                            ),
+                          ],
                         ),
                       );
                     }).toList(),

@@ -18,15 +18,15 @@ class TriRaceService {
     '#00BBDD',
   ];
 
-  static const _gradientPalette = [
-    ['#FF6B6B', '#FF8E53'],
-    ['#4ECDC4', '#44B09E'],
-    ['#45B7D1', '#667eea'],
-    ['#96CEB4', '#88D8B0'],
-    ['#FFEAA7', '#FDCB6E'],
-    ['#DDA0DD', '#C77DFF'],
-    ['#98D8C8', '#7FDBDA'],
-    ['#F7DC6F', '#F39C12'],
+  static const _neonPalette = [
+    '#00FFFF', // Cyan
+    '#FF00FF', // Magenta
+    '#39FF14', // Lime
+    '#FFFF00', // Yellow
+    '#FF6600', // Orange
+    '#FF1493', // Hot Pink
+    '#BF00FF', // Purple
+    '#FF0733', // Red
   ];
 
   CollectionReference get _triRaces =>
@@ -120,10 +120,9 @@ class TriRaceService {
       final colorTheme = raceData['colorTheme'] as String? ?? 'solid';
       final colorIndex = participantUids.length % _palette.length;
 
-      final avatarColor = _palette[colorIndex];
-      final String? avatarColorEnd = colorTheme == 'gradient'
-          ? _gradientPalette[colorIndex][1]
-          : null;
+      final avatarColor = colorTheme == 'neon'
+          ? _neonPalette[colorIndex]
+          : _palette[colorIndex];
 
       final batch = _db.batch();
 
@@ -133,9 +132,6 @@ class TriRaceService {
         'joinedAt': FieldValue.serverTimestamp(),
         'avatarColor': avatarColor,
       };
-      if (avatarColorEnd != null) {
-        participantData['avatarColorEnd'] = avatarColorEnd;
-      }
 
       batch.set(participantDoc, participantData);
 
@@ -355,10 +351,9 @@ class TriRaceService {
       final botName = 'Bot $botNumber';
       final colorTheme = raceData['colorTheme'] as String? ?? 'solid';
       final colorIndex = participantUids.length % _palette.length;
-      final avatarColor = _palette[colorIndex];
-      final String? avatarColorEnd = colorTheme == 'gradient'
-          ? _gradientPalette[colorIndex][1]
-          : null;
+      final avatarColor = colorTheme == 'neon'
+          ? _neonPalette[colorIndex]
+          : _palette[colorIndex];
 
       final batch = _db.batch();
 
@@ -368,9 +363,6 @@ class TriRaceService {
         'joinedAt': FieldValue.serverTimestamp(),
         'avatarColor': avatarColor,
       };
-      if (avatarColorEnd != null) {
-        botData['avatarColorEnd'] = avatarColorEnd;
-      }
 
       batch.set(_participants(raceId).doc(botId), botData);
 

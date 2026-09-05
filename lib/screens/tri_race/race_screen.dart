@@ -52,6 +52,13 @@ double _piecewiseProgress(double t, List<_Segment> segments) {
   return (accumulated / total).clamp(0.0, 1.0);
 }
 
+double _currentSpeedMultiplier(double linearProgress, List<_Segment> segments) {
+  if (segments.isEmpty) return 1.0;
+  final segLen = 1.0 / segments.length;
+  final idx = (linearProgress / segLen).floor().clamp(0, segments.length - 1);
+  return segments[idx].speedMultiplier;
+}
+
 // ── Race Screen ─────────────────────────────────────────────────────────────
 
 class RaceScreen extends StatefulWidget {
@@ -85,11 +92,10 @@ class _RaceScreenState extends State<RaceScreen>
   final Map<String, Color> _colors = {};
   final Map<String, Color?> _colorEnds = {};
   final Map<String, List<_Segment>> _segments = {};
+  String _colorTheme = 'solid';
 
   // Rotation state — updated every frame from ticker, no separate timers
   final Map<String, double> _rotations = {};
-  final Map<String, Random> _rotRngs = {};
-  final Map<String, double> _nextRotChange = {};
   double _lastRotationTick = 0;
 
   static const double _worldWidthFactor = 4.0;
@@ -166,6 +172,7 @@ class _RaceScreenState extends State<RaceScreen>
       if (!mounted || race == null) return;
       setState(() {
         _raceDurationMs = race.raceDurationMs ?? _raceDurationMs;
+        _colorTheme = race.colorTheme;
         if (race.raceStartedAt != null) _raceStartedAt = race.raceStartedAt;
       });
       if (race.status == TriRaceStatus.finished && !_finishHandled) {
@@ -250,18 +257,19 @@ class _RaceScreenState extends State<RaceScreen>
     if (!mounted || _raceStartedAt == null || _showingResults) return;
     _epoch++;
 
-    // Update rotations in batch
+    // Continuous spin — tied to movement speed
     final now = _ticker.lastElapsedDuration?.inMilliseconds.toDouble() ?? 0;
     final dt = now - _lastRotationTick;
-    if (dt > 100) {
-      _lastRotationTick = now;
+    _lastRotationTick = now;
+
+    if (dt > 0 && dt < 200) {
       for (final p in _participants) {
-        final nextChange = _nextRotChange[p.userId] ?? 0;
-        if (now >= nextChange) {
-          final rng = _rotRngs[p.userId]!;
-          _rotations[p.userId] = (rng.nextDouble() - 0.5) * 20;
-          _nextRotChange[p.userId] = now + 800 + rng.nextInt(700);
-        }
+        final segs = _segments[p.userId];
+        if (segs == null) continue;
+        final rawProgress = _computeProgress(p);
+        if (rawProgress <= 0 || rawProgress >= 1.0) continue;
+        final speed = _currentSpeedMultiplier(rawProgress, segs);
+        _rotations[p.userId] = (_rotations[p.userId] ?? 0) + speed * 360.0 * (dt / 1000.0);
       }
     }
 
@@ -323,11 +331,8 @@ class _RaceScreenState extends State<RaceScreen>
           : null;
       _segments[p.userId] = _buildSegments(p.speedSeed ?? 0.5);
 
-      if (!_rotRngs.containsKey(p.userId)) {
-        final rng = Random(p.speedSeed?.hashCode ?? 0);
-        _rotRngs[p.userId] = rng;
+      if (!_rotations.containsKey(p.userId)) {
         _rotations[p.userId] = 0;
-        _nextRotChange[p.userId] = 0;
       }
     }
   }
@@ -490,6 +495,7 @@ class _RaceScreenState extends State<RaceScreen>
                 cameraX: cameraX,
                 finishLineOffset: _finishLineOffset,
                 epoch: _epoch,
+                colorTheme: _colorTheme,
               ),
             ),
           ),
@@ -570,6 +576,7 @@ class _TriangleLayerPainter extends CustomPainter {
   final double cameraX;
   final double finishLineOffset;
   final int epoch;
+  final String colorTheme;
 
   _TriangleLayerPainter({
     required this.participants,
@@ -583,6 +590,7 @@ class _TriangleLayerPainter extends CustomPainter {
     required this.cameraX,
     this.finishLineOffset = 100,
     this.epoch = 0,
+    this.colorTheme = 'solid',
   });
 
   @override
@@ -620,18 +628,16 @@ class _TriangleLayerPainter extends CustomPainter {
       final fillPaint = Paint()
         ..style = PaintingStyle.fill;
 
-      final colorEnd = colorEnds[p.userId];
-      if (colorEnd != null) {
-        fillPaint.shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [color, colorEnd],
-        ).createShader(Rect.fromLTWH(
-          -triangleSize.width / 2,
-          -triangleSize.height / 2,
-          triangleSize.width,
-          triangleSize.height,
-        ));
+      if (colorTheme == 'neon') {
+        // Glow layer
+        fillPaint
+          ..color = color
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+        canvas.drawPath(path, fillPaint);
+        // Sharp center
+        fillPaint
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, 0)
+          ..color = color;
       } else {
         fillPaint.color = color;
       }
