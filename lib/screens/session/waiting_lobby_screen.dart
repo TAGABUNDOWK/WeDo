@@ -74,7 +74,7 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
   /// kept so their avatar stays visible to friends. A global "Back to Lobby"
   /// button is parked so the host can come back.
   void _leaveToApp() {
-    LobbyReturnStore.instance.park(sessionId: widget.sessionId, isHost: widget.isHost);
+    LobbyReturnStore.instance.park(sessionId: widget.sessionId, isHost: widget.isHost, lobbyType: LobbyType.session);
     if (mounted) Navigator.of(context).pop();
   }
 

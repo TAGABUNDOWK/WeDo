@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/tri_race_entity.dart';
 import '../../services/tri_race/tri_race_service.dart';
+import '../../services/session/lobby_return_store.dart';
 import '../../utils/constants.dart';
 import 'race_screen.dart';
 import 'tri_race_results_screen.dart';
@@ -31,54 +32,37 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
 
   bool _isConfirmingLeave = false;
   bool _cancelledDialogShown = false;
+  TriRaceStatus? _currentRaceStatus;
   final Map<String, String> _displayNames = {};
   final Set<String> _nameQueued = {};
 
   Future<void> _onPopInvoked(bool didPop, dynamic result) async {
     if (didPop || _isConfirmingLeave) return;
 
-    _isConfirmingLeave = true;
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF2D1B4E),
-        title: const Text('Leave Lobby?', style: TextStyle(color: Colors.white)),
-        content: Text(
-          widget.isHost
-              ? 'This will cancel the TriRace for all players.'
-              : 'Are you sure you want to leave?',
-          style: const TextStyle(color: AppColors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Stay', style: TextStyle(color: AppColors.textSecondary)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(
-              widget.isHost ? 'Cancel Race' : 'Leave',
-              style: const TextStyle(color: Colors.redAccent),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      try {
-        if (widget.isHost) {
-          await _service.cancelTriRace(widget.raceId, _currentUser!.uid);
-        } else {
-          await _service.removeParticipant(widget.raceId, _currentUser!.uid);
-        }
-      } catch (_) {}
-
-      if (mounted) Navigator.of(context).pop();
+    if (widget.isHost) {
+      if (_currentRaceStatus == TriRaceStatus.lobby) {
+        _leaveToApp();
+      } else {
+        Navigator.of(context).pop();
+      }
+      return;
     }
 
-    _isConfirmingLeave = false;
+    // Participant: temporary leave if lobby, otherwise just pop.
+    if (_currentRaceStatus == TriRaceStatus.lobby) {
+      _leaveToApp();
+    } else {
+      Navigator.of(context).pop();
+    }
+  }
+
+  void _leaveToApp() {
+    LobbyReturnStore.instance.park(
+      sessionId: widget.raceId,
+      isHost: widget.isHost,
+      lobbyType: LobbyType.triRace,
+    );
+    if (mounted) Navigator.of(context).pop();
   }
 
   void _showCancelledDialog() {
@@ -125,6 +109,81 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
   String _participantName(TriRaceParticipant p) =>
       _displayNames[p.userId] ?? p.username;
 
+  Future<void> _confirmLeave() async {
+    if (_isConfirmingLeave) return;
+    _isConfirmingLeave = true;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF2D1B4E),
+        title: const Text('Leave Lobby?', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'This will remove you from the race. You won\'t be able to rejoin.',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Stay', style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Leave Race', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        await _service.removeParticipant(widget.raceId, _currentUser!.uid);
+      } catch (_) {}
+
+      if (mounted) Navigator.of(context).pop();
+    }
+
+    _isConfirmingLeave = false;
+  }
+
+  Future<void> _confirmCancelRace() async {
+    if (_isConfirmingLeave) return;
+    _isConfirmingLeave = true;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF2D1B4E),
+        title: const Text('Cancel Race?', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'This will cancel the TriRace for all players. This cannot be undone.',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Stay', style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Cancel Race', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      LobbyReturnStore.instance.clear();
+      try {
+        await _service.cancelTriRace(widget.raceId, _currentUser!.uid);
+      } catch (_) {}
+
+      if (mounted) Navigator.of(context).pop();
+    }
+
+    _isConfirmingLeave = false;
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -156,6 +215,8 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
             if (race == null) {
               return const Center(child: Text('Race not found', style: TextStyle(color: Colors.white)));
             }
+
+            _currentRaceStatus = race.status;
 
             if (race.status == TriRaceStatus.cancelled) {
               if (!widget.isHost) {
@@ -467,6 +528,24 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
                             ),
                           ),
                         ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 48,
+                          child: OutlinedButton.icon(
+                            onPressed: _confirmCancelRace,
+                            icon: const Icon(Icons.cancel_outlined, size: 18),
+                            label: const Text(
+                              'Cancel Race',
+                              style: TextStyle(fontFamily: _fontFamily, fontSize: 14),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.redAccent,
+                              side: const BorderSide(color: Colors.redAccent),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
+                        ),
                       ] else ...[
                         Center(
                           child: Container(
@@ -482,6 +561,24 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
                                 fontSize: 14,
                                 color: AppColors.textSecondary,
                               ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 48,
+                          child: OutlinedButton.icon(
+                            onPressed: _confirmLeave,
+                            icon: const Icon(Icons.exit_to_app, size: 18),
+                            label: const Text(
+                              'Leave Race',
+                              style: TextStyle(fontFamily: _fontFamily, fontSize: 14),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.redAccent,
+                              side: const BorderSide(color: Colors.redAccent),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
                           ),
                         ),
