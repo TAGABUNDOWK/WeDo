@@ -29,6 +29,7 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
 
   bool _isConfirmingLeave = false;
   Timer? _hostPresenceTimer;
+  SessionStatus? _currentSessionStatus;
 
   @override
   void initState() {
@@ -51,46 +52,21 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
   Future<void> _onPopInvoked(bool didPop, dynamic result) async {
     if (didPop || _isConfirmingLeave) return;
 
-    // The host's back action leaves to the app temporarily (no cancel).
     if (widget.isHost) {
-      _leaveToApp();
+      if (_currentSessionStatus == SessionStatus.lobby) {
+        _leaveToApp();
+      } else {
+        Navigator.of(context).pop();
+      }
       return;
     }
 
-    _isConfirmingLeave = true;
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Leave Lobby?'),
-        content: const Text('Are you sure you want to leave?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Stay'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              'Leave',
-              style: TextStyle(color: Colors.redAccent),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      try {
-        await _service.removeParticipant(widget.sessionId, _currentUser!.uid);
-      } catch (_) {}
-
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
+    // Participant: temporary leave if lobby, otherwise just pop.
+    if (_currentSessionStatus == SessionStatus.lobby) {
+      _leaveToApp();
+    } else {
+      Navigator.of(context).pop();
     }
-
-    _isConfirmingLeave = false;
   }
 
   /// Leaves the lobby temporarily without cancelling. The session stays in
@@ -98,7 +74,7 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
   /// kept so their avatar stays visible to friends. A global "Back to Lobby"
   /// button is parked so the host can come back.
   void _leaveToApp() {
-    LobbyReturnStore.instance.park(sessionId: widget.sessionId);
+    LobbyReturnStore.instance.park(sessionId: widget.sessionId, isHost: widget.isHost);
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -177,6 +153,8 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
             if (session == null) {
               return const Center(child: Text('Session not found'));
             }
+
+            _currentSessionStatus = session.status;
 
             if (session.status == SessionStatus.cancelled) {
               if (!widget.isHost) {
@@ -309,6 +287,8 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
               'Waiting for host to start...',
               style: TextStyle(color: Colors.white54, fontSize: 13),
             ),
+            const SizedBox(height: 16),
+            _buildLeaveButton(),
           ],
           const SizedBox(height: 20),
         ],
@@ -504,6 +484,39 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
     );
   }
 
+  Widget _buildLeaveButton() {
+    return GestureDetector(
+      onTap: _confirmLeave,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.redAccent.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: Colors.redAccent.withValues(alpha: 0.5),
+            width: 1,
+          ),
+        ),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.exit_to_app, size: 16, color: Colors.redAccent),
+            SizedBox(width: 6),
+            Text(
+              'Leave Lobby',
+              style: TextStyle(
+                color: Colors.redAccent,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _startSession() async {
     if (_currentUser == null) return;
     LobbyReturnStore.instance.clear();
@@ -515,6 +528,46 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
         SnackBar(content: Text('Error: $e')),
       );
     }
+  }
+
+  Future<void> _confirmLeave() async {
+    if (_isConfirmingLeave) return;
+    _isConfirmingLeave = true;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Leave Lobby?'),
+        content: const Text(
+          'This will remove you from the session. You won\'t be able to rejoin.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Stay'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'Leave',
+              style: TextStyle(color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        await _service.removeParticipant(widget.sessionId, _currentUser!.uid);
+      } catch (_) {}
+
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    }
+
+    _isConfirmingLeave = false;
   }
 
   void _showCancelledDialog() {

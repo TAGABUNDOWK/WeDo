@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'models/session_entity.dart';
 import 'screens/auth/splash/splash_page.dart';
 import 'screens/auth/welcome/welcome_page.dart';
 import 'screens/home/home_page.dart';
@@ -8,6 +9,7 @@ import 'screens/chat/group/group_info_screen.dart';
 import 'screens/session/waiting_lobby_screen.dart';
 import 'services/auth/user_service.dart';
 import 'services/session/lobby_return_store.dart';
+import 'services/session/session_service.dart';
 
 class MyApp extends StatefulWidget {
   final GlobalKey<NavigatorState>? navigatorKey;
@@ -76,13 +78,21 @@ class _MyAppState extends State<MyApp> {
     setState(() => _showSplash = false);
   }
 
-  void _returnToLobby(String sessionId) {
+  Future<void> _returnToLobby(String sessionId) async {
     final navigator = widget.navigatorKey?.currentState;
     if (navigator == null) return;
+
+    final isHost = LobbyReturnStore.instance.isHost;
+    final session = await SessionService().getSessionStream(sessionId).first;
+    if (session == null || session.status != SessionStatus.lobby) {
+      LobbyReturnStore.instance.clear();
+      return;
+    }
+
     LobbyReturnStore.instance.clear();
     navigator.push(
       MaterialPageRoute(
-        builder: (_) => WaitingLobbyScreen(sessionId: sessionId, isHost: true),
+        builder: (_) => WaitingLobbyScreen(sessionId: sessionId, isHost: isHost),
       ),
     );
   }
