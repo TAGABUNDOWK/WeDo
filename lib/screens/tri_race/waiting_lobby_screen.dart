@@ -353,6 +353,10 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
                             if (index < participants.length) {
                               final p = participants[index];
                               final isMe = p.userId == _currentUser?.uid;
+                              final avatarColor = Color(
+                                int.parse(p.avatarColor.replaceFirst('#', '0xFF')),
+                              );
+                              final isNeon = race.colorTheme == 'neon';
                               return Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -360,12 +364,19 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
                                     width: 56,
                                     height: 56,
                                     decoration: BoxDecoration(
-                                      color: Color(
-                                        int.parse(p.avatarColor.replaceFirst('#', '0xFF')),
-                                      ),
+                                      color: avatarColor,
                                       shape: BoxShape.circle,
                                       border: isMe
                                           ? Border.all(color: Colors.white, width: 2)
+                                          : null,
+                                      boxShadow: isNeon
+                                          ? [
+                                              BoxShadow(
+                                                color: avatarColor.withValues(alpha: 0.7),
+                                                blurRadius: 10,
+                                                spreadRadius: 2,
+                                              ),
+                                            ]
                                           : null,
                                     ),
                                     alignment: Alignment.center,

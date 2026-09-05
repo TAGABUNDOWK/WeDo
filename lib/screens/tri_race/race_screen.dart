@@ -85,6 +85,7 @@ class _RaceScreenState extends State<RaceScreen>
   final Map<String, Color> _colors = {};
   final Map<String, Color?> _colorEnds = {};
   final Map<String, List<_Segment>> _segments = {};
+  String _colorTheme = 'solid';
 
   // Rotation state — updated every frame from ticker, no separate timers
   final Map<String, double> _rotations = {};
@@ -166,6 +167,7 @@ class _RaceScreenState extends State<RaceScreen>
       if (!mounted || race == null) return;
       setState(() {
         _raceDurationMs = race.raceDurationMs ?? _raceDurationMs;
+        _colorTheme = race.colorTheme;
         if (race.raceStartedAt != null) _raceStartedAt = race.raceStartedAt;
       });
       if (race.status == TriRaceStatus.finished && !_finishHandled) {
@@ -490,6 +492,7 @@ class _RaceScreenState extends State<RaceScreen>
                 cameraX: cameraX,
                 finishLineOffset: _finishLineOffset,
                 epoch: _epoch,
+                colorTheme: _colorTheme,
               ),
             ),
           ),
@@ -570,6 +573,7 @@ class _TriangleLayerPainter extends CustomPainter {
   final double cameraX;
   final double finishLineOffset;
   final int epoch;
+  final String colorTheme;
 
   _TriangleLayerPainter({
     required this.participants,
@@ -583,6 +587,7 @@ class _TriangleLayerPainter extends CustomPainter {
     required this.cameraX,
     this.finishLineOffset = 100,
     this.epoch = 0,
+    this.colorTheme = 'solid',
   });
 
   @override
@@ -620,18 +625,16 @@ class _TriangleLayerPainter extends CustomPainter {
       final fillPaint = Paint()
         ..style = PaintingStyle.fill;
 
-      final colorEnd = colorEnds[p.userId];
-      if (colorEnd != null) {
-        fillPaint.shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [color, colorEnd],
-        ).createShader(Rect.fromLTWH(
-          -triangleSize.width / 2,
-          -triangleSize.height / 2,
-          triangleSize.width,
-          triangleSize.height,
-        ));
+      if (colorTheme == 'neon') {
+        // Glow layer
+        fillPaint
+          ..color = color
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+        canvas.drawPath(path, fillPaint);
+        // Sharp center
+        fillPaint
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, 0)
+          ..color = color;
       } else {
         fillPaint.color = color;
       }
