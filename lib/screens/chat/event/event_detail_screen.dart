@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../utils/constants.dart';
 import '../../../models/event.dart';
+import '../../../models/user_entity.dart';
 import '../../../services/event/event_service.dart';
 import '../../../services/group/group_service.dart';
+import '../../../services/auth/user_service.dart';
 
 class EventDetailScreen extends StatefulWidget {
   final String eventId;
@@ -26,9 +28,11 @@ class EventDetailScreen extends StatefulWidget {
 class _EventDetailScreenState extends State<EventDetailScreen> {
   final _eventService = EventService();
   final _groupService = GroupService();
+  final _userService = UserService();
   final _currentUser = FirebaseAuth.instance.currentUser;
   ChatEvent? _event;
   Map<String, String> _memberNames = {};
+  final Map<String, UserEntity> _userCache = {};
   bool _isLoading = true;
   Timer? _expiryTimer;
 
@@ -67,10 +71,17 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       }
     }
 
+    final cache = <String, UserEntity>{};
+    for (final uid in event.rsvps.keys) {
+      final user = await _userService.getUserDocument(uid);
+      if (user != null) cache[uid] = user;
+    }
+
     if (mounted) {
       setState(() {
         _event = event;
         _memberNames = names;
+        _userCache.addAll(cache);
         _isLoading = false;
       });
     }
@@ -98,21 +109,63 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     return _memberNames[_event!.createdBy] ?? 'Unknown';
   }
 
-  List<String> _getAttendeeInitials({int limit = 3}) {
+  List<String> _getAttendeeUids({int limit = 3}) {
     final keys = _event!.rsvps.keys.toList();
-    final names = <String>[];
-    for (final uid in keys) {
-      if (names.length >= limit) break;
-      final name = _memberNames[uid] ?? uid;
-      if (name.isNotEmpty) {
-        final parts = name.trim().split(RegExp(r'\s+'));
-        final initials = parts.length >= 2
-            ? '${parts[0][0]}${parts[1][0]}'
-            : name.substring(0, name.length.clamp(0, 2));
-        names.add(initials.toUpperCase());
-      }
-    }
-    return names;
+    return keys.take(limit).toList();
+  }
+
+  Widget _buildAvatar(String uid, double size) {
+    final user = _userCache[uid];
+    final photoUrl = user?.photoUrl;
+    final avatarAsset = user?.avatarAsset;
+    final hasAvatarAsset = avatarAsset != null && avatarAsset.isNotEmpty;
+    final hasAvatarUrl = photoUrl != null && photoUrl.isNotEmpty;
+    final initials = uid.isNotEmpty ? uid.substring(0, 1).toUpperCase() : '?';
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: const Color(0xFF211635),
+        border: Border.all(
+          color: AppColors.midnightBg,
+          width: 2,
+        ),
+      ),
+      child: ClipOval(
+        child: hasAvatarAsset
+            ? Image.asset(
+                avatarAsset,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => _buildAvatarFallback(initials, size),
+              )
+            : hasAvatarUrl
+                ? Image.network(
+                    photoUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => _buildAvatarFallback(initials, size),
+                  )
+                : _buildAvatarFallback(initials, size),
+      ),
+    );
+  }
+
+  Widget _buildAvatarFallback(String initials, double size) {
+    return Container(
+      color: const Color(0xFF211635),
+      child: Center(
+        child: Text(
+          initials,
+          style: TextStyle(
+            color: AppColors.lavenderAccent,
+            fontFamily: 'PlusJakartaSans',
+            fontWeight: FontWeight.w700,
+            fontSize: size * 0.33,
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -262,44 +315,22 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   }
 
   Widget _buildSocialProof() {
-    final initials = _getAttendeeInitials(limit: 3);
+    final uids = _getAttendeeUids(limit: 3);
     final totalRsvps = _event!.rsvps.length;
-    final extra = totalRsvps - initials.length;
+    final extra = totalRsvps - uids.length;
 
     return Row(
       children: [
         SizedBox(
-          width: 36 * initials.length.toDouble() - 8 * (initials.length - 1).clamp(0, initials.length),
+          width: 36 * uids.length.toDouble() - 8 * (uids.length - 1).clamp(0, uids.length),
           height: 36,
           child: Stack(
             clipBehavior: Clip.none,
             children: [
-              for (int i = 0; i < initials.length; i++)
+              for (int i = 0; i < uids.length; i++)
                 Positioned(
                   left: i * 28.0,
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF211635),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppColors.midnightBg,
-                        width: 2,
-                      ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        initials[i],
-                        style: const TextStyle(
-                          color: AppColors.lavenderAccent,
-                          fontFamily: 'PlusJakartaSans',
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ),
+                  child: _buildAvatar(uids[i], 36),
                 ),
             ],
           ),
@@ -562,12 +593,12 @@ class _RsvpActionRowState extends State<_RsvpActionRow> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+          Row(
           children: [
             Expanded(
               child: _RsvpButton(
-                label: 'Yes',
-                count: event.yesCount,
+                label: 'Interested',
+                count: event.interestedCount,
                 isSelected: myRsvp == 'yes',
                 isActive: true,
                 isLocked: isLocked,
@@ -578,20 +609,8 @@ class _RsvpActionRowState extends State<_RsvpActionRow> {
             const SizedBox(width: 8),
             Expanded(
               child: _RsvpButton(
-                label: 'Maybe',
-                count: event.maybeCount,
-                isSelected: myRsvp == 'maybe',
-                isActive: false,
-                isLocked: isLocked,
-                icon: Icons.help_outline,
-                onTap: () => _rsvp('maybe'),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _RsvpButton(
-                label: 'No',
-                count: event.noCount,
+                label: 'Not Interested',
+                count: event.notInterestedCount,
                 isSelected: myRsvp == 'no',
                 isActive: false,
                 isLocked: isLocked,

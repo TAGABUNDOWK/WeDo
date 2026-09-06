@@ -123,6 +123,24 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
 
     if (question.isEmpty || options.length < 2 || _currentUser == null) return;
 
+    final uniqueOptions = options.toSet();
+    if (uniqueOptions.length != options.length) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Poll options must be unique'),
+            backgroundColor: const Color(0xFF211635),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: const BorderSide(color: AppColors.glassBorder),
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
     setState(() => _isCreating = true);
 
     try {

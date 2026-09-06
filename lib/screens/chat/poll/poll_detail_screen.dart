@@ -142,6 +142,9 @@ class _PollDetailScreenState extends State<PollDetailScreen> {
   Widget _buildAvatar(String uid, double size) {
     final user = _userCache[uid];
     final photoUrl = user?.photoUrl;
+    final avatarAsset = user?.avatarAsset;
+    final hasAvatarAsset = avatarAsset != null && avatarAsset.isNotEmpty;
+    final hasAvatarUrl = photoUrl != null && photoUrl.isNotEmpty;
 
     return Container(
       width: size,
@@ -152,13 +155,19 @@ class _PollDetailScreenState extends State<PollDetailScreen> {
         border: Border.all(color: Colors.white, width: 1.5),
       ),
       child: ClipOval(
-        child: photoUrl != null && photoUrl.isNotEmpty
-            ? Image.network(
-                photoUrl,
+        child: hasAvatarAsset
+            ? Image.asset(
+                avatarAsset,
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => _buildFallbackAvatar(uid, size),
               )
-            : _buildFallbackAvatar(uid, size),
+            : hasAvatarUrl
+                ? Image.network(
+                    photoUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => _buildFallbackAvatar(uid, size),
+                  )
+                : _buildFallbackAvatar(uid, size),
       ),
     );
   }

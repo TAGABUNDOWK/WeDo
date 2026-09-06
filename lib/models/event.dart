@@ -70,9 +70,8 @@ class ChatEvent {
     };
   }
 
-  int get yesCount => rsvps.values.where((v) => v == 'yes').length;
-  int get noCount => rsvps.values.where((v) => v == 'no').length;
-  int get maybeCount => rsvps.values.where((v) => v == 'maybe').length;
+  int get interestedCount => rsvps.values.where((v) => v == 'yes').length;
+  int get notInterestedCount => rsvps.values.where((v) => v == 'no').length;
   int get totalResponses => rsvps.length;
 
   String? myRsvp(String uid) => rsvps[uid];
