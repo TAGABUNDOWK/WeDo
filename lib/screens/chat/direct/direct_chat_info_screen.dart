@@ -235,10 +235,13 @@ class _DirectChatInfoScreenState extends State<DirectChatInfoScreen> {
                   child: CircleAvatar(
                     radius: 50,
                     backgroundColor: const Color(0xFFFE4EF0).withValues(alpha: 0.2),
-                    backgroundImage: _otherUser?.photoUrl != null && _otherUser!.photoUrl!.isNotEmpty
-                        ? NetworkImage(_otherUser!.photoUrl!)
-                        : null,
-                    child: (_otherUser?.photoUrl == null || _otherUser!.photoUrl!.isEmpty)
+                    backgroundImage: _otherUser?.avatarAsset != null && _otherUser!.avatarAsset!.isNotEmpty
+                        ? AssetImage(_otherUser!.avatarAsset!)
+                        : _otherUser?.photoUrl != null && _otherUser!.photoUrl!.isNotEmpty
+                            ? NetworkImage(_otherUser!.photoUrl!)
+                            : null,
+                    child: (_otherUser?.avatarAsset == null || _otherUser!.avatarAsset!.isEmpty) &&
+                            (_otherUser?.photoUrl == null || _otherUser!.photoUrl!.isEmpty)
                         ? Text(
                             name.isNotEmpty ? name[0].toUpperCase() : '?',
                             style: const TextStyle(fontSize: 36, fontFamily: _fontFamily, color: Color(0xFFFE4EF0)),

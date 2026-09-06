@@ -349,7 +349,19 @@ class CallManager extends ChangeNotifier {
         renderer?.dispose();
         notifyListeners();
 
-        if (!callData.isGroup && _reconnectTimer == null) {
+        if (callData.isGroup) {
+          _pendingOfferPeers.remove(peerId);
+          _reconnectTimer?.cancel();
+          _reconnectTimer = Timer(const Duration(seconds: 3), () {
+            _reconnectTimer = null;
+            if (_activeCall != null && callData.isGroup) {
+              final key = webrtc.WebRTCService.pcKeyForTest(_currentUser?.uid ?? '', peerId);
+              _webrtcService?.peerConnections.remove(key);
+              _pendingOfferPeers.remove(peerId);
+              _createGroupOffers();
+            }
+          });
+        } else if (_reconnectTimer == null) {
           _reconnectTimer = Timer(const Duration(seconds: 5), () {
             _reconnectTimer = null;
             endActiveCall();
@@ -416,7 +428,7 @@ class CallManager extends ChangeNotifier {
           _callService.getCallStream(callData.callId).listen((call) {
         if (call == null || call.status != CallStatus.active) return;
         _groupCallDebounce?.cancel();
-        _groupCallDebounce = Timer(const Duration(milliseconds: 500), () {
+        _groupCallDebounce = Timer(const Duration(milliseconds: 300), () {
           _createGroupOffers();
         });
       });

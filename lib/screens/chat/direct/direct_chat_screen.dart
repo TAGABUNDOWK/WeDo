@@ -425,15 +425,20 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                 user?.displayName ??
                 widget.otherUid;
             final photoUrl = user?.photoUrl;
+            final avatarAsset = user?.avatarAsset;
+            final hasAvatarAsset = avatarAsset != null && avatarAsset.isNotEmpty;
+            final hasPhotoUrl = photoUrl != null && photoUrl.isNotEmpty;
             return Row(
               children: [
                 CircleAvatar(
                   radius: 14,
                   backgroundColor: Colors.white.withValues(alpha: 0.2),
-                  backgroundImage: photoUrl != null && photoUrl.isNotEmpty
-                      ? NetworkImage(photoUrl)
-                      : null,
-                  child: photoUrl == null || photoUrl.isEmpty
+                  backgroundImage: hasAvatarAsset
+                      ? AssetImage(avatarAsset)
+                      : hasPhotoUrl
+                          ? NetworkImage(photoUrl)
+                          : null,
+                  child: !hasAvatarAsset && !hasPhotoUrl
                       ? const Icon(Icons.person, color: Colors.white, size: 16)
                       : null,
                 ),
