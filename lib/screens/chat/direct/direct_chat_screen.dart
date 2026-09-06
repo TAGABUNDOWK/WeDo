@@ -63,6 +63,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   int _lastMessageCount = 0;
   late Stream<List<ChatMessage>> _messagesStream;
   late Stream<UserEntity?> _otherUserStream;
+  ChatMessage? _replyingTo;
 
   @override
   void initState() {
@@ -162,9 +163,13 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       senderId: _currentUser.uid,
       senderName: _currentUser.displayName ?? _currentUser.email ?? 'Unknown',
       text: text,
+      replyTo: _replyingTo?.id,
+      replyToContent: _replyingTo?.content,
+      replyToSender: _replyingTo?.senderName,
     );
 
     _messageCtrl.clear();
+    setState(() => _replyingTo = null);
   }
 
   void _editMessage(ChatMessage msg) {
@@ -240,6 +245,34 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       uid: _currentUser!.uid,
       forEveryone: false,
     );
+  }
+
+  void _startReply(ChatMessage msg) {
+    setState(() => _replyingTo = msg);
+    _messageCtrl.clear();
+    FocusScope.of(context).requestFocus(FocusNode());
+  }
+
+  void _cancelReply() {
+    setState(() => _replyingTo = null);
+  }
+
+  void _toggleReaction(ChatMessage msg, String emoji) {
+    if (_currentUser == null) return;
+    if (emoji.isEmpty) {
+      _directService.removeReaction(
+        chatId: widget.chatId,
+        messageId: msg.id,
+        uid: _currentUser!.uid,
+      );
+    } else {
+      _directService.addReaction(
+        chatId: widget.chatId,
+        messageId: msg.id,
+        uid: _currentUser!.uid,
+        emoji: emoji,
+      );
+    }
   }
 
   Future<void> _pickAndSendImage() async {
@@ -669,6 +702,12 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                               senderPhotoUrl: !isMe ? _otherPhotoUrl : null,
                               senderAvatarAsset: !isMe ? _otherAvatarAsset : null,
                               isRead: isMe && msg.isRead,
+                              currentUid: _currentUser?.uid,
+                              onReply: () => _startReply(msg),
+                              onReact: (emoji) => _toggleReaction(msg, emoji),
+                              reactions: msg.reactions,
+                              replyToContent: msg.replyToContent,
+                              replyToSender: msg.replyToSender,
                             );
                           }
 
@@ -694,6 +733,12 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                               senderPhotoUrl: !isMe ? _otherPhotoUrl : null,
                               senderAvatarAsset: !isMe ? _otherAvatarAsset : null,
                               isRead: isMe && msg.isRead,
+                              currentUid: _currentUser?.uid,
+                              onReply: () => _startReply(msg),
+                              onReact: (emoji) => _toggleReaction(msg, emoji),
+                              reactions: msg.reactions,
+                              replyToContent: msg.replyToContent,
+                              replyToSender: msg.replyToSender,
                             );
                           }
 
@@ -749,8 +794,31 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                                 : null,
                             onDeleteForMe: () => _deleteMessageForMe(msg),
                             senderPhotoUrl: !isMe ? _otherPhotoUrl : null,
-                              senderAvatarAsset: !isMe ? _otherAvatarAsset : null,
+                            senderAvatarAsset: !isMe ? _otherAvatarAsset : null,
                             isRead: isMe && msg.isRead,
+                            currentUid: _currentUser?.uid,
+                            onReply: () => _startReply(msg),
+                            onReact: (emoji) => _toggleReaction(msg, emoji),
+                            reactions: msg.reactions,
+                            replyToContent: msg.replyToContent,
+                            replyToSender: msg.replyToSender,
+                          );
+                        }
+
+                        Widget wrapWithSwipe(Widget child) {
+                          if (isSystem || msg.type == MessageType.call ||
+                              msg.type == MessageType.event ||
+                              msg.type == MessageType.poll) {
+                            return child;
+                          }
+                          return GestureDetector(
+                            onHorizontalDragEnd: (details) {
+                              if (details.primaryVelocity != null &&
+                                  details.primaryVelocity! > 300) {
+                                _startReply(msg);
+                              }
+                            },
+                            child: child,
                           );
                         }
 
@@ -758,11 +826,11 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                           return Column(
                             children: [
                               DateSeparator(timestamp: msg.createdAt),
-                              buildMessage(),
+                              wrapWithSwipe(buildMessage()),
                             ],
                           );
                         }
-                        return buildMessage();
+                        return wrapWithSwipe(buildMessage());
                       },
                     );
                   },
@@ -824,56 +892,109 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
             color: t.composerBackground,
             child: SafeArea(
-              child: Row(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  IconButton(
-                    icon: Icon(
-                      Icons.add_circle_outline,
-                      color: t.textSecondary,
-                    ),
-                    onPressed: _showAttachMenu,
-                  ),
-                  AudioRecorderButton(onRecordingComplete: _onAudioRecorded),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: TextField(
-                      controller: _messageCtrl,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: InputDecoration(
-                        hintText: 'Message',
-                        hintStyle: TextStyle(color: t.textSecondary),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
-                          borderSide: BorderSide.none,
-                        ),
-                        filled: true,
-                        fillColor: t.inputBackground,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
+                  if (_replyingTo != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      margin: const EdgeInsets.only(bottom: 4),
+                      decoration: BoxDecoration(
+                        color: t.inputBackground,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border(
+                          left: BorderSide(color: t.accent, width: 3),
                         ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: t.accent,
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      onPressed: _sendMessage,
-                      icon: const Icon(
-                        Icons.send,
-                        color: Colors.white,
-                        size: 20,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  _replyingTo!.senderName?.isNotEmpty == true
+                                      ? _replyingTo!.senderName!
+                                      : 'You',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: t.accent,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  _replyingTo!.content,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: t.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: _cancelReply,
+                            child: Icon(Icons.close, size: 18, color: t.textSecondary),
+                          ),
+                        ],
                       ),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                        minWidth: 40,
-                        minHeight: 40,
-                      ),
                     ),
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          Icons.add_circle_outline,
+                          color: t.textSecondary,
+                        ),
+                        onPressed: _showAttachMenu,
+                      ),
+                      AudioRecorderButton(onRecordingComplete: _onAudioRecorded),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: TextField(
+                          controller: _messageCtrl,
+                          textCapitalization: TextCapitalization.sentences,
+                          decoration: InputDecoration(
+                            hintText: _replyingTo != null ? 'Reply...' : 'Message',
+                            hintStyle: TextStyle(color: t.textSecondary),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(24),
+                              borderSide: BorderSide.none,
+                            ),
+                            filled: true,
+                            fillColor: t.inputBackground,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 10,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: t.accent,
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          onPressed: _sendMessage,
+                          icon: const Icon(
+                            Icons.send,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 40,
+                            minHeight: 40,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
