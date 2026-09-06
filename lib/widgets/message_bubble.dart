@@ -543,9 +543,9 @@ class _MessageBubbleState extends State<MessageBubble> {
                           ),
                           if (widget.reactions != null && widget.reactions!.isNotEmpty)
                             Positioned(
-                              bottom: -10,
-                              right: widget.isMe ? 2 : null,
-                              left: widget.isMe ? null : 2,
+                              bottom: -4,
+                              right: widget.isMe ? -2 : null,
+                              left: widget.isMe ? null : -2,
                               child: _buildReactionBadge(widget.reactions!, widget.currentUid, accent),
                             ),
                         ],
@@ -656,22 +656,22 @@ class _MessageBubbleState extends State<MessageBubble> {
     final isOwnDisplay = isOwn && ownEmoji == displayEmoji;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       decoration: BoxDecoration(
         color: isOwnDisplay
             ? accent.withValues(alpha: 0.18)
             : Theme.of(context).scaffoldBackgroundColor,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isOwnDisplay
               ? accent.withValues(alpha: 0.4)
               : Theme.of(context).dividerColor.withValues(alpha: 0.3),
-          width: 1,
+          width: 0.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 4,
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 3,
             offset: const Offset(0, 1),
           ),
         ],
@@ -679,13 +679,13 @@ class _MessageBubbleState extends State<MessageBubble> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(displayEmoji, style: const TextStyle(fontSize: 14)),
+          Text(displayEmoji, style: const TextStyle(fontSize: 13)),
           if (count > 1) ...[
-            const SizedBox(width: 2),
+            const SizedBox(width: 1),
             Text(
               '$count',
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 9,
                 color: isOwnDisplay ? accent : Theme.of(context).textTheme.bodySmall?.color,
                 fontWeight: FontWeight.w600,
               ),
