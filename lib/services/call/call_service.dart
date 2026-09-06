@@ -44,13 +44,19 @@ class CallService {
 
   Future<void> joinCall(String callId, String uid) async {
     final doc = await _calls.doc(callId).get();
-    final status = doc.data()?['status'] as String?;
+    final data = doc.data();
+    final status = data?['status'] as String?;
     if (status == 'ended' || status == 'missed') return;
 
-    await _calls.doc(callId).update({
+    final updateData = <String, dynamic>{
       'status': CallStatus.active.value,
-      'startedAt': FieldValue.serverTimestamp(),
-    });
+    };
+
+    if (status != CallStatus.active.value) {
+      updateData['startedAt'] = FieldValue.serverTimestamp();
+    }
+
+    await _calls.doc(callId).update(updateData);
 
     await _participants(callId).doc(uid).set({
       'uid': uid,
@@ -86,9 +92,7 @@ class CallService {
         .where('status', isEqualTo: 'active')
         .get();
 
-    final createdBy = callDoc.data()?['createdBy'] as String?;
-
-    if (activeParticipants.docs.isEmpty || uid == createdBy) {
+    if (activeParticipants.docs.isEmpty) {
       await endCall(callId);
     }
   }

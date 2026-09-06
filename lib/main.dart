@@ -94,6 +94,7 @@ class _IncomingCallListener extends StatefulWidget {
 
 class _IncomingCallListenerState extends State<_IncomingCallListener> {
   final _callService = CallService();
+  final _userService = UserService();
   StreamSubscription<Call?>? _callSub;
   bool _navigated = false;
 
@@ -104,7 +105,7 @@ class _IncomingCallListenerState extends State<_IncomingCallListener> {
   }
 
   void _listenForCall() {
-    _callSub = _callService.getCallStream(widget.callId).listen((call) {
+    _callSub = _callService.getCallStream(widget.callId).listen((call) async {
       if (call == null) {
         if (mounted) Navigator.of(context).pop();
         return;
@@ -117,14 +118,25 @@ class _IncomingCallListenerState extends State<_IncomingCallListener> {
 
       if (call.status.name == 'ringing' && mounted && !_navigated) {
         _navigated = true;
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => IncomingCallScreen(
-              call: call,
-              callerName: call.createdBy,
+
+        String callerDisplayName = call.createdBy;
+        try {
+          final userDoc = await _userService.getUserDocument(call.createdBy);
+          if (userDoc != null && userDoc.displayName.isNotEmpty) {
+            callerDisplayName = userDoc.displayName;
+          }
+        } catch (_) {}
+
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => IncomingCallScreen(
+                call: call,
+                callerName: callerDisplayName,
+              ),
             ),
-          ),
-        );
+          );
+        }
       }
     });
   }
