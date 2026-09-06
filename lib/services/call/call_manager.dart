@@ -304,22 +304,17 @@ class CallManager extends ChangeNotifier {
     _webrtcService!.onRemoteStream.listen((pair) {
       final (peerId, stream) = pair;
       _remoteStreamController?.add(stream);
-      if (stream.getTracks().isEmpty) {
-        final renderer = _remoteRenderers.remove(peerId);
-        renderer?.srcObject = null;
-        renderer?.dispose();
+
+      var renderer = _remoteRenderers[peerId];
+      if (renderer == null) {
+        renderer = RTCVideoRenderer();
+        renderer.initialize().then((_) {
+          renderer!.srcObject = stream;
+          notifyListeners();
+        });
+        _remoteRenderers[peerId] = renderer;
       } else {
-        var renderer = _remoteRenderers[peerId];
-        if (renderer == null) {
-          renderer = RTCVideoRenderer();
-          renderer.initialize().then((_) {
-            renderer!.srcObject = stream;
-            notifyListeners();
-          });
-          _remoteRenderers[peerId] = renderer;
-        } else {
-          renderer.srcObject = stream;
-        }
+        renderer.srcObject = stream;
       }
       notifyListeners();
     });
