@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/call.dart';
 import '../../services/auth/user_service.dart';
 import '../../services/call/call_manager.dart';
@@ -35,6 +36,7 @@ class _CallScreenState extends State<CallScreen> {
   final CallManager _callManager = CallManager();
   final UserService _userService = UserService();
   final Map<String, String> _participantNames = {};
+  final Map<String, String> _participantPhotos = {};
 
   Offset _pipPosition = Offset.zero;
   bool _pipInitialized = false;
@@ -79,6 +81,31 @@ class _CallScreenState extends State<CallScreen> {
   }
 
   Future<void> _loadParticipantNames() async {
+    final myUid = FirebaseAuth.instance.currentUser?.uid;
+    if (myUid != null && !_participantNames.containsKey(myUid)) {
+      try {
+        final user = await _userService.getUserDocument(myUid);
+        if (user != null && mounted) {
+          setState(() {
+            _participantNames[myUid] = user.displayName.isNotEmpty
+                ? user.displayName
+                : (user.username.isNotEmpty ? user.username : myUid);
+            if (user.photoUrl != null && user.photoUrl!.isNotEmpty) {
+              _participantPhotos[myUid] = user.photoUrl!;
+            } else if (user.avatarAsset != null && user.avatarAsset!.isNotEmpty) {
+              _participantPhotos[myUid] = 'asset:${user.avatarAsset!}';
+            }
+          });
+        }
+      } catch (_) {
+        if (mounted) {
+          setState(() {
+            _participantNames[myUid] = myUid;
+          });
+        }
+      }
+    }
+
     for (final uid in widget.members) {
       if (_participantNames.containsKey(uid)) continue;
       try {
@@ -88,6 +115,11 @@ class _CallScreenState extends State<CallScreen> {
             _participantNames[uid] = user.displayName.isNotEmpty
                 ? user.displayName
                 : (user.username.isNotEmpty ? user.username : uid);
+            if (user.photoUrl != null && user.photoUrl!.isNotEmpty) {
+              _participantPhotos[uid] = user.photoUrl!;
+            } else if (user.avatarAsset != null && user.avatarAsset!.isNotEmpty) {
+              _participantPhotos[uid] = 'asset:${user.avatarAsset!}';
+            }
           });
         }
       } catch (_) {
@@ -102,6 +134,47 @@ class _CallScreenState extends State<CallScreen> {
 
   String _getParticipantName(String uid) {
     return _participantNames[uid] ?? uid;
+  }
+
+  String? _getParticipantPhoto(String uid) {
+    return _participantPhotos[uid];
+  }
+
+  bool _hasActiveVideo(RTCVideoRenderer renderer) {
+    final stream = renderer.srcObject;
+    if (stream == null) return false;
+    final videoTracks = stream.getVideoTracks();
+    if (videoTracks.isEmpty) return false;
+    return videoTracks.any((track) => track.enabled);
+  }
+
+  Widget _buildParticipantAvatar({
+    required String uid,
+    required double radius,
+  }) {
+    final name = _getParticipantName(uid);
+    final photo = _getParticipantPhoto(uid);
+    final hasPhoto = photo != null && photo.isNotEmpty;
+    final isAsset = hasPhoto && photo.startsWith('asset:');
+
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: const Color(0xFFFE4EF0).withValues(alpha: 0.2),
+      backgroundImage: hasPhoto
+          ? (isAsset
+              ? AssetImage(photo.replaceFirst('asset:', ''))
+              : NetworkImage(photo))
+          : null,
+      child: !hasPhoto
+          ? Text(
+              name.isNotEmpty ? name[0].toUpperCase() : '?',
+              style: TextStyle(
+                fontSize: radius,
+                color: const Color(0xFFFE4EF0),
+              ),
+            )
+          : null,
+    );
   }
 
   void _initPipPosition(BoxConstraints constraints) {
@@ -177,9 +250,7 @@ class _CallScreenState extends State<CallScreen> {
   }
 
   Widget _buildVideoView() {
-    final remoteCount = _callManager.remoteParticipantCount;
-
-    if (widget.isGroup && remoteCount > 1) {
+    if (widget.isGroup) {
       return LayoutBuilder(
         builder: (context, constraints) {
           _initPipPosition(constraints);
@@ -284,6 +355,54 @@ class _CallScreenState extends State<CallScreen> {
       return _buildFocusedPeerView(constraints, entries);
     }
 
+    if (entries.isEmpty) {
+      final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+      return Stack(
+        children: [
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _buildParticipantAvatar(uid: myUid, radius: 60),
+                const SizedBox(height: 16),
+                const Text(
+                  'Waiting for others to join...',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70, fontSize: 16),
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            top: 16,
+            left: 0,
+            right: 0,
+            child: Column(
+              children: [
+                Text(
+                  widget.callName,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  formatSeconds(_callManager.callDuration),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70, fontSize: 14),
+                ),
+              ],
+            ),
+          ),
+          if (hasLocalStream) _buildDraggablePip(constraints),
+        ],
+      );
+    }
+
     return _buildGridPeerView(constraints, entries, hasLocalStream);
   }
 
@@ -294,25 +413,36 @@ class _CallScreenState extends State<CallScreen> {
       orElse: () => entries.first,
     );
     final hasLocalStream = _callManager.localRenderer?.srcObject != null;
+    final hasVideo = _hasActiveVideo(focusedEntry.value);
 
     return Stack(
       children: [
         Positioned.fill(
           child: GestureDetector(
             onTap: () => _onPeerTapped(focusedEntry.key),
-            child: FittedBox(
-              fit: BoxFit.cover,
-              clipBehavior: Clip.hardEdge,
-              child: SizedBox(
-                width: 320,
-                height: 240,
-                child: RTCVideoView(
-                  focusedEntry.value,
-                  objectFit:
-                      RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                ),
-              ),
-            ),
+            child: hasVideo
+                ? FittedBox(
+                    fit: BoxFit.cover,
+                    clipBehavior: Clip.hardEdge,
+                    child: SizedBox(
+                      width: 320,
+                      height: 240,
+                      child: RTCVideoView(
+                        focusedEntry.value,
+                        objectFit:
+                            RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                      ),
+                    ),
+                  )
+                : Container(
+                    color: const Color(0xFF2D1B69),
+                    child: Center(
+                      child: _buildParticipantAvatar(
+                        uid: focusedEntry.key,
+                        radius: 60,
+                      ),
+                    ),
+                  ),
           ),
         ),
         Positioned(
@@ -356,6 +486,7 @@ class _CallScreenState extends State<CallScreen> {
       right: 8,
       child: Column(
         children: otherEntries.map((entry) {
+          final hasVideo = _hasActiveVideo(entry.value);
           return Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: GestureDetector(
@@ -375,11 +506,22 @@ class _CallScreenState extends State<CallScreen> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      RTCVideoView(
-                        entry.value,
-                        objectFit:
-                            RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                      ),
+                      if (hasVideo)
+                        RTCVideoView(
+                          entry.value,
+                          objectFit:
+                              RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                        )
+                      else
+                        Container(
+                          color: const Color(0xFF2D1B69),
+                          child: Center(
+                            child: _buildParticipantAvatar(
+                              uid: entry.key,
+                              radius: 20,
+                            ),
+                          ),
+                        ),
                       Positioned(
                         left: 4,
                         bottom: 4,
@@ -437,6 +579,7 @@ class _CallScreenState extends State<CallScreen> {
           itemCount: count,
           itemBuilder: (context, index) {
             final entry = entries[index];
+            final hasVideo = _hasActiveVideo(entry.value);
             return GestureDetector(
               onTap: () => _onPeerTapped(entry.key),
               child: ClipRRect(
@@ -444,11 +587,22 @@ class _CallScreenState extends State<CallScreen> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    RTCVideoView(
-                      entry.value,
-                      objectFit:
-                          RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                    ),
+                    if (hasVideo)
+                      RTCVideoView(
+                        entry.value,
+                        objectFit:
+                            RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                      )
+                    else
+                      Container(
+                        color: const Color(0xFF2D1B69),
+                        child: Center(
+                          child: _buildParticipantAvatar(
+                            uid: entry.key,
+                            radius: 32,
+                          ),
+                        ),
+                      ),
                     Positioned(
                       left: 8,
                       bottom: 8,
@@ -459,12 +613,23 @@ class _CallScreenState extends State<CallScreen> {
                           color: Colors.black54,
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: Text(
-                          _getParticipantName(entry.key),
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 12),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              hasVideo ? Icons.videocam : Icons.videocam_off,
+                              color: hasVideo ? Colors.green : Colors.white54,
+                              size: 12,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _getParticipantName(entry.key),
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 12),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -510,6 +675,9 @@ class _CallScreenState extends State<CallScreen> {
       return const SizedBox.shrink();
     }
 
+    final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final hasLocalVideo = _hasActiveVideo(localRenderer);
+
     return Positioned(
       left: _pipPosition.dx,
       top: _pipPosition.dy,
@@ -546,12 +714,22 @@ class _CallScreenState extends State<CallScreen> {
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: RTCVideoView(
-              localRenderer,
-              mirror: true,
-              objectFit:
-                  RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-            ),
+            child: hasLocalVideo
+                ? RTCVideoView(
+                    localRenderer,
+                    mirror: true,
+                    objectFit:
+                        RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                  )
+                : Container(
+                    color: const Color(0xFF2D1B69),
+                    child: Center(
+                      child: _buildParticipantAvatar(
+                        uid: myUid,
+                        radius: 30,
+                      ),
+                    ),
+                  ),
           ),
         ),
       ),
