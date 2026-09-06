@@ -35,6 +35,10 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
   TriRaceStatus? _currentRaceStatus;
   final Map<String, String> _displayNames = {};
   final Set<String> _nameQueued = {};
+  final Map<String, String> _profileUrls = {};
+  final Set<String> _photoQueued = {};
+  final Map<String, String> _avatarAssets = {};
+  final Set<String> _avatarAssetsQueued = {};
 
   Future<void> _onPopInvoked(bool didPop, dynamic result) async {
     if (didPop || _isConfirmingLeave) return;
@@ -106,8 +110,38 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
     });
   }
 
+  // Resolve profile photo URLs (users/{id}.photo_url) once per uid
+  void _resolveProfilePhotos(List<TriRaceParticipant> participants) {
+    final missing = participants
+        .map((p) => p.userId)
+        .where((id) => !_photoQueued.contains(id))
+        .toList();
+    if (missing.isEmpty) return;
+    _photoQueued.addAll(missing);
+    _service.fetchProfilePhotos(missing).then((photos) {
+      if (!mounted) return;
+      setState(() => _profileUrls.addAll(photos));
+    });
+  }
+
+  // Resolve preset avatar assets (users/{id}.avatar_asset) once per uid
+  void _resolveAvatarAssets(List<TriRaceParticipant> participants) {
+    final missing = participants
+        .map((p) => p.userId)
+        .where((id) => !_avatarAssetsQueued.contains(id))
+        .toList();
+    if (missing.isEmpty) return;
+    _avatarAssetsQueued.addAll(missing);
+    _service.fetchAvatarAssets(missing).then((assets) {
+      if (!mounted) return;
+      setState(() => _avatarAssets.addAll(assets));
+    });
+  }
+
   String _participantName(TriRaceParticipant p) =>
       _displayNames[p.userId] ?? p.username;
+
+  String? _participantPhoto(TriRaceParticipant p) => _profileUrls[p.userId];
 
   Future<void> _confirmLeave() async {
     if (_isConfirmingLeave) return;
@@ -256,6 +290,8 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
               builder: (context, participantSnapshot) {
                 final participants = participantSnapshot.data ?? [];
                 _resolveNames(participants);
+                _resolveProfilePhotos(participants);
+                _resolveAvatarAssets(participants);
 
                 return Padding(
                   padding: const EdgeInsets.all(20),
@@ -357,6 +393,9 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
                                 int.parse(p.avatarColor.replaceFirst('#', '0xFF')),
                               );
                               final isNeon = race.colorTheme == 'neon';
+                              final photoUrl = _participantPhoto(p);
+                              final avatarAsset = _avatarAssets[p.userId];
+                              final hasImage = photoUrl != null || avatarAsset != null;
                               return Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -378,19 +417,36 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
                                               ),
                                             ]
                                           : null,
+                                      image: photoUrl != null
+                                          ? DecorationImage(
+                                              image: NetworkImage(photoUrl),
+                                              fit: BoxFit.cover,
+                                            )
+                                          : null,
                                     ),
                                     alignment: Alignment.center,
-                                    child: Text(
-                                      _participantName(p).isNotEmpty
-                                          ? _participantName(p)[0].toUpperCase()
-                                          : '?',
-                                      style: const TextStyle(
-                                        fontFamily: _fontFamily,
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.white,
-                                      ),
-                                    ),
+                                    child: hasImage
+                                        ? (avatarAsset != null && photoUrl == null
+                                            ? ClipOval(
+                                                child: Image.asset(
+                                                  avatarAsset,
+                                                  width: 56,
+                                                  height: 56,
+                                                  fit: BoxFit.cover,
+                                                ),
+                                              )
+                                            : null)
+                                        : Text(
+                                            _participantName(p).isNotEmpty
+                                                ? _participantName(p)[0].toUpperCase()
+                                                : '?',
+                                            style: const TextStyle(
+                                              fontFamily: _fontFamily,
+                                              fontSize: 20,
+                                              fontWeight: FontWeight.w700,
+                                              color: Colors.white,
+                                            ),
+                                          ),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(

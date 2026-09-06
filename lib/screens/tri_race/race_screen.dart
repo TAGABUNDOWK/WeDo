@@ -94,6 +94,10 @@ class _RaceScreenState extends State<RaceScreen>
   final Map<String, List<_Segment>> _segments = {};
   String _colorTheme = 'solid';
 
+  // Display name resolution
+  final Map<String, String> _displayNames = {};
+  final Set<String> _nameQueued = {};
+
   // Rotation state — updated every frame from ticker, no separate timers
   final Map<String, double> _rotations = {};
   double _lastRotationTick = 0;
@@ -335,7 +339,24 @@ class _RaceScreenState extends State<RaceScreen>
         _rotations[p.userId] = 0;
       }
     }
+    _resolveNames();
   }
+
+  void _resolveNames() {
+    final missing = _participants
+        .map((p) => p.userId)
+        .where((id) => !_nameQueued.contains(id))
+        .toList();
+    if (missing.isEmpty) return;
+    _nameQueued.addAll(missing);
+    _service.fetchDisplayNames(missing).then((names) {
+      if (!mounted) return;
+      setState(() => _displayNames.addAll(names));
+    });
+  }
+
+  String _participantName(TriRaceParticipant p) =>
+      _displayNames[p.userId] ?? p.username;
 
   double _computeProgress(TriRaceParticipant p) {
     if (_raceStartedAt == null || p.finishTimeMs == null) return 0;
@@ -489,6 +510,7 @@ class _RaceScreenState extends State<RaceScreen>
                 colorEnds: _colorEnds,
                 segments: _segments,
                 rotations: _rotations,
+                displayNames: _displayNames,
                 computeProgress: _computeProgress,
                 worldWidth: worldWidth,
                 screenH: screenH,
@@ -551,6 +573,7 @@ class _RaceScreenState extends State<RaceScreen>
                 participants: _participants,
                 arrived: _arrived,
                 colors: _colors,
+                displayNames: _displayNames,
                 visualProgress: _visualProgress,
               ),
             ),
@@ -570,6 +593,7 @@ class _TriangleLayerPainter extends CustomPainter {
   final Map<String, Color?> colorEnds;
   final Map<String, List<_Segment>> segments;
   final Map<String, double> rotations;
+  final Map<String, String> displayNames;
   final double Function(TriRaceParticipant) computeProgress;
   final double worldWidth;
   final double screenH;
@@ -584,6 +608,7 @@ class _TriangleLayerPainter extends CustomPainter {
     required this.colorEnds,
     required this.segments,
     required this.rotations,
+    required this.displayNames,
     required this.computeProgress,
     required this.worldWidth,
     required this.screenH,
@@ -651,9 +676,10 @@ class _TriangleLayerPainter extends CustomPainter {
 
       canvas.restore();
 
+      final displayName = displayNames[p.userId] ?? p.username;
       final textPainter = TextPainter(
           text: TextSpan(
-            text: p.username,
+            text: displayName,
           style: TextStyle(
             fontFamily: _fontFamily,
             fontSize: 11,
@@ -775,12 +801,14 @@ class _LeaderboardPanel extends StatelessWidget {
   final List<TriRaceParticipant> participants;
   final Set<String> arrived;
   final Map<String, Color> colors;
+  final Map<String, String> displayNames;
   final double Function(TriRaceParticipant) visualProgress;
 
   const _LeaderboardPanel({
     required this.participants,
     required this.arrived,
     required this.colors,
+    required this.displayNames,
     required this.visualProgress,
   });
 
@@ -864,7 +892,7 @@ class _LeaderboardPanel extends StatelessWidget {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        p.username,
+                        displayNames[p.userId] ?? p.username,
                         style: TextStyle(
                           fontFamily: _fontFamily,
                           fontSize: 10,

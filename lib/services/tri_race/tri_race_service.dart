@@ -215,6 +215,52 @@ class TriRaceService {
     return names;
   }
 
+  /// Resolves profile photo URLs (users/{id}.photo_url) for the given userIds.
+  /// Bots are skipped and keys with no photo are omitted so callers can fall
+  /// back to a default avatar.
+  Future<Map<String, String>> fetchProfilePhotos(List<String> userIds) async {
+    final unique = userIds.where((id) => !id.startsWith('bot_')).toSet();
+    if (unique.isEmpty) return const {};
+
+    final photos = <String, String>{};
+    try {
+      final docs = await Future.wait(
+        unique.map((id) => _db.collection('users').doc(id).get()),
+      );
+      for (final doc in docs) {
+        if (!doc.exists) continue;
+        final data = doc.data();
+        final photoUrl = (data?['photo_url'] as String?)?.trim();
+        if (photoUrl != null && photoUrl.isNotEmpty) photos[doc.id] = photoUrl;
+      }
+    } catch (_) {}
+
+    return photos;
+  }
+
+  /// Resolves preset avatar asset paths (users/{id}.avatar_asset) for the given
+  /// userIds. Bots are skipped and keys with no asset are omitted so callers can
+  /// fall back to a default avatar.
+  Future<Map<String, String>> fetchAvatarAssets(List<String> userIds) async {
+    final unique = userIds.where((id) => !id.startsWith('bot_')).toSet();
+    if (unique.isEmpty) return const {};
+
+    final assets = <String, String>{};
+    try {
+      final docs = await Future.wait(
+        unique.map((id) => _db.collection('users').doc(id).get()),
+      );
+      for (final doc in docs) {
+        if (!doc.exists) continue;
+        final data = doc.data();
+        final asset = (data?['avatar_asset'] as String?)?.trim();
+        if (asset != null && asset.isNotEmpty) assets[doc.id] = asset;
+      }
+    } catch (_) {}
+
+    return assets;
+  }
+
   // ──────────────────────────── Completed Queries ──────────────────────────
 
   Future<List<TriRace>> getUserCompletedTriRaces(String uid, {int limit = 3}) async {
@@ -277,10 +323,10 @@ class TriRaceService {
       final rng = Random();
       final batch = _db.batch();
 
-      // Generate finishTimeMs for each participant (6000–14000ms)
+      // Generate finishTimeMs for each participant (20000–35000ms)
       final List<MapEntry<String, int>> finishTimes = [];
       for (final p in participants) {
-        final finishMs = 6000 + rng.nextInt(8001); // 6000–14000
+        final finishMs = 20000 + rng.nextInt(15001); // 20000–35000
         finishTimes.add(MapEntry(p.id, finishMs));
       }
 
