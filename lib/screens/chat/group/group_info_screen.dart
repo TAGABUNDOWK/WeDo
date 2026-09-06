@@ -385,14 +385,14 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     if (confirm == true && mounted) {
       final senderName =
           _currentUser?.displayName ?? _currentUser?.email ?? 'Someone';
-      await _groupService.removeMember(
-        groupId: widget.groupId,
-        memberUid: memberId,
-      );
       await _groupService.sendSystemMessage(
         groupId: widget.groupId,
         content: '$senderName removed $memberName',
         senderName: senderName,
+      );
+      await _groupService.removeMember(
+        groupId: widget.groupId,
+        memberUid: memberId,
       );
       _loadData();
     }
@@ -474,14 +474,14 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
 
     if (confirm == true && mounted) {
       final senderName = _currentUser?.displayName ?? _currentUser?.email ?? 'Someone';
-      await _groupService.removeMember(
-        groupId: widget.groupId,
-        memberUid: _currentUser!.uid,
-      );
       await _groupService.sendSystemMessage(
         groupId: widget.groupId,
         content: '$senderName left the group',
         senderName: senderName,
+      );
+      await _groupService.removeMember(
+        groupId: widget.groupId,
+        memberUid: _currentUser!.uid,
       );
       if (mounted) Navigator.pop(context);
     }

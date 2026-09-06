@@ -272,6 +272,57 @@ class _AttendeeRow extends StatelessWidget {
     required this.userCache,
   });
 
+  Widget _buildAvatar(String uid, double size) {
+    final user = userCache[uid];
+    final photoUrl = user?.photoUrl;
+    final avatarAsset = user?.avatarAsset;
+    final hasAvatarAsset = avatarAsset != null && avatarAsset.isNotEmpty;
+    final hasAvatarUrl = photoUrl != null && photoUrl.isNotEmpty;
+    final initials = uid.isNotEmpty ? uid.substring(0, 1).toUpperCase() : '?';
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: const Color(0xFF211635),
+        border: Border.all(color: AppColors.midnightBg, width: 1.5),
+      ),
+      child: ClipOval(
+        child: hasAvatarAsset
+            ? Image.asset(
+                avatarAsset,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => _buildFallback(initials, size),
+              )
+            : hasAvatarUrl
+                ? Image.network(
+                    photoUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => _buildFallback(initials, size),
+                  )
+                : _buildFallback(initials, size),
+      ),
+    );
+  }
+
+  Widget _buildFallback(String initials, double size) {
+    return Container(
+      color: const Color(0xFF211635),
+      child: Center(
+        child: Text(
+          initials,
+          style: TextStyle(
+            fontFamily: _fontFamily,
+            fontSize: size * 0.4,
+            fontWeight: FontWeight.w700,
+            color: AppColors.lavenderAccent,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final respondents = event.rsvps.keys.toList();
@@ -286,23 +337,8 @@ class _AttendeeRow extends StatelessWidget {
       );
     }
 
-    String nameFor(String uid) {
-      final user = userCache[uid];
-      if (user != null) {
-        final n =
-            (user.displayName.isNotEmpty ? user.displayName : (user.email ?? ''))
-                .trim();
-        if (n.isNotEmpty) return n;
-      }
-      return uid.length > 6 ? uid.substring(0, 6) : uid;
-    }
-
-    final displayNames = <String>[
-      for (final uid in respondents) nameFor(uid),
-    ];
-
-    final visibleCount = displayNames.length.clamp(0, 4);
-    final overflow = displayNames.length - visibleCount;
+    final visibleCount = respondents.length.clamp(0, 4);
+    final overflow = respondents.length - visibleCount;
 
     return Row(
       children: [
@@ -313,31 +349,7 @@ class _AttendeeRow extends StatelessWidget {
             children: List.generate(visibleCount, (i) {
               return Positioned(
                 left: i * 16.0,
-                child: Container(
-                  width: 20,
-                  height: 20,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF211635),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: AppColors.midnightBg,
-                      width: 1.5,
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      displayNames[i].isNotEmpty
-                          ? displayNames[i][0].toUpperCase()
-                          : '?',
-                      style: const TextStyle(
-                        fontFamily: _fontFamily,
-                        fontSize: 8,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.lavenderAccent,
-                      ),
-                    ),
-                  ),
-                ),
+                child: _buildAvatar(respondents[i], 20),
               );
             }),
           ),
@@ -573,8 +585,8 @@ class _RsvpRow extends StatelessWidget {
       children: [
         Expanded(
           child: _RsvpButton(
-            label: 'Yes',
-            count: event.yesCount,
+            label: 'Interested',
+            count: event.interestedCount,
             isSelected: myResponse == 'yes',
             isActive: true,
             isLocked: isLocked,
@@ -584,19 +596,8 @@ class _RsvpRow extends StatelessWidget {
         const SizedBox(width: 6),
         Expanded(
           child: _RsvpButton(
-            label: 'Maybe',
-            count: event.maybeCount,
-            isSelected: myResponse == 'maybe',
-            isActive: false,
-            isLocked: isLocked,
-            onTap: () => onRsvp('maybe'),
-          ),
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: _RsvpButton(
-            label: 'No',
-            count: event.noCount,
+            label: 'Not Interested',
+            count: event.notInterestedCount,
             isSelected: myResponse == 'no',
             isActive: false,
             isLocked: isLocked,
@@ -676,7 +677,7 @@ class _RsvpButton extends StatelessWidget {
               children: [
                 if (isSelected) ...[
                   Icon(
-                    isActive ? Icons.check : (label == 'Maybe' ? Icons.help_outline : Icons.close),
+                    Icons.close,
                     size: 11,
                     color: iconColor,
                   ),

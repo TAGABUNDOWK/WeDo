@@ -18,7 +18,7 @@ void main() {
 
   for (int i = 0; i < totalSamples; i++) {
     final t = i / sampleRate;
-    final cycleDuration = ringOn + ringPause + ringOn + cyclePause;
+    const cycleDuration = ringOn + ringPause + ringOn + cyclePause;
     final cyclePos = t % cycleDuration;
 
     double amplitude = 0;
@@ -44,8 +44,8 @@ void main() {
     if (amplitude > 0) {
       final burstStart = cyclePos < ringOn ? 0.0 : ringOn + ringPause;
       final posInBurst = cyclePos - burstStart;
-      final attack = 0.010;
-      final release = 0.020;
+      const attack = 0.010;
+      const release = 0.020;
       if (posInBurst < attack) {
         amplitude *= posInBurst / attack;
       } else if (posInBurst > ringOn - release) {
@@ -60,16 +60,16 @@ void main() {
 
   // Write WAV file
   final wav = _buildWav(samples, sampleRate);
-  final outPath = 'assets/audio/ringtone.wav';
+  const outPath = 'assets/audio/ringtone.wav';
   File(outPath).writeAsBytesSync(wav);
   print('Generated $outPath (${wav.length} bytes)');
 }
 
 Uint8List _buildWav(Int16List samples, int sampleRate) {
-  final numChannels = 1;
-  final bitsPerSample = 16;
+  const numChannels = 1;
+  const bitsPerSample = 16;
   final byteRate = sampleRate * numChannels * bitsPerSample ~/ 8;
-  final blockAlign = numChannels * bitsPerSample ~/ 8;
+  const blockAlign = numChannels * bitsPerSample ~/ 8;
   final dataSize = samples.lengthInBytes;
   final fileSize = 36 + dataSize;
 

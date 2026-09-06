@@ -1,15 +1,22 @@
 import 'dart:ui';
+import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../account/account_screen.dart';
 import '../friends/friends_page.dart';
 import '../session/session_entry_screen.dart';
-import '../session/create_session_screen.dart';
 import '../../features/spin_wheel/screens/wheel_screen.dart';
+import '../tri_race/tri_race_entry_screen.dart';
+import '../games/all_games_screen.dart';
 import '../chat/chat_tab.dart';
 import '../../widgets/animated_background.dart';
 import '../../services/auth/user_service.dart';
+import '../../services/friends/friend_service.dart';
+import '../../services/notification/notification_service.dart';
+import '../../models/notification_entity.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -27,9 +34,10 @@ class _HomePageState extends State<HomePage> {
     FriendsPage(),
     SessionEntryScreen(),
     AccountScreen(),
+    AllGamesScreen(),
   ];
 
-  static const _activeColor = Color(0xFFFE4EF0);
+  static const _activeColor = Color(0xFF7D56F5);
   static const _inactiveColor = Color(0x80FFFFFF);
 
   @override
@@ -103,7 +111,7 @@ class BlobNavBar extends StatefulWidget {
     required this.onTap,
   });
 
-  static const _iconColor = Color(0xFF7A4A8A);
+  static const _iconColor = Color(0x80FFFFFF);
 
   @override
   State<BlobNavBar> createState() => _BlobNavBarState();
@@ -184,6 +192,32 @@ class _BlobNavBarState extends State<BlobNavBar>
           child: Stack(
             clipBehavior: Clip.none,
             children: [
+              // ── Floating shadow behind the bar ──
+              Positioned(
+                left: leftX - 4,
+                top: popupSpace + (barH - capsuleH) / 2 - 4,
+                right: (w - rightX - sideW) - 4 + leftX - 4,
+                bottom: 0,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(28),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF7D56F5).withValues(alpha: 0.15),
+                        blurRadius: 30,
+                        spreadRadius: 4,
+                        offset: const Offset(0, 6),
+                      ),
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.25),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
               // ── Left hourglass connector ──
               Positioned(
                 left: leftX + sideW - 21,
@@ -292,15 +326,15 @@ class _BlobNavBarState extends State<BlobNavBar>
                   isMenuOpen: _isMenuOpen,
                   activeColor: widget.activeColor,
                   inactiveColor: widget.inactiveColor,
-                  onTap: () => widget.onTap(3),
+                  onTap: () => widget.onTap(5),
                   onLongPress: _toggleMenu,
                 ),
               ),
 
               Positioned(
                 bottom: 54,
-                left: centerX + centerDiameter / 2 - 90,
-                width: 180,
+                left: centerX + centerDiameter / 2 - 120,
+                width: 240,
                 child: AnimatedBuilder(
                   animation: _menuCtrl,
                   builder: (context, _) {
@@ -312,18 +346,25 @@ class _BlobNavBarState extends State<BlobNavBar>
                           clipBehavior: Clip.none,
                           children: [
                             Positioned(
-                              left: 14,
+                              left: 36,
                               bottom: 20 * _menuScale.value,
                               child: Transform.translate(
                                 offset: Offset(0, 30 * (1 - _menuScale.value)),
                                 child: _PopupCircle(
-                                  icon: 'assets/icons/bolt.png',
-                                  onTap: () => _onChoiceTap(null),
+                                  icon: 'assets/icons/racing-flag.png',
+                                  onTap: () => _onChoiceTap(() {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const TriRaceEntryScreen(),
+                                      ),
+                                    );
+                                  }),
                                 ),
                               ),
                             ),
                             Positioned(
-                              left: (180 - 52) / 2,
+                              left: 94,
                               bottom: 40 * _menuScale.value,
                               child: Transform.translate(
                                 offset: Offset(0, 20 * (1 - _menuScale.value)),
@@ -333,7 +374,7 @@ class _BlobNavBarState extends State<BlobNavBar>
                                     Navigator.of(context).push(
                                       MaterialPageRoute(
                                         builder: (_) =>
-                                            const CreateSessionScreen(),
+                                            const SessionEntryScreen(),
                                       ),
                                     );
                                   }),
@@ -341,7 +382,7 @@ class _BlobNavBarState extends State<BlobNavBar>
                               ),
                             ),
                             Positioned(
-                              right: 14,
+                              right: 36,
                               bottom: 20 * _menuScale.value,
                               child: Transform.translate(
                                 offset: Offset(0, 30 * (1 - _menuScale.value)),
@@ -456,14 +497,14 @@ class _CenterLogoButtonState extends State<_CenterLogoButton> {
                     end: Alignment.bottomRight,
                     colors: [
                       widget.isMenuOpen
-                          ? const Color(0xFFFF6BB5)
+                          ? const Color(0xFF9B7AFF)
                           : widget.isActive
-                          ? const Color(0xFFFF6BB5)
+                          ? const Color(0xFF9B7AFF)
                           : const Color(0xFF9A5AB0),
                       widget.isMenuOpen
-                          ? const Color(0xFF800DD8)
+                          ? const Color(0xFF5A3AD4)
                           : widget.isActive
-                          ? const Color(0xFF800DD8)
+                          ? const Color(0xFF5A3AD4)
                           : const Color(0xFF6A3A80),
                     ],
                   ),
@@ -471,9 +512,9 @@ class _CenterLogoButtonState extends State<_CenterLogoButton> {
                     BoxShadow(
                       color:
                           (widget.isMenuOpen
-                                  ? const Color(0xFFFE4EF0)
+                                  ? const Color(0xFF7D56F5)
                                   : widget.isActive
-                                  ? const Color(0xFFFE4EF0)
+                                  ? const Color(0xFF7D56F5)
                                   : const Color(0xFF7A4A8A))
                               .withValues(
                                 alpha: widget.isMenuOpen
@@ -709,13 +750,6 @@ class _FeatureCardData {
 
 const _featureCards = [
   _FeatureCardData(
-    image: 'assets/images/GameTime.jpg',
-    badge: 'NEW UPDATE',
-    title: 'GameTime: Activated',
-    description: 'Turn any moment into a game night.',
-    badgeColor: Color(0xFFFE4EF0),
-  ),
-  _FeatureCardData(
     image: 'assets/images/Flashcards.png',
     badge: 'TRY NOW',
     title: 'Flashcards Mode',
@@ -723,18 +757,11 @@ const _featureCards = [
     badgeColor: Color(0xFF800DD8),
   ),
   _FeatureCardData(
-    image: 'assets/images/SlotMachine.jpg',
-    badge: 'HOT',
-    title: 'Spin the Slot',
-    description: 'Let luck decide what happens next.',
-    badgeColor: Color(0xFFFF6BB5),
-  ),
-  _FeatureCardData(
-    image: 'assets/images/RandomChallenge.png',
-    badge: 'RANDOM PICK',
-    title: "What's the Scene?",
-    description: 'Answer the prompt, act it out, keep the night moving.',
-    badgeColor: Color(0xFF4ECDC4),
+    image: 'assets/images/TriRace.png',
+    badge: 'RACE NOW',
+    title: 'TriRace',
+    description: 'Race your friends in a thrilling tri-challenge.',
+    badgeColor: Color(0xFFFF6B35),
   ),
   _FeatureCardData(
     image: 'assets/images/SpinWheel.png',
@@ -755,7 +782,12 @@ class _HomeTab extends StatefulWidget {
 class _HomeTabState extends State<_HomeTab> {
   final _auth = FirebaseAuth.instance;
   final _userService = UserService();
+  final _notificationService = NotificationService();
+  final _friendService = FriendService();
   String _displayName = '';
+  bool _showNotifications = false;
+
+  String get _uid => _auth.currentUser?.uid ?? '';
 
   @override
   void initState() {
@@ -772,6 +804,22 @@ class _HomeTabState extends State<_HomeTab> {
     }
   }
 
+  Future<void> _acceptRequest(String friendshipId, String notificationId) async {
+    await _friendService.acceptRequest(
+      friendshipId,
+      acceptorUid: _uid,
+      acceptorNotificationId: notificationId,
+    );
+  }
+
+  Future<void> _declineRequest(String friendshipId, String notificationId) async {
+    await _friendService.declineRequest(
+      friendshipId,
+      declinerUid: _uid,
+      declinerNotificationId: notificationId,
+    );
+  }
+
   String _greeting() {
     final hour = DateTime.now().hour;
     if (hour >= 5 && hour < 12) return 'Good Morning';
@@ -779,45 +827,249 @@ class _HomeTabState extends State<_HomeTab> {
     return 'Good Night';
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Image.asset(
-                    'assets/images/WeDo-Logo.png',
-                    width: 60,
-                    height: 60,
-                    errorBuilder: (context, error, stackTrace) {
-                      return const Icon(
-                        Icons.casino,
-                        color: Color(0xFFFE4EF0),
-                        size: 40,
-                      );
-                    },
-                  ),
-                  const SizedBox(width: 10),
-                  ShaderMask(
-                    shaderCallback: (bounds) => const LinearGradient(
-                      colors: [Color(0xFFFE4EF0), Color(0xFF800DD8)],
-                    ).createShader(bounds),
-                    child: const Text(
-                      'WeDo',
-                      style: TextStyle(
-                        fontFamily: 'PressStart2P',
-                        fontSize: 26,
-                        color: Colors.white,
+  Widget _buildNotificationBell() {
+    return GestureDetector(
+      onTap: () => setState(() => _showNotifications = !_showNotifications),
+      child: SizedBox(
+        width: 36,
+        height: 36,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Center(
+              child: Image.asset(
+                'assets/icons/notification.png',
+                width: 30,
+                height: 30,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) => Icon(
+                  Icons.notifications_outlined,
+                  color: Colors.white.withValues(alpha: 0.85),
+                  size: 30,
+                ),
+              ),
+            ),
+            StreamBuilder<int>(
+              stream: _notificationService.getUnreadCount(_uid),
+              builder: (context, snapshot) {
+                final count = snapshot.data ?? 0;
+                if (count == 0) return const SizedBox.shrink();
+                return Positioned(
+                  right: -2,
+                  top: -2,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF800DD8),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Text(
+                        count > 9 ? '9+' : '$count',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          fontFamily: 'Poppins',
+                        ),
                       ),
                     ),
                   ),
-                ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationsPanel() {
+    return Positioned(
+      top: 70,
+      right: 0,
+      left: 0,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            constraints: const BoxConstraints(maxHeight: 400),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2A1450).withValues(alpha: 0.95),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.12),
+                width: 1,
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Notifications',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                          fontFamily: 'Poppins',
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () async {
+                              await _notificationService.markAllAsRead(_uid);
+                            },
+                            child: Text(
+                              'Mark all read',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.white.withValues(alpha: 0.5),
+                                fontFamily: 'Poppins',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          GestureDetector(
+                            onTap: () => setState(() => _showNotifications = false),
+                            child: Icon(
+                              Icons.close,
+                              size: 20,
+                              color: Colors.white.withValues(alpha: 0.5),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Divider(height: 1, color: Colors.white.withValues(alpha: 0.08)),
+                StreamBuilder<List<NotificationEntity>>(
+                  stream: _notificationService.getNotificationsStream(_uid),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 40),
+                        child: Center(
+                          child: CircularProgressIndicator(color: Color(0xFFFE4EF0)),
+                        ),
+                      );
+                    }
+                    final notifications = snapshot.data ?? [];
+                    if (notifications.isEmpty) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 40),
+                        child: Text(
+                          'No notifications yet',
+                          style: TextStyle(
+                            color: Colors.white38,
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                          ),
+                        ),
+                      );
+                    }
+                    return Flexible(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        itemCount: notifications.length,
+                        itemBuilder: (context, index) {
+                          final notif = notifications[index];
+                          return _NotificationItem(
+                            notification: notif,
+                            onAccept: notif.type == NotificationType.friendRequest &&
+                                    notif.status == NotificationStatus.pending
+                                ? () => _acceptRequest(
+                                    notif.relatedId ?? '', notif.notificationId)
+                                : null,
+                            onDecline: notif.type == NotificationType.friendRequest &&
+                                    notif.status == NotificationStatus.pending
+                                ? () => _declineRequest(
+                                    notif.relatedId ?? '', notif.notificationId)
+                                : null,
+                            onTap: () async {
+                              if (!notif.isRead) {
+                                await _notificationService.markAsRead(
+                                    _uid, notif.notificationId);
+                              }
+                            },
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Stack(
+        children: [
+          SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Row(
+                        children: [
+                          Image.asset(
+                            'assets/images/WeDo-Logo.png',
+                            width: 60,
+                            height: 60,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Icon(
+                                Icons.casino,
+                                color: Color(0xFFFE4EF0),
+                                size: 40,
+                              );
+                            },
+                          ),
+                          const SizedBox(width: 10),
+                          ShaderMask(
+                            shaderCallback: (bounds) => const LinearGradient(
+                              colors: [Color(0xFFFE4EF0), Color(0xFF800DD8)],
+                            ).createShader(bounds),
+                            child: const Text(
+                              'WeDo',
+                              style: TextStyle(
+                                fontFamily: 'PressStart2P',
+                                fontSize: 26,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      _buildNotificationBell(),
+                    ],
+                  ),
               const SizedBox(height: 5),
               Padding(
                 padding: const EdgeInsets.only(left: 8),
@@ -852,8 +1104,240 @@ class _HomeTabState extends State<_HomeTab> {
               const _NowPlayingSection(),
               const SizedBox(height: 28),
               const _StackedCards(),
+              const SizedBox(height: 120),
             ],
           ),
+        ),
+      ),
+          if (_showNotifications)
+            GestureDetector(
+              onTap: () => setState(() => _showNotifications = false),
+              child: Container(
+                color: Colors.black.withValues(alpha: 0.2),
+              ),
+            ),
+          if (_showNotifications)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: _buildNotificationsPanel(),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Notification item ───────────────────────────────────────────────────────
+class _NotificationItem extends StatelessWidget {
+  final NotificationEntity notification;
+  final VoidCallback? onAccept;
+  final VoidCallback? onDecline;
+  final VoidCallback? onTap;
+
+  const _NotificationItem({
+    required this.notification,
+    this.onAccept,
+    this.onDecline,
+    this.onTap,
+  });
+
+  IconData _typeIcon() {
+    switch (notification.type) {
+      case NotificationType.friendRequest:
+        return Icons.person_add;
+      case NotificationType.friendRequestAccepted:
+        return Icons.check_circle;
+      case NotificationType.pollVote:
+        return Icons.how_to_vote;
+    }
+  }
+
+  Color _typeColor() {
+    switch (notification.type) {
+      case NotificationType.friendRequest:
+        return const Color(0xFFFE4EF0);
+      case NotificationType.friendRequestAccepted:
+        return const Color(0xFF4CAF50);
+      case NotificationType.pollVote:
+        return const Color(0xFFE91E63);
+    }
+  }
+
+  String _timeAgo() {
+    final diff = DateTime.now().difference(notification.createdAt);
+    if (diff.inSeconds < 60) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${(diff.inDays / 7).floor()}w ago';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isPending = notification.type == NotificationType.friendRequest &&
+        notification.status == NotificationStatus.pending;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: notification.isRead
+              ? Colors.transparent
+              : Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: _typeColor().withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(_typeIcon(), size: 18, color: _typeColor()),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    notification.title,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: notification.isRead ? FontWeight.w500 : FontWeight.w700,
+                      color: Colors.white,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    notification.message,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.6),
+                      fontFamily: 'Poppins',
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _timeAgo(),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.white.withValues(alpha: 0.4),
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                  if (isPending) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        GestureDetector(
+                          onTap: onAccept,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFE4EF0),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              'Accept',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                                fontFamily: 'Poppins',
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: onDecline,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                            ),
+                            child: const Text(
+                              'Decline',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white70,
+                                fontFamily: 'Poppins',
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ] else if (notification.type == NotificationType.friendRequest) ...[
+                    const SizedBox(height: 8),
+                    if (notification.status == NotificationStatus.accepted)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF4CAF50).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.check_circle, size: 12, color: Color(0xFF4CAF50)),
+                            SizedBox(width: 4),
+                            Text('Accepted',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF4CAF50),
+                                    fontFamily: 'Poppins')),
+                          ],
+                        ),
+                      )
+                    else if (notification.status == NotificationStatus.declined)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.cancel_outlined, size: 12, color: Colors.white54),
+                            SizedBox(width: 4),
+                            Text('Declined',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white54,
+                                    fontFamily: 'Poppins')),
+                          ],
+                        ),
+                      ),
+                  ],
+                ],
+              ),
+            ),
+            if (!notification.isRead)
+              Container(
+                width: 8,
+                height: 8,
+                margin: const EdgeInsets.only(top: 6, left: 6),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFE4EF0),
+                  shape: BoxShape.circle,
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -874,8 +1358,8 @@ class _FeatureCarouselState extends State<_FeatureCarousel>
   int _currentIndex = 0;
   late final AnimationController _controller;
 
-  static const _autoScrollInterval = 3;
-  static const _animDuration = Duration(milliseconds: 500);
+  static const _autoScrollInterval = 10;
+  static const _animDuration = Duration(milliseconds: 800);
 
   @override
   void initState() {
@@ -911,28 +1395,24 @@ class _FeatureCarouselState extends State<_FeatureCarousel>
   Widget build(BuildContext context) {
     final data = _featureCards[_currentIndex];
 
-    return GestureDetector(
-      onTap: () {
-        if (_currentIndex == 4) {
-          Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const WheelScreen()));
-        } else {
-          _advance();
-        }
+    return AnimatedSwitcher(
+      duration: _animDuration,
+      switchInCurve: Curves.easeInOut,
+      switchOutCurve: Curves.easeInOut,
+      transitionBuilder: (child, animation) {
+        final slideOffset = Tween<Offset>(
+          begin: const Offset(0.15, 0.0),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutQuint));
+        return SlideTransition(
+          position: slideOffset,
+          child: FadeTransition(opacity: animation, child: child),
+        );
       },
-      child: AnimatedSwitcher(
-        duration: _animDuration,
-        switchInCurve: Curves.easeInOut,
-        switchOutCurve: Curves.easeInOut,
-        transitionBuilder: (child, animation) {
-          return FadeTransition(opacity: animation, child: child);
-        },
-        child: _FeatureCarouselCard(
-          key: ValueKey(_currentIndex),
-          data: data,
-          showActionIcon: _currentIndex == 0,
-        ),
+      child: _FeatureCarouselCard(
+        key: ValueKey(_currentIndex),
+        data: data,
+        showActionIcon: _currentIndex == 0,
       ),
     );
   }
@@ -1088,26 +1568,14 @@ const _nowPlayingGames = [
     statusColor: Colors.greenAccent,
   ),
   _NowPlayingCard(
-    imagePath: 'assets/images/Gaming.jpg',
-    title: 'GameTime',
-    statusLabel: '1.2k Online',
-    statusColor: Colors.greenAccent,
-  ),
-  _NowPlayingCard(
-    imagePath: 'assets/images/RandomChallenge.png',
-    title: "What's the Scene?",
-    statusLabel: 'Local Match',
-    statusColor: Colors.pinkAccent,
-  ),
-  _NowPlayingCard(
     imagePath: 'assets/images/SpinWheel.png',
     title: 'Spin the Wheel',
     statusLabel: '1.2k Online',
     statusColor: Colors.greenAccent,
   ),
   _NowPlayingCard(
-    imagePath: 'assets/images/SlotMachine.jpg',
-    title: 'Spin the Slot',
+    imagePath: 'assets/images/TriRace.png',
+    title: 'TriRace',
     statusLabel: 'Local Match',
     statusColor: Colors.pinkAccent,
   ),
@@ -1132,11 +1600,17 @@ class _NowPlayingSection extends StatelessWidget {
                   fontFamily: 'Poppins',
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF9A5AB0),
+                  color: Colors.white,
                 ),
               ),
               GestureDetector(
-                onTap: () {},
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const AllGamesScreen(),
+                    ),
+                  );
+                },
                 child: const Text(
                   'See all',
                   style: TextStyle(
@@ -1175,12 +1649,28 @@ class _NowPlayingCardWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 250,
-      height: 160,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        child: DecoratedBox(
+    return GestureDetector(
+      onTap: () {
+        if (data.title == 'Flashcards Mode') {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const SessionEntryScreen()),
+          );
+        } else if (data.title == 'Spin the Wheel') {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const WheelScreen()),
+          );
+        } else if (data.title == 'TriRace') {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const TriRaceEntryScreen()),
+          );
+        }
+      },
+      child: SizedBox(
+        width: 250,
+        height: 160,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: DecoratedBox(
           decoration: BoxDecoration(
             border: Border.all(
               color: Colors.deepPurpleAccent.withValues(alpha: 0.3),
@@ -1261,6 +1751,7 @@ class _NowPlayingCardWidget extends StatelessWidget {
           ),
         ),
       ),
+    ),
     );
   }
 }
@@ -1295,6 +1786,7 @@ class _StackedCards extends StatefulWidget {
 class _StackedCardsState extends State<_StackedCards>
     with SingleTickerProviderStateMixin {
   int _userCount = 0;
+  int _selectedRating = 0;
   late final AnimationController _swapCtrl;
   late Animation<double> _leftOffsetX;
   late Animation<double> _leftAngle;
@@ -1497,12 +1989,277 @@ class _StackedCardsState extends State<_StackedCards>
       clipper: _SlantedCardClipper(slant: slant, cornerRadius: cornerR),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: CustomPaint(
-          size: cardSize,
-          painter: _BackGlassCardPainter(slant: slant),
+        child: Stack(
+          children: [
+            CustomPaint(
+              size: cardSize,
+              painter: _RateUsBackgroundPainter(slant: slant),
+            ),
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // ── Mascot placeholder ──
+                    _buildMascotPlaceholder(),
+                    const SizedBox(height: 10),
+                    // ── Heading ──
+                    const Text(
+                      'PLEASE RATE US',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    // ── Subtitle ──
+                    Text(
+                      'Enjoying WeDo? Your feedback\nhelps us grow and improve!',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        color: Colors.white.withValues(alpha: 0.75),
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    // ── Star rating ──
+                    _buildStarRating(),
+                    const SizedBox(height: 4),
+                    // ── Tap hint ──
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Transform(
+                          alignment: Alignment.center,
+                          transform: Matrix4.identity()..rotateZ(-math.pi / 4),
+                          child: const Icon(
+                            Icons.arrow_back,
+                            size: 12,
+                            color: Color(0xFFD100D1),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Text(
+                          'Tap a star to rate',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            fontStyle: FontStyle.italic,
+                            color: Color(0xFFD100D1),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    // ── Buttons ──
+                    Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => _launchAppStore(),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(24),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.35),
+                                  width: 1.2,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.edit_outlined,
+                                    size: 14,
+                                    color: Colors.white.withValues(alpha: 0.9),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'WRITE A REVIEW',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white.withValues(alpha: 0.9),
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              HapticFeedback.lightImpact();
+                              _onSwapTap();
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(24),
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFFFE4EF0), Color(0xFF800DD8)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                              ),
+                                child: const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.favorite_border,
+                                      size: 14,
+                                      color: Colors.white,
+                                    ),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      'MAYBE LATER',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    // ── Footer ──
+                    Text(
+                      'Thank you for being awesome! 💜',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 10,
+                        fontWeight: FontWeight.w400,
+                        color: Colors.white.withValues(alpha: 0.55),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  Widget _buildMascotPlaceholder() {
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
+      children: [
+        // Sparkle decorations
+        ...List.generate(5, (i) {
+          final angle = (i * 72) * math.pi / 180;
+          final radius = 28.0 + (i % 2) * 8;
+          return Positioned(
+            left: 40 + radius * math.cos(angle) - 4,
+            top: 20 + radius * math.sin(angle) - 4,
+            child: Icon(
+              i % 2 == 0 ? Icons.star : Icons.auto_awesome,
+              size: i % 2 == 0 ? 8 : 10,
+              color: const Color(0xFFFE4EF0),
+            ),
+          );
+        }),
+        // Heart bubble
+        Positioned(
+          right: 22,
+          top: 8,
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: const BoxDecoration(
+              color: Color(0xFFFE4EF0),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.favorite, size: 8, color: Colors.white),
+          ),
+        ),
+        // Mascot body (WeDo logo as placeholder)
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: const Color(0xFF800DD8),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFD100D1).withValues(alpha: 0.4),
+                blurRadius: 16,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Image.asset(
+            'assets/images/WeDo-Logo.png',
+            width: 28,
+            height: 28,
+            errorBuilder: (context, error, stackTrace) {
+              return const Icon(
+                Icons.casino,
+                color: Colors.white,
+                size: 24,
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStarRating() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(5, (index) {
+        final isSelected = index < _selectedRating;
+        return GestureDetector(
+          onTap: () {
+            HapticFeedback.lightImpact();
+            setState(() => _selectedRating = index + 1);
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Icon(
+              isSelected ? Icons.star_rounded : Icons.star_outline_rounded,
+              size: 40,
+              color: const Color(0xFFD100D1),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
+  Future<void> _launchAppStore() async {
+    const iosUrl = 'https://apps.apple.com/app/id000000000';
+    const androidUrl = 'https://play.google.com/store/apps/details?id=com.choosly.wedo';
+    final url = Theme.of(context).platform == TargetPlatform.iOS
+        ? Uri.parse(iosUrl)
+        : Uri.parse(androidUrl);
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
   }
 
   @override
@@ -1536,7 +2293,6 @@ class _StackedCardsState extends State<_StackedCards>
           child: Transform(
             alignment: Alignment.bottomCenter,
             transform: Matrix4.identity()
-              ..scaleByDouble(-1.0, 1.0, 1.0, 1.0)
               ..rotateZ(rightAng),
             child: _buildRightCard(slant, cornerR, cardSize),
           ),
@@ -1622,33 +2378,35 @@ class _GlassCardPainter extends CustomPainter {
   bool shouldRepaint(covariant _GlassCardPainter old) => old.slant != slant;
 }
 
-// ── Gradient glassmorphism painter (back card) ─────────────────────────────
-
-class _BackGlassCardPainter extends CustomPainter {
+class _RateUsBackgroundPainter extends CustomPainter {
   final double slant;
 
-  const _BackGlassCardPainter({required this.slant});
+  const _RateUsBackgroundPainter({required this.slant});
 
   @override
   void paint(Canvas canvas, Size size) {
     final path = _slantedCardPath(size, slant, 28);
 
-    // Gradient fill: #FE4EF0 → #800DD8 at 30% opacity
+    // Deep purple gradient fill
     final fillPaint = Paint()
       ..shader = const LinearGradient(
-        colors: [Color(0x4DFE4EF0), Color(0x4D800DD8)],
-        begin: Alignment.topRight,
-        end: Alignment.bottomLeft,
+        colors: [Color(0xFF2D1456), Color(0xFF190831)],
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
       ..style = PaintingStyle.fill;
     canvas.drawPath(path, fillPaint);
 
-    // Subtle light border
-    final strokePaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.18)
+    // Neon magenta border glow
+    final glowPaint = Paint()
+      ..shader = const LinearGradient(
+        colors: [Color(0x80D100D1), Color(0x40FE4EF0)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
-    canvas.drawPath(path, strokePaint);
+      ..strokeWidth = 1.5;
+    canvas.drawPath(path, glowPaint);
 
     // Inner highlight along top edge
     final highlightPaint = Paint()
@@ -1656,14 +2414,14 @@ class _BackGlassCardPainter extends CustomPainter {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          Colors.white.withValues(alpha: 0.22),
+          const Color(0xFFFE4EF0).withValues(alpha: 0.15),
           Colors.white.withValues(alpha: 0.0),
         ],
-        stops: const [0.0, 0.35],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height * 0.4));
+        stops: const [0.0, 0.3],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height * 0.35));
     canvas.drawPath(path, highlightPaint);
   }
 
   @override
-  bool shouldRepaint(covariant _BackGlassCardPainter old) => old.slant != slant;
+  bool shouldRepaint(covariant _RateUsBackgroundPainter old) => old.slant != slant;
 }

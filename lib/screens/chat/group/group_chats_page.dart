@@ -70,12 +70,19 @@ class _GroupChatsPageState extends State<GroupChatsPage> {
                   separatorBuilder: (_, _) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final group = groups[index];
+                    final hasUnread = group.lastMessage != null &&
+                        group.lastMessageSenderId != null &&
+                        group.lastMessageSenderId != currentUser.uid &&
+                        !group.lastMessageReadBy.contains(currentUser.uid);
                     return ChatTile(
                       name: group.name,
                       lastMessage: group.lastMessage,
                       lastMessageAt: group.lastMessageAt,
                       memberCount: group.memberCount,
                       avatarUrl: group.photoUrl,
+                      hasUnread: hasUnread,
+                      lastSenderId: group.lastMessageSenderId,
+                      currentUserId: currentUser.uid,
                       onTap: () => _openChat(context, group.id),
                     );
                   },

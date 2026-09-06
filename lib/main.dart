@@ -21,15 +21,13 @@ void _handleIncomingCall(Map<String, dynamic> data) {
   final callId = data['callId'] as String?;
   if (callId == null) return;
 
-  final callerName = data['callerName'] as String? ?? 'Someone';
-
   final context = navigatorKey.currentContext;
   if (context == null) return;
 
   Navigator.of(context).push(
     MaterialPageRoute(
       fullscreenDialog: true,
-      builder: (_) => _IncomingCallListener(callId: callId, callerName: callerName),
+      builder: (_) => _IncomingCallListener(callId: callId),
     ),
   );
 }
@@ -88,8 +86,7 @@ Future<void> main() async {
 
 class _IncomingCallListener extends StatefulWidget {
   final String callId;
-  final String callerName;
-  const _IncomingCallListener({required this.callId, required this.callerName});
+  const _IncomingCallListener({required this.callId});
 
   @override
   State<_IncomingCallListener> createState() => _IncomingCallListenerState();
@@ -124,7 +121,7 @@ class _IncomingCallListenerState extends State<_IncomingCallListener> {
           MaterialPageRoute(
             builder: (_) => IncomingCallScreen(
               call: call,
-              callerName: widget.callerName,
+              callerName: call.createdBy,
             ),
           ),
         );

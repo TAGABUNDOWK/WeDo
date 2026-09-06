@@ -2,12 +2,12 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../../widgets/animated_background.dart';
 import '../models/wheel_option.dart';
-import '../data/wheel_history_repository.dart';
+import '../data/wheel_options_store.dart';
+import '../data/wheel_palette.dart';
 import '../widgets/spin_wheel_painter.dart';
 import '../widgets/wheel_option_chip.dart';
 import '../widgets/options_editor_sheet.dart';
 import '../widgets/spin_result_sheet.dart';
-import 'wheel_history_screen.dart';
 
 class WheelScreen extends StatefulWidget {
   const WheelScreen({super.key});
@@ -17,36 +17,28 @@ class WheelScreen extends StatefulWidget {
 }
 
 class _WheelScreenState extends State<WheelScreen>
-    with SingleTickerProviderStateMixin {
-  final _repository = WheelHistoryRepository();
+    with TickerProviderStateMixin {
+  final _optionsStore = WheelOptionsStore();
   late AnimationController _spinController;
   late Animation<double> _spinAnimation;
+  late AnimationController _bounceController;
+  late Animation<double> _bounceAnimation;
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
 
   List<WheelOption> _options = [];
   bool _isSpinning = false;
   double _currentRotation = 0;
 
-  static const _wheelColors = [
-    Color(0xFF6D28D9),
-    Color(0xFF7C3AED),
-    Color(0xFF8B5CF6),
-    Color(0xFFA78BFA),
-    Color(0xFF9333EA),
-    Color(0xFFC026D3),
-    Color(0xFFD946EF),
-    Color(0xFF5B21B6),
-  ];
+  Color _getColorForIndex(int index) {
+    return WheelPalette.colorForIndex(index, total: _options.length);
+  }
 
   @override
   void initState() {
     super.initState();
 
-    _options = [
-      const WheelOption(label: 'Option 1', color: Color(0xFF6D28D9)),
-      const WheelOption(label: 'Option 2', color: Color(0xFF7C3AED)),
-      const WheelOption(label: 'Option 3', color: Color(0xFF8B5CF6)),
-      const WheelOption(label: 'Option 4', color: Color(0xFFA78BFA)),
-    ];
+    _options = _defaultOptions();
 
     _spinController = AnimationController(
       vsync: this,
@@ -69,16 +61,69 @@ class _WheelScreenState extends State<WheelScreen>
         _onSpinComplete();
       }
     });
+
+    // Pointer bounce animation
+    _bounceController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
+    _bounceAnimation = Tween<double>(begin: 1.0, end: 1.3).animate(
+      CurvedAnimation(
+        parent: _bounceController,
+        curve: Curves.elasticOut,
+      ),
+    );
+    _bounceController.addListener(() {
+      setState(() {});
+    });
+
+    // Hub idle pulse animation
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.08).animate(
+      CurvedAnimation(
+        parent: _pulseController,
+        curve: Curves.easeInOut,
+      ),
+    );
+    _pulseController.addListener(() {
+      setState(() {});
+    });
+    _pulseController.repeat(reverse: true);
+
+    _loadSavedOptions();
+  }
+
+  List<WheelOption> _defaultOptions() {
+    return [
+      const WheelOption(label: 'Option 1', color: Color(0xFF6D28D9)),
+      const WheelOption(label: 'Option 2', color: Color(0xFF7C3AED)),
+      const WheelOption(label: 'Option 3', color: Color(0xFF8B5CF6)),
+      const WheelOption(label: 'Option 4', color: Color(0xFFA78BFA)),
+    ];
+  }
+
+  Future<void> _loadSavedOptions() async {
+    final saved = await _optionsStore.loadOptions();
+    if (saved == null || saved.isEmpty) return;
+    if (!mounted) return;
+    setState(() {
+      _options = saved;
+    });
+  }
+
+  Future<void> _persistOptions() async {
+    await _optionsStore.saveOptions(_options);
   }
 
   @override
   void dispose() {
     _spinController.dispose();
+    _bounceController.dispose();
+    _pulseController.dispose();
     super.dispose();
-  }
-
-  Color _getColorForIndex(int index) {
-    return _wheelColors[index % _wheelColors.length];
   }
 
   void _addDefaultOptions() {
@@ -89,6 +134,7 @@ class _WheelScreenState extends State<WheelScreen>
           color: _getColorForIndex(_options.length),
         ));
       }
+      _persistOptions();
     }
   }
 
@@ -96,6 +142,9 @@ class _WheelScreenState extends State<WheelScreen>
     if (_isSpinning || _options.length <= 1) return;
 
     setState(() => _isSpinning = true);
+
+    // Pause idle pulse during spin
+    _pulseController.stop();
 
     // Pick winner first
     final winningIndex = math.Random().nextInt(_options.length);
@@ -143,14 +192,15 @@ class _WheelScreenState extends State<WheelScreen>
     final winningOption = _options[_pendingWinningIndex!];
     _currentRotation = _spinAnimation.value;
 
-    // Save to Firestore
-    _repository.saveSpin(
-      options: _options,
-      winningOption: winningOption,
-      winningIndex: _pendingWinningIndex!,
-    );
-
     setState(() => _isSpinning = false);
+
+    // Trigger pointer bounce
+    _bounceController.forward(from: 0).then((_) {
+      _bounceController.reverse();
+    });
+
+    // Resume idle pulse
+    _pulseController.repeat(reverse: true);
 
     // Capture index before clearing
     final winnerIdx = _pendingWinningIndex!;
@@ -167,6 +217,7 @@ class _WheelScreenState extends State<WheelScreen>
           setState(() {
             _options.removeAt(winnerIdx);
           });
+          _persistOptions();
         },
       );
     }
@@ -181,6 +232,7 @@ class _WheelScreenState extends State<WheelScreen>
           _options = newOptions;
           _addDefaultOptions();
         });
+        _persistOptions();
       },
     );
   }
@@ -190,6 +242,7 @@ class _WheelScreenState extends State<WheelScreen>
     setState(() {
       _options.removeAt(index);
     });
+    _persistOptions();
   }
 
   @override
@@ -226,21 +279,7 @@ class _WheelScreenState extends State<WheelScreen>
                         textAlign: TextAlign.center,
                       ),
                     ),
-                    IconButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const WheelHistoryScreen(),
-                          ),
-                        );
-                      },
-                      icon: const Icon(
-                        Icons.history,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                    ),
+                    const SizedBox(width: 48),
                   ],
                 ),
               ),
@@ -254,17 +293,38 @@ class _WheelScreenState extends State<WheelScreen>
                   child: GestureDetector(
                     onTap: (_isSpinning || _options.length <= 1) ? null : _spin,
                     child: AnimatedBuilder(
-                      animation: _spinAnimation,
+                      animation: Listenable.merge([
+                        _spinAnimation,
+                        _bounceAnimation,
+                        _pulseAnimation,
+                      ]),
                       builder: (context, _) {
-                        return SizedBox(
+                        return Container(
                           width: 320,
                           height: 320,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+                                blurRadius: 40,
+                                spreadRadius: 8,
+                              ),
+                              BoxShadow(
+                                color: const Color(0xFFFE4EF0).withValues(alpha: 0.15),
+                                blurRadius: 60,
+                                spreadRadius: 4,
+                              ),
+                            ],
+                          ),
                           child: CustomPaint(
                             painter: SpinWheelPainter(
                               options: _options,
                               rotation: _isSpinning
                                   ? _spinAnimation.value
                                   : _currentRotation,
+                              pointerScale: _bounceAnimation.value,
+                              hubScale: _pulseAnimation.value,
                             ),
                           ),
                         );

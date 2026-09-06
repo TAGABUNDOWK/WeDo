@@ -47,6 +47,7 @@ class SessionEntity {
   final DateTime createdAt;
   final DateTime expiresAt;
   final DateTime? deleteAfter;
+  final DateTime? hostLastSeen;
 
   const SessionEntity({
     required this.id,
@@ -62,6 +63,7 @@ class SessionEntity {
     required this.createdAt,
     required this.expiresAt,
     this.deleteAfter,
+    this.hostLastSeen,
   });
 
   factory SessionEntity.fromMap(String id, Map<String, dynamic> map) {
@@ -82,6 +84,7 @@ class SessionEntity {
       createdAt: _parseTimestamp(map['createdAt']),
       expiresAt: _parseTimestamp(map['expiresAt']),
       deleteAfter: map['deleteAfter'] != null ? _parseTimestamp(map['deleteAfter']) : null,
+      hostLastSeen: map['hostLastSeen'] != null ? _parseTimestamp(map['hostLastSeen']) : null,
     );
   }
 
@@ -99,6 +102,7 @@ class SessionEntity {
       'createdAt': Timestamp.fromDate(createdAt),
       'expiresAt': Timestamp.fromDate(expiresAt),
       if (deleteAfter != null) 'deleteAfter': Timestamp.fromDate(deleteAfter!),
+      if (hostLastSeen != null) 'hostLastSeen': Timestamp.fromDate(hostLastSeen!),
     };
   }
 
@@ -116,10 +120,12 @@ class SessionEntity {
     DateTime? createdAt,
     DateTime? expiresAt,
     DateTime? deleteAfter,
+    DateTime? hostLastSeen,
     bool clearSpeedShieldWinnerId = false,
     bool clearAggregatedResults = false,
     bool clearInvitedUserIds = false,
     bool clearParticipantUids = false,
+    bool clearHostLastSeen = false,
   }) {
     return SessionEntity(
       id: id ?? this.id,
@@ -139,6 +145,7 @@ class SessionEntity {
       createdAt: createdAt ?? this.createdAt,
       expiresAt: expiresAt ?? this.expiresAt,
       deleteAfter: deleteAfter ?? this.deleteAfter,
+      hostLastSeen: clearHostLastSeen ? null : (hostLastSeen ?? this.hostLastSeen),
     );
   }
 
@@ -158,7 +165,8 @@ class SessionEntity {
         'aggregatedResults: $aggregatedResults, '
         'invitedUserIds: $invitedUserIds, '
         'participantUids: $participantUids, '
-        'deleteAfter: $deleteAfter)';
+        'deleteAfter: $deleteAfter, '
+        'hostLastSeen: $hostLastSeen)';
   }
 
   @override

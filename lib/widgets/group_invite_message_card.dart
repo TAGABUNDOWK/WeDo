@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/group/group_service.dart';
@@ -78,6 +79,32 @@ class _InviteCard extends StatefulWidget {
 
 class _InviteCardState extends State<_InviteCard> {
   bool _isLoading = false;
+  String? _fetchedGroupName;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.groupName == 'Group' && widget.groupId.isNotEmpty) {
+      _fetchGroupName();
+    }
+  }
+
+  String get _displayName => _fetchedGroupName ?? widget.groupName;
+
+  Future<void> _fetchGroupName() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('groups')
+          .doc(widget.groupId)
+          .get();
+      if (doc.exists && mounted) {
+        final name = doc.data()?['name'] as String?;
+        if (name != null && name.isNotEmpty) {
+          setState(() => _fetchedGroupName = name);
+        }
+      }
+    } catch (_) {}
+  }
 
   Future<void> _onTap() async {
     if (_isLoading) return;
@@ -153,7 +180,7 @@ class _InviteCardState extends State<_InviteCard> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildHeader(widget.groupName),
+          _buildHeader(_displayName),
           _buildBody(),
         ],
       ),

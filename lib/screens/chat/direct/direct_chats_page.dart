@@ -74,6 +74,10 @@ class _DirectChatsPageState extends State<DirectChatsPage> {
                   itemBuilder: (context, index) {
                     final chat = chats[index];
                     final otherUid = chat.otherUserId(currentUser.uid);
+                    final hasUnread = chat.lastMessage != null &&
+                        chat.lastMessageSenderId != null &&
+                        chat.lastMessageSenderId != currentUser.uid &&
+                        !chat.lastMessageReadBy.contains(currentUser.uid);
                     return FutureBuilder<UserEntity?>(
                       future: _directService.getUser(otherUid),
                       builder: (context, userSnap) {
@@ -83,6 +87,12 @@ class _DirectChatsPageState extends State<DirectChatsPage> {
                           lastMessage: chat.lastMessage,
                           lastMessageAt: chat.lastMessageAt,
                           memberCount: 2,
+                          isGroup: false,
+                          hasUnread: hasUnread,
+                          lastSenderId: chat.lastMessageSenderId,
+                          currentUserId: currentUser.uid,
+                          avatarUrl: user?.photoUrl,
+                          avatarAsset: user?.avatarAsset,
                           onTap: () => _openChat(context, chat.id, otherUid),
                         );
                       },

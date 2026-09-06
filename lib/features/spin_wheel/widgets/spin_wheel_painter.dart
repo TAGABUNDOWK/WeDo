@@ -6,11 +6,15 @@ class SpinWheelPainter extends CustomPainter {
   final List<WheelOption> options;
   final double rotation;
   final double pointerAngle;
+  final double pointerScale;
+  final double hubScale;
 
   SpinWheelPainter({
     required this.options,
     required this.rotation,
     this.pointerAngle = -math.pi / 2,
+    this.pointerScale = 1.0,
+    this.hubScale = 1.0,
   });
 
   @override
@@ -25,6 +29,18 @@ class SpinWheelPainter extends CustomPainter {
     canvas.translate(center.dx, center.dy);
     canvas.rotate(rotation);
 
+    // Ambient glow behind the wheel
+    final glowPaint = Paint()
+      ..color = const Color(0xFF8B5CF6).withValues(alpha: 0.25)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 24);
+    canvas.drawCircle(Offset.zero, radius + 12, glowPaint);
+
+    // Second glow layer tinted pink
+    final glowPaint2 = Paint()
+      ..color = const Color(0xFFFE4EF0).withValues(alpha: 0.12)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 36);
+    canvas.drawCircle(Offset.zero, radius + 20, glowPaint2);
+
     // Draw segments
     for (int i = 0; i < options.length; i++) {
       final startAngle = i * segmentAngle;
@@ -32,7 +48,14 @@ class SpinWheelPainter extends CustomPainter {
       final option = options[i];
 
       final segmentPaint = Paint()
-        ..color = option.color
+        ..shader = RadialGradient(
+          colors: [
+            option.color.withValues(alpha: 0.65),
+            option.color,
+          ],
+        ).createShader(
+          Rect.fromCircle(center: Offset.zero, radius: radius),
+        )
         ..style = PaintingStyle.fill;
 
       final path = Path();
@@ -47,17 +70,26 @@ class SpinWheelPainter extends CustomPainter {
 
       canvas.drawPath(path, segmentPaint);
 
-      // Draw divider line (skip for single option)
+      // Draw divider line glow (skip for single option)
       if (options.length > 1) {
-        final dividerPaint = Paint()
-          ..color = Colors.white.withValues(alpha: 0.3)
-          ..strokeWidth = 1.5
-          ..style = PaintingStyle.stroke;
+        final dividerGlowPaint = Paint()
+          ..color = Colors.white.withValues(alpha: 0.15)
+          ..strokeWidth = 4
+          ..style = PaintingStyle.stroke
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
 
         final dividerEnd = Offset(
           radius * math.cos(startAngle),
           radius * math.sin(startAngle),
         );
+        canvas.drawLine(Offset.zero, dividerEnd, dividerGlowPaint);
+
+        // Draw divider line
+        final dividerPaint = Paint()
+          ..color = Colors.white.withValues(alpha: 0.3)
+          ..strokeWidth = 1.5
+          ..style = PaintingStyle.stroke;
+
         canvas.drawLine(Offset.zero, dividerEnd, dividerPaint);
       }
     }
@@ -65,7 +97,7 @@ class SpinWheelPainter extends CustomPainter {
     // Draw labels
     if (options.length == 1) {
       final option = options[0];
-      final fontSize = 14.0;
+      const fontSize = 14.0;
 
       final textPainter = TextPainter(
         text: TextSpan(
@@ -116,7 +148,17 @@ class SpinWheelPainter extends CustomPainter {
 
         canvas.save();
         canvas.translate(labelX, labelY);
-        canvas.rotate(midAngle + math.pi / 2);
+
+        // Flip text in bottom half so labels stay upright
+        final normalizedMid = midAngle % (2 * math.pi);
+        final inBottomHalf = normalizedMid > math.pi / 2 &&
+            normalizedMid < 3 * math.pi / 2;
+
+        if (inBottomHalf) {
+          canvas.rotate(midAngle - math.pi / 2);
+        } else {
+          canvas.rotate(midAngle + math.pi / 2);
+        }
 
         final textPainter = TextPainter(
           text: TextSpan(
@@ -161,13 +203,17 @@ class SpinWheelPainter extends CustomPainter {
 
     canvas.drawCircle(Offset.zero, radius, rimPaint);
 
-    // Draw center hub shadow
-    final hubShadowPaint = Paint()
-      ..color = Colors.black.withValues(alpha: 0.4)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
-    canvas.drawCircle(Offset.zero, 32, hubShadowPaint);
+    // Draw center hub (with pulse scale)
+    canvas.save();
+    canvas.scale(hubScale);
 
-    // Draw center hub
+    // Hub shadow
+    final hubShadowPaint = Paint()
+      ..color = const Color(0xFFFE4EF0).withValues(alpha: 0.25)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16);
+    canvas.drawCircle(Offset.zero, 38, hubShadowPaint);
+
+    // Hub body
     final hubPaint = Paint()
       ..shader = const LinearGradient(
         begin: Alignment.topLeft,
@@ -176,18 +222,18 @@ class SpinWheelPainter extends CustomPainter {
       ).createShader(Rect.fromCircle(center: Offset.zero, radius: 28));
     canvas.drawCircle(Offset.zero, 28, hubPaint);
 
-    // Draw hub border
+    // Hub border
     final hubBorderPaint = Paint()
       ..color = Colors.white.withValues(alpha: 0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
     canvas.drawCircle(Offset.zero, 28, hubBorderPaint);
 
-    // Draw SPIN text on hub
+    // SPIN text on hub
     final spinTextPainter = TextPainter(
-      text: TextSpan(
+      text: const TextSpan(
         text: 'SPIN',
-        style: const TextStyle(
+        style: TextStyle(
           color: Colors.white,
           fontSize: 13,
           fontWeight: FontWeight.w800,
@@ -204,11 +250,13 @@ class SpinWheelPainter extends CustomPainter {
 
     canvas.restore();
 
+    canvas.restore();
+
     // Draw pointer (outside rotation transform)
-    _drawPointer(canvas, center, radius);
+    _drawPointer(canvas, center, radius, pointerScale);
   }
 
-  void _drawPointer(Canvas canvas, Offset center, double radius) {
+  void _drawPointer(Canvas canvas, Offset center, double radius, double scale) {
     final pointerPaint = Paint()
       ..color = const Color(0xFFFE4EF0)
       ..style = PaintingStyle.fill;
@@ -228,6 +276,12 @@ class SpinWheelPainter extends CustomPainter {
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
     canvas.drawPath(pointerPath.shift(const Offset(0, 2)), shadowPaint);
 
+    // Apply bounce scale from the pointer tip
+    canvas.save();
+    canvas.translate(center.dx, pointerY + pointerSize + 4);
+    canvas.scale(scale);
+    canvas.translate(-center.dx, -(pointerY + pointerSize + 4));
+
     canvas.drawPath(pointerPath, pointerPaint);
 
     // Pointer border
@@ -236,11 +290,15 @@ class SpinWheelPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
     canvas.drawPath(pointerPath, borderPaint);
+
+    canvas.restore();
   }
 
   @override
   bool shouldRepaint(covariant SpinWheelPainter oldDelegate) {
     return oldDelegate.rotation != rotation ||
-        oldDelegate.options != options;
+        oldDelegate.options != options ||
+        oldDelegate.pointerScale != pointerScale ||
+        oldDelegate.hubScale != hubScale;
   }
 }

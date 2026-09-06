@@ -472,7 +472,7 @@ class _SwipingScreenState extends State<SwipingScreen>
     final swipeDown = _dragOffset.dy > 0 ? _dragOffset.dy : 0.0;
     final dragFraction = (swipeDown / _swipeThreshold).clamp(0.0, 1.0);
     final showCommitHint = swipeDown > _swipeThreshold * 0.6;
-    final halfGap = 20.0;
+    const halfGap = 20.0;
 
     return AnimatedPositioned(
       duration: _isAnimating ? Duration.zero : const Duration(milliseconds: 50),
@@ -502,7 +502,7 @@ class _SwipingScreenState extends State<SwipingScreen>
     final dragFraction = (swipeUp / _swipeThreshold).clamp(-1.0, 0.0);
     final rotation = dragFraction * _maxRotation;
     final showCommitHint = swipeUp.abs() > _swipeThreshold * 0.6;
-    final halfGap = 20.0;
+    const halfGap = 20.0;
 
     return AnimatedPositioned(
       duration: _isAnimating ? Duration.zero : const Duration(milliseconds: 50),

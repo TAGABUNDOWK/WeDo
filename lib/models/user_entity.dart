@@ -7,6 +7,8 @@ class UserEntity {
   final String usernameLower;
   final String? email;
   final String? photoUrl;
+  final String? avatarAsset;
+  final String? frameAsset;
   final String authProvider;
   final bool isPremium;
   final DateTime createdAt;
@@ -25,6 +27,8 @@ class UserEntity {
     this.usernameLower = '',
     this.email,
     this.photoUrl,
+    this.avatarAsset,
+    this.frameAsset,
     required this.authProvider,
     required this.isPremium,
     required this.createdAt,
@@ -45,6 +49,8 @@ class UserEntity {
       usernameLower: json['username_lower'] as String? ?? '',
       email: json['email'] as String?,
       photoUrl: json['photo_url'] as String?,
+      avatarAsset: json['avatar_asset'] as String?,
+      frameAsset: json['frame_asset'] as String?,
       authProvider: json['auth_provider'] as String,
       isPremium: json['is_premium'] as bool? ?? false,
       createdAt: _parseTimestamp(json['created_at']),
@@ -66,6 +72,8 @@ class UserEntity {
       'username_lower': usernameLower,
       'email': email,
       'photo_url': photoUrl,
+      'avatar_asset': avatarAsset,
+      'frame_asset': frameAsset,
       'auth_provider': authProvider,
       'is_premium': isPremium,
       'created_at': createdAt.toIso8601String(),
@@ -99,6 +107,8 @@ class UserEntity {
     String? usernameLower,
     String? email,
     String? photoUrl,
+    String? avatarAsset,
+    String? frameAsset,
     String? authProvider,
     bool? isPremium,
     DateTime? createdAt,
@@ -117,6 +127,8 @@ class UserEntity {
       usernameLower: usernameLower ?? this.usernameLower,
       email: email ?? this.email,
       photoUrl: photoUrl ?? this.photoUrl,
+      avatarAsset: avatarAsset ?? this.avatarAsset,
+      frameAsset: frameAsset ?? this.frameAsset,
       authProvider: authProvider ?? this.authProvider,
       isPremium: isPremium ?? this.isPremium,
       createdAt: createdAt ?? this.createdAt,

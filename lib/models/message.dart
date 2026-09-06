@@ -63,6 +63,7 @@ class ChatMessage {
   final String? audioUrl;
   final int? durationSeconds;
   final String? activityId;
+  final String? activityType;
   final String? callType;
   final String? callStatus;
   final String? refId;
@@ -86,6 +87,7 @@ class ChatMessage {
     this.audioUrl,
     this.durationSeconds,
     this.activityId,
+    this.activityType,
     this.callType,
     this.callStatus,
     this.refId,
@@ -118,6 +120,7 @@ class ChatMessage {
     final durationSeconds = data['durationSeconds'] as int?
         ?? data['duration_seconds'] as int?;
     final activityId = data['activityId'] as String?;
+    final activityType = data['activityType'] as String?;
     final callType = data['callType'] as String?
         ?? data['call_type'] as String?;
     final callStatus = data['callStatus'] as String?
@@ -150,6 +153,7 @@ class ChatMessage {
       audioUrl: audioUrl,
       durationSeconds: durationSeconds,
       activityId: activityId,
+      activityType: activityType,
       callType: callType,
       callStatus: callStatus,
       refId: refId,
@@ -175,6 +179,7 @@ class ChatMessage {
       'audioUrl': audioUrl,
       'durationSeconds': durationSeconds,
       'activityId': activityId,
+      'activityType': activityType,
       'callType': callType,
       'callStatus': callStatus,
       'refId': refId,

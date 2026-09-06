@@ -14,7 +14,7 @@ class ChatThemePicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final allOptions = [
-      _ThemeOption(id: null, name: 'Default', accent: const Color(0xFF9E9E9E)),
+      const _ThemeOption(id: null, name: 'Default', accent: Color(0xFF9E9E9E)),
       ...AppChatTheme.presets.map(
         (t) => _ThemeOption(id: t.id, name: t.name, accent: t.accent),
       ),

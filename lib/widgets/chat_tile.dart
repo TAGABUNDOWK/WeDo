@@ -12,6 +12,7 @@ class ChatTile extends StatelessWidget {
   final String? lastSenderId;
   final String? currentUserId;
   final String? avatarUrl;
+  final String? avatarAsset;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
 
@@ -27,6 +28,7 @@ class ChatTile extends StatelessWidget {
     this.lastSenderId,
     this.currentUserId,
     this.avatarUrl,
+    this.avatarAsset,
     required this.onTap,
     this.onLongPress,
   });
@@ -35,6 +37,10 @@ class ChatTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final isFromMe = lastSenderId != null && lastSenderId == currentUserId;
     final showUnread = hasUnread && !isFromMe;
+
+    final bool hasAvatarAsset = avatarAsset != null && avatarAsset!.isNotEmpty;
+    final bool hasAvatarUrl = avatarUrl != null && avatarUrl!.isNotEmpty;
+    final bool hasAvatar = hasAvatarAsset || hasAvatarUrl;
 
     return Material(
       color: Colors.transparent,
@@ -57,14 +63,14 @@ class ChatTile extends StatelessWidget {
                 Stack(
                   children: [
                     CircleAvatar(
-                      key: ValueKey(avatarUrl),
                       radius: 26,
                       backgroundColor: const Color(0xFFFE4EF0).withValues(alpha: 0.2),
-                      backgroundImage:
-                          avatarUrl != null && avatarUrl!.isNotEmpty
+                      backgroundImage: hasAvatarAsset
+                          ? AssetImage(avatarAsset!)
+                          : hasAvatarUrl
                               ? NetworkImage(avatarUrl!)
                               : null,
-                      child: avatarUrl == null || avatarUrl!.isEmpty
+                      child: !hasAvatar
                           ? Icon(
                               isGroup ? Icons.group : Icons.person,
                               color: const Color(0xFFFE4EF0),
