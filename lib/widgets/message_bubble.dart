@@ -543,9 +543,9 @@ class _MessageBubbleState extends State<MessageBubble> {
                           ),
                           if (widget.reactions != null && widget.reactions!.isNotEmpty)
                             Positioned(
-                              bottom: -8,
-                              right: widget.isMe ? 4 : null,
-                              left: widget.isMe ? null : 4,
+                              bottom: -10,
+                              right: widget.isMe ? 2 : null,
+                              left: widget.isMe ? null : 2,
                               child: _buildReactionBadge(widget.reactions!, widget.currentUid, accent),
                             ),
                         ],

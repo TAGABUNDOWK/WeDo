@@ -22,6 +22,7 @@ import '../../../widgets/tri_race_invite_message_card.dart';
 import '../../../widgets/group_invite_message_card.dart';
 import '../../../widgets/composer_option.dart';
 import '../../../widgets/audio_recorder_button.dart';
+import '../../../widgets/swipe_reply_wrapper.dart';
 import '../../call/outgoing_call_screen.dart';
 import '../event/create_event_screen.dart';
 import '../event/event_detail_screen.dart';
@@ -811,13 +812,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                               msg.type == MessageType.poll) {
                             return child;
                           }
-                          return GestureDetector(
-                            onHorizontalDragEnd: (details) {
-                              if (details.primaryVelocity != null &&
-                                  details.primaryVelocity! > 300) {
-                                _startReply(msg);
-                              }
-                            },
+                          return SwipeReplyWrapper(
+                            onReply: () => _startReply(msg),
                             child: child,
                           );
                         }
