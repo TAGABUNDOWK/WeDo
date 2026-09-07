@@ -254,7 +254,7 @@ class _WheelScreenState extends State<WheelScreen>
         child: SafeArea(
           child: Column(
             children: [
-              // App bar
+              // App bar with sparkle title
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Row(
@@ -267,16 +267,59 @@ class _WheelScreenState extends State<WheelScreen>
                         size: 20,
                       ),
                     ),
-                    const Expanded(
-                      child: Text(
-                        'Spin the Wheel',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                        textAlign: TextAlign.center,
+                    Expanded(
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Title text
+                          const Text(
+                            'Spin the Wheel',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          // Sparkle decorations
+                          Positioned(
+                            left: 30,
+                            top: 0,
+                            child: Icon(
+                              Icons.auto_awesome,
+                              size: 12,
+                              color: const Color(0xFFFE4EF0).withValues(alpha: 0.9),
+                            ),
+                          ),
+                          Positioned(
+                            right: 35,
+                            top: 2,
+                            child: Icon(
+                              Icons.auto_awesome,
+                              size: 10,
+                              color: const Color(0xFF8B5CF6).withValues(alpha: 0.8),
+                            ),
+                          ),
+                          Positioned(
+                            left: 50,
+                            bottom: 0,
+                            child: Icon(
+                              Icons.auto_awesome,
+                              size: 8,
+                              color: const Color(0xFFD946EF).withValues(alpha: 0.7),
+                            ),
+                          ),
+                          Positioned(
+                            right: 55,
+                            bottom: 2,
+                            child: Icon(
+                              Icons.auto_awesome,
+                              size: 11,
+                              color: const Color(0xFFC026D3).withValues(alpha: 0.85),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(width: 48),
@@ -306,14 +349,19 @@ class _WheelScreenState extends State<WheelScreen>
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
-                                blurRadius: 40,
-                                spreadRadius: 8,
+                                color: const Color(0xFF8B5CF6).withValues(alpha: 0.4),
+                                blurRadius: 50,
+                                spreadRadius: 10,
                               ),
                               BoxShadow(
-                                color: const Color(0xFFFE4EF0).withValues(alpha: 0.15),
-                                blurRadius: 60,
-                                spreadRadius: 4,
+                                color: const Color(0xFFFE4EF0).withValues(alpha: 0.25),
+                                blurRadius: 70,
+                                spreadRadius: 6,
+                              ),
+                              BoxShadow(
+                                color: const Color(0xFFC026D3).withValues(alpha: 0.15),
+                                blurRadius: 90,
+                                spreadRadius: 2,
                               ),
                             ],
                           ),

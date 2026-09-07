@@ -29,17 +29,23 @@ class SpinWheelPainter extends CustomPainter {
     canvas.translate(center.dx, center.dy);
     canvas.rotate(rotation);
 
-    // Ambient glow behind the wheel
+    // Ambient glow behind the wheel - layer 1 (purple)
     final glowPaint = Paint()
-      ..color = const Color(0xFF8B5CF6).withValues(alpha: 0.25)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 24);
-    canvas.drawCircle(Offset.zero, radius + 12, glowPaint);
+      ..color = const Color(0xFF8B5CF6).withValues(alpha: 0.35)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 28);
+    canvas.drawCircle(Offset.zero, radius + 14, glowPaint);
 
     // Second glow layer tinted pink
     final glowPaint2 = Paint()
-      ..color = const Color(0xFFFE4EF0).withValues(alpha: 0.12)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 36);
-    canvas.drawCircle(Offset.zero, radius + 20, glowPaint2);
+      ..color = const Color(0xFFFE4EF0).withValues(alpha: 0.18)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 40);
+    canvas.drawCircle(Offset.zero, radius + 22, glowPaint2);
+
+    // Third glow layer - vibrant outer ring
+    final glowPaint3 = Paint()
+      ..color = const Color(0xFFC026D3).withValues(alpha: 0.12)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 50);
+    canvas.drawCircle(Offset.zero, radius + 30, glowPaint3);
 
     // Draw segments
     for (int i = 0; i < options.length; i++) {
@@ -73,10 +79,10 @@ class SpinWheelPainter extends CustomPainter {
       // Draw divider line glow (skip for single option)
       if (options.length > 1) {
         final dividerGlowPaint = Paint()
-          ..color = Colors.white.withValues(alpha: 0.15)
-          ..strokeWidth = 4
+          ..color = Colors.white.withValues(alpha: 0.25)
+          ..strokeWidth = 6
           ..style = PaintingStyle.stroke
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
 
         final dividerEnd = Offset(
           radius * math.cos(startAngle),
@@ -86,8 +92,8 @@ class SpinWheelPainter extends CustomPainter {
 
         // Draw divider line
         final dividerPaint = Paint()
-          ..color = Colors.white.withValues(alpha: 0.3)
-          ..strokeWidth = 1.5
+          ..color = Colors.white.withValues(alpha: 0.45)
+          ..strokeWidth = 2
           ..style = PaintingStyle.stroke;
 
         canvas.drawLine(Offset.zero, dividerEnd, dividerPaint);
@@ -207,27 +213,39 @@ class SpinWheelPainter extends CustomPainter {
     canvas.save();
     canvas.scale(hubScale);
 
-    // Hub shadow
+    // Hub shadow - outer glow
     final hubShadowPaint = Paint()
-      ..color = const Color(0xFFFE4EF0).withValues(alpha: 0.25)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16);
-    canvas.drawCircle(Offset.zero, 38, hubShadowPaint);
+      ..color = const Color(0xFFFE4EF0).withValues(alpha: 0.35)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20);
+    canvas.drawCircle(Offset.zero, 40, hubShadowPaint);
+
+    // Hub outer glow ring
+    final hubOuterGlow = Paint()
+      ..color = const Color(0xFF8B5CF6).withValues(alpha: 0.2)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
+    canvas.drawCircle(Offset.zero, 34, hubOuterGlow);
 
     // Hub body
     final hubPaint = Paint()
       ..shader = const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [Color(0xFFFE4EF0), Color(0xFF800DD8)],
-      ).createShader(Rect.fromCircle(center: Offset.zero, radius: 28));
-    canvas.drawCircle(Offset.zero, 28, hubPaint);
+        colors: [Color(0xFFFF55F0), Color(0xFF9333EA)],
+      ).createShader(Rect.fromCircle(center: Offset.zero, radius: 30));
+    canvas.drawCircle(Offset.zero, 30, hubPaint);
 
-    // Hub border
+    // Hub border - stronger
     final hubBorderPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.3)
+      ..color = Colors.white.withValues(alpha: 0.45)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-    canvas.drawCircle(Offset.zero, 28, hubBorderPaint);
+      ..strokeWidth = 2.5;
+    canvas.drawCircle(Offset.zero, 30, hubBorderPaint);
+
+    // Inner hub highlight
+    final hubHighlightPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.15)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+    canvas.drawCircle(Offset(-8, -10), 10, hubHighlightPaint);
 
     // SPIN text on hub
     final spinTextPainter = TextPainter(
@@ -262,33 +280,39 @@ class SpinWheelPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
 
     final pointerPath = Path();
-    const pointerSize = 16.0;
-    final pointerY = center.dy - radius - 2;
+    const pointerSize = 22.0;
+    final pointerY = center.dy - radius - 4;
 
-    pointerPath.moveTo(center.dx, pointerY + pointerSize + 4);
+    pointerPath.moveTo(center.dx, pointerY + pointerSize + 6);
     pointerPath.lineTo(center.dx - pointerSize / 2, pointerY);
     pointerPath.lineTo(center.dx + pointerSize / 2, pointerY);
     pointerPath.close();
 
+    // Pointer glow halo
+    final glowPaint = Paint()
+      ..color = const Color(0xFFFE4EF0).withValues(alpha: 0.4)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
+    canvas.drawPath(pointerPath, glowPaint);
+
     // Pointer shadow
     final shadowPaint = Paint()
-      ..color = Colors.black.withValues(alpha: 0.3)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
-    canvas.drawPath(pointerPath.shift(const Offset(0, 2)), shadowPaint);
+      ..color = Colors.black.withValues(alpha: 0.4)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+    canvas.drawPath(pointerPath.shift(const Offset(0, 3)), shadowPaint);
 
     // Apply bounce scale from the pointer tip
     canvas.save();
-    canvas.translate(center.dx, pointerY + pointerSize + 4);
+    canvas.translate(center.dx, pointerY + pointerSize + 6);
     canvas.scale(scale);
-    canvas.translate(-center.dx, -(pointerY + pointerSize + 4));
+    canvas.translate(-center.dx, -(pointerY + pointerSize + 6));
 
     canvas.drawPath(pointerPath, pointerPaint);
 
-    // Pointer border
+    // Pointer border - stronger
     final borderPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.5)
+      ..color = Colors.white.withValues(alpha: 0.6)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
+      ..strokeWidth = 2;
     canvas.drawPath(pointerPath, borderPaint);
 
     canvas.restore();

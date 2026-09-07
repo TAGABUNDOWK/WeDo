@@ -24,6 +24,13 @@ class WheelOptionChip extends StatelessWidget {
           color: option.color.withValues(alpha: 0.5),
           width: 1,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: option.color.withValues(alpha: 0.2),
+            blurRadius: 8,
+            spreadRadius: 1,
+          ),
+        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
