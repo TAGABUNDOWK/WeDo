@@ -7,6 +7,7 @@ import '../../../services/poll/poll_service.dart';
 import '../../../services/group/group_service.dart';
 import '../../../services/direct/direct_service.dart';
 import '../../../services/auth/user_service.dart';
+import '../../../services/notification/notification_service.dart';
 
 const _fontFamily = 'PlusJakartaSans';
 
@@ -34,6 +35,7 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
   final _groupService = GroupService();
   final _directService = DirectService();
   final _userService = UserService();
+  final _notificationService = NotificationService();
   final _currentUser = FirebaseAuth.instance.currentUser;
   PollType _pollType = PollType.public;
   DateTime? _closesAt;
@@ -172,6 +174,11 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
           content: 'created a poll',
           senderName: senderName,
         );
+        await _sendPollNotifications(
+          pollId: pollId,
+          question: question,
+          groupId: widget.groupId!,
+        );
       } else if (widget.chatId != null) {
         await _directService.sendPollMessage(
           chatId: widget.chatId!,
@@ -184,6 +191,11 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
           chatId: widget.chatId!,
           content: 'created a poll',
           senderName: senderName,
+        );
+        await _sendPollNotifications(
+          pollId: pollId,
+          question: question,
+          chatId: widget.chatId!,
         );
       }
 
@@ -205,6 +217,51 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
     } finally {
       if (mounted) setState(() => _isCreating = false);
     }
+  }
+
+  Future<void> _sendPollNotifications({
+    required String pollId,
+    required String question,
+    String? groupId,
+    String? chatId,
+  }) async {
+    try {
+      final user = _currentUser;
+      if (user == null) return;
+      final senderName = _pollType == PollType.secret
+          ? 'Anonymous'
+          : (user.displayName ?? user.email ?? 'Unknown');
+
+      if (groupId != null) {
+        final members = await _groupService.getGroupMembersWithNames(groupId);
+        for (final member in members) {
+          final uid = member['uid'] as String;
+          if (uid == user.uid) continue;
+          await _notificationService.createPollCreatedNotification(
+            recipientId: uid,
+            senderId: user.uid,
+            senderName: senderName,
+            pollId: pollId,
+            question: question,
+            groupId: groupId,
+          );
+        }
+      } else if (chatId != null) {
+        final chat = await _directService.getChat(chatId);
+        if (chat == null) return;
+        final otherUid = chat.otherUserId(user.uid);
+        if (otherUid.isEmpty) return;
+        await _notificationService.createPollCreatedNotification(
+          recipientId: otherUid,
+          senderId: user.uid,
+          senderName: senderName,
+          pollId: pollId,
+          question: question,
+          chatId: chatId,
+          otherUid: user.uid,
+        );
+      }
+    } catch (_) {}
   }
 
   String _formatCloseDate(DateTime dt) {
