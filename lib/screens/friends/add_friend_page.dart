@@ -14,7 +14,7 @@ class _AddFriendPageState extends State<AddFriendPage> {
   final _searchCtrl = TextEditingController();
   final _friendService = FriendService();
   final _auth = FirebaseAuth.instance;
-  final _bg = const Color(0xFFE7ECEF);
+  final _bg = const Color(0xFF190831);
 
   bool _isLoading = false;
   List<UserEntity> _results = [];
@@ -86,27 +86,16 @@ class _AddFriendPageState extends State<AddFriendPage> {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: _bg,
+        color: Colors.black.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(16),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0xFFFFFFFF),
-            offset: Offset(-6, -6),
-            blurRadius: 12,
-          ),
-          BoxShadow(
-            color: Color(0xFFB8C6CC),
-            offset: Offset(6, 6),
-            blurRadius: 12,
-          ),
-        ],
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10), width: 1),
       ),
       child: Row(
         children: [
           CircleAvatar(
             radius: 20,
-            backgroundColor: Colors.blue.shade100,
-            child: const Icon(Icons.person, color: Colors.blue),
+            backgroundColor: Colors.white.withValues(alpha: 0.10),
+            child: const Icon(Icons.person, color: Color(0xFFFE4EF0)),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -121,7 +110,7 @@ class _AddFriendPageState extends State<AddFriendPage> {
                 if (user.username.isNotEmpty && user.username != user.displayName)
                   Text(
                     '@${user.username}',
-                    style: const TextStyle(fontSize: 12, color: Colors.black45),
+                    style: const TextStyle(fontSize: 12, color: Colors.white70),
                     overflow: TextOverflow.ellipsis,
                   ),
               ],
@@ -130,7 +119,7 @@ class _AddFriendPageState extends State<AddFriendPage> {
           if (status == 'friends')
             const Text('Friends', style: TextStyle(color: Colors.green))
           else if (status == 'pending')
-            const Text('Sent', style: TextStyle(color: Colors.black45))
+            const Text('Sent', style: TextStyle(color: Colors.white54))
           else
             TextButton(
               onPressed: () => _onSend(user),
@@ -161,24 +150,26 @@ class _AddFriendPageState extends State<AddFriendPage> {
               child: Row(
                 children: [
                   Expanded(
-                    child: TextField(
+                      child: TextField(
                       controller: _searchCtrl,
                       textInputAction: TextInputAction.search,
                       onSubmitted: (_) => _onSearch(),
+                      style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
                         hintText: 'Search by username',
+                        hintStyle: const TextStyle(color: Colors.white54),
                         filled: true,
-                        fillColor: _bg,
-                        prefixIcon: const Icon(Icons.search),
+                        fillColor: Colors.black.withValues(alpha: 0.35),
+                        prefixIcon: const Icon(Icons.search, color: Colors.white70),
                         contentPadding:
                             const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
+                          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.20)),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
+                          borderSide: const BorderSide(color: Color(0xFFFE4EF0)),
                         ),
                       ),
                     ),
@@ -200,7 +191,7 @@ class _AddFriendPageState extends State<AddFriendPage> {
                             _searchedQuery.isEmpty
                                 ? 'Search for a username to add friends'
                                 : 'No user found with that username',
-                            style: const TextStyle(color: Colors.black45),
+                            style: const TextStyle(color: Colors.white70),
                           ),
                         )
                       : ListView.builder(

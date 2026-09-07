@@ -1,5 +1,22 @@
+import 'dart:ui';
+import 'dart:math' as math;
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../account/account_screen.dart';
 import '../friends/friends_page.dart';
+import '../session/session_entry_screen.dart';
+import '../../features/spin_wheel/screens/wheel_screen.dart';
+import '../tri_race/tri_race_entry_screen.dart';
+import '../games/all_games_screen.dart';
+import '../chat/chat_tab.dart';
+import '../../widgets/animated_background.dart';
+import '../../services/auth/user_service.dart';
+import '../../services/friends/friend_service.dart';
+import '../../services/notification/notification_service.dart';
+import '../../models/notification_entity.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -10,75 +27,88 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int _currentIndex = 0;
+  String? _avatarAsset;
+  String? _photoUrl;
 
   static const _tabs = [
     _HomeTab(),
-    _PlaceholderTab(icon: Icons.chat_bubble_outline, label: 'Chat'),
+    ChatTab(),
     FriendsPage(),
-    _PlaceholderTab(icon: Icons.casino_outlined, label: 'Session'),
+    SessionEntryScreen(),
+    AccountScreen(),
+    AllGamesScreen(),
   ];
 
-  BoxDecoration _neumorphicDecoration({Color? color}) {
-    final base = color ?? const Color(0xFFE7ECEF);
-    return BoxDecoration(
-      color: base,
-      borderRadius: BorderRadius.circular(16),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0xFFFFFFFF),
-          offset: Offset(-6, -6),
-          blurRadius: 12,
-        ),
-        BoxShadow(
-          color: Color(0xFFB8C6CC),
-          offset: Offset(6, 6),
-          blurRadius: 12,
-        ),
-      ],
-    );
+  static const _activeColor = Color(0xFF7D56F5);
+  static const _inactiveColor = Color(0x80FFFFFF);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserProfile();
+  }
+
+  Future<void> _loadUserProfile() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final user = await UserService().getUserDocument(uid);
+    if (user != null && mounted) {
+      setState(() {
+        _avatarAsset = user.avatarAsset;
+        _photoUrl = user.photoUrl;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final bg = const Color(0xFFE7ECEF);
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+
     return Scaffold(
-      backgroundColor: bg,
-      body: SafeArea(
-        child: IndexedStack(
-          index: _currentIndex,
-          children: _tabs,
-        ),
-      ),
-      bottomNavigationBar: Container(
-        margin: const EdgeInsets.all(12),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        decoration: _neumorphicDecoration(),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
+      backgroundColor: Colors.transparent,
+      body: AnimatedBackground(
+        showStars: false,
+        child: Stack(
           children: [
-            _NavItem(
-              icon: Icons.home,
-              label: 'Home',
-              isSelected: _currentIndex == 0,
-              onTap: () => setState(() => _currentIndex = 0),
+            Positioned(
+              top: 100,
+              left: -150,
+              child: Transform(
+                alignment: Alignment.center,
+                transform: Matrix4.identity()
+                  ..scaleByDouble(-1.0, 1.0, 1.0, 1.0)
+                  ..rotateZ(-0.55),
+                child: Opacity(
+                  opacity: 0.05,
+                  child: Image.asset(
+                    'assets/images/Ears-overlay1.png',
+                    width: 900,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
             ),
-            _NavItem(
-              icon: Icons.chat_bubble_outline,
-              label: 'Chat',
-              isSelected: _currentIndex == 1,
-              onTap: () => setState(() => _currentIndex = 1),
+            SafeArea(
+              child: Column(
+                children: [
+                  Expanded(
+                    child: IndexedStack(index: _currentIndex, children: _tabs),
+                  ),
+                ],
+              ),
             ),
-            _NavItem(
-              icon: Icons.people_outline,
-              label: 'Friends',
-              isSelected: _currentIndex == 2,
-              onTap: () => setState(() => _currentIndex = 2),
-            ),
-            _NavItem(
-              icon: Icons.casino_outlined,
-              label: 'Session',
-              isSelected: _currentIndex == 3,
-              onTap: () => setState(() => _currentIndex = 3),
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: bottomPadding + 20,
+              child: BlobNavBar(
+                currentIndex: _currentIndex,
+                activeColor: _activeColor,
+                inactiveColor: _inactiveColor,
+                avatarAsset: _avatarAsset,
+                photoUrl: _photoUrl,
+                onTap: (index) => setState(() => _currentIndex = index),
+              ),
             ),
           ],
         ),
@@ -87,46 +117,1302 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-class _NavItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool isSelected;
+// ── Glassmorphism capsule navigation bar ────────────────────────────────────
+
+class BlobNavBar extends StatefulWidget {
+  final int currentIndex;
+  final Color activeColor;
+  final Color inactiveColor;
+  final ValueChanged<int> onTap;
+  final String? avatarAsset;
+  final String? photoUrl;
+
+  const BlobNavBar({
+    super.key,
+    required this.currentIndex,
+    required this.activeColor,
+    required this.inactiveColor,
+    required this.onTap,
+    this.avatarAsset,
+    this.photoUrl,
+  });
+
+  static const _iconColor = Color(0x80FFFFFF);
+
+  @override
+  State<BlobNavBar> createState() => _BlobNavBarState();
+}
+
+class _BlobNavBarState extends State<BlobNavBar>
+    with SingleTickerProviderStateMixin {
+  bool _isMenuOpen = false;
+  late final AnimationController _menuCtrl;
+  late final Animation<double> _menuScale;
+  late final Animation<double> _menuFade;
+
+  @override
+  void initState() {
+    super.initState();
+    _menuCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _menuScale = CurvedAnimation(parent: _menuCtrl, curve: Curves.easeOutBack);
+    _menuFade = CurvedAnimation(
+      parent: _menuCtrl,
+      curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _menuCtrl.dispose();
+    super.dispose();
+  }
+
+  void _toggleMenu() {
+    setState(() => _isMenuOpen = !_isMenuOpen);
+    if (_isMenuOpen) {
+      _menuCtrl.forward();
+    } else {
+      _menuCtrl.reverse();
+    }
+  }
+
+  void _closeMenu() {
+    if (_isMenuOpen) {
+      setState(() => _isMenuOpen = false);
+      _menuCtrl.reverse();
+    }
+  }
+
+  void _onChoiceTap(VoidCallback? navigation) {
+    _closeMenu();
+    if (navigation != null) {
+      Future.delayed(const Duration(milliseconds: 200), navigation);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = constraints.maxWidth;
+
+        const double padX = 20;
+        const double capsuleH = 56;
+        const double gap = 14;
+        const double centerRaise = 18;
+        const double centerDiameter = capsuleH + centerRaise;
+        final double sideW = (w - padX * 2 - gap * 2 - centerDiameter) / 2;
+        const double barH = capsuleH + 16;
+        const double popupSpace = 120;
+
+        const double leftX = padX;
+        final double centerX = w / 2 - centerDiameter / 2;
+        final double rightX = w - padX - sideW;
+
+        return SizedBox(
+          height: barH + popupSpace,
+          width: w,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // ── Floating shadow behind the bar ──
+              Positioned(
+                left: leftX - 4,
+                top: popupSpace + (barH - capsuleH) / 2 - 4,
+                right: (w - rightX - sideW) - 4 + leftX - 4,
+                bottom: 0,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(28),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF7D56F5).withValues(alpha: 0.15),
+                        blurRadius: 30,
+                        spreadRadius: 4,
+                        offset: const Offset(0, 6),
+                      ),
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.25),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // ── Left hourglass connector ──
+              Positioned(
+                left: leftX + sideW - 21,
+                top: popupSpace + (barH - capsuleH) / 2,
+                width: centerX - (leftX + sideW) + 39,
+                height: capsuleH,
+                child: CustomPaint(
+                  painter: _HourglassConnectorPainter(
+                    color: Colors.white.withValues(alpha: 0.07),
+                  ),
+                ),
+              ),
+
+              // ── Right hourglass connector ──
+              Positioned(
+                left: centerX + centerDiameter - 17,
+                top: popupSpace + (barH - capsuleH) / 2,
+                width: rightX - (centerX + centerDiameter) + 39,
+                height: capsuleH,
+                child: CustomPaint(
+                  painter: _HourglassConnectorPainter(
+                    color: Colors.white.withValues(alpha: 0.07),
+                  ),
+                ),
+              ),
+
+              // ── Left glass capsule ──
+              Positioned(
+                left: leftX,
+                top: popupSpace + (barH - capsuleH) / 2,
+                width: sideW,
+                height: capsuleH,
+                child: _GlassCapsule(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _NavIconButton(
+                        item: const _NavDef(
+                          index: 0,
+                          asset: 'assets/icons/home.png',
+                        ),
+                        isActive: widget.currentIndex == 0,
+                        activeColor: widget.activeColor,
+                        iconColor: BlobNavBar._iconColor,
+                        onTap: () => widget.onTap(0),
+                      ),
+                      _NavIconButton(
+                        item: const _NavDef(
+                          index: 1,
+                          asset: 'assets/icons/message.png',
+                        ),
+                        isActive: widget.currentIndex == 1,
+                        activeColor: widget.activeColor,
+                        iconColor: BlobNavBar._iconColor,
+                        onTap: () => widget.onTap(1),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // ── Right glass capsule ──
+              Positioned(
+                left: rightX,
+                top: popupSpace + (barH - capsuleH) / 2,
+                width: sideW,
+                height: capsuleH,
+                child: _GlassCapsule(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _NavIconButton(
+                        item: const _NavDef(
+                          index: 2,
+                          asset: 'assets/icons/friends.png',
+                        ),
+                        isActive: widget.currentIndex == 2,
+                        activeColor: widget.activeColor,
+                        iconColor: BlobNavBar._iconColor,
+                        onTap: () => widget.onTap(2),
+                      ),
+                      _NavIconButton(
+                        item: const _NavDef(
+                          index: 4,
+                          asset: 'assets/icons/avatar.png',
+                          size: 20,
+                        ),
+                        isActive: widget.currentIndex == 4,
+                        activeColor: widget.activeColor,
+                        iconColor: BlobNavBar._iconColor,
+                        onTap: () => widget.onTap(4),
+                        avatarAsset: widget.avatarAsset,
+                        photoUrl: widget.photoUrl,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // ── Raised center capsule (hero button) ──
+              Positioned(
+                left: centerX,
+                top: popupSpace + (barH - centerDiameter) / 2,
+                width: centerDiameter,
+                height: centerDiameter,
+                child: _CenterLogoButton(
+                  isActive: widget.currentIndex == 3,
+                  isMenuOpen: _isMenuOpen,
+                  activeColor: widget.activeColor,
+                  inactiveColor: widget.inactiveColor,
+                  onTap: () => widget.onTap(5),
+                  onLongPress: _toggleMenu,
+                ),
+              ),
+
+              Positioned(
+                bottom: 54,
+                left: centerX + centerDiameter / 2 - 120,
+                width: 240,
+                child: AnimatedBuilder(
+                  animation: _menuCtrl,
+                  builder: (context, _) {
+                    return Opacity(
+                      opacity: _menuFade.value,
+                      child: SizedBox(
+                        height: 110,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Positioned(
+                              left: 36,
+                              bottom: 20 * _menuScale.value,
+                              child: Transform.translate(
+                                offset: Offset(0, 30 * (1 - _menuScale.value)),
+                                child: _PopupCircle(
+                                  icon: 'assets/icons/racing-flag.png',
+                                  onTap: () => _onChoiceTap(() {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const TriRaceEntryScreen(),
+                                      ),
+                                    );
+                                  }),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              left: 94,
+                              bottom: 40 * _menuScale.value,
+                              child: Transform.translate(
+                                offset: Offset(0, 20 * (1 - _menuScale.value)),
+                                child: _PopupCircle(
+                                  icon: 'assets/icons/punch.png',
+                                  onTap: () => _onChoiceTap(() {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const SessionEntryScreen(),
+                                      ),
+                                    );
+                                  }),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              right: 36,
+                              bottom: 20 * _menuScale.value,
+                              child: Transform.translate(
+                                offset: Offset(0, 30 * (1 - _menuScale.value)),
+                                child: _PopupCircle(
+                                  icon: 'assets/icons/spinning-wheel.png',
+                                  onTap: () => _onChoiceTap(() {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => const WheelScreen(),
+                                      ),
+                                    );
+                                  }),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ── Glassmorphism capsule ───────────────────────────────────────────────────
+
+class _GlassCapsule extends StatelessWidget {
+  final Widget child;
+  const _GlassCapsule({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(28),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.18),
+              width: 1,
+            ),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Center logo button (raised hero) ────────────────────────────────────────
+
+class _CenterLogoButton extends StatefulWidget {
+  final bool isActive;
+  final bool isMenuOpen;
+  final Color activeColor;
+  final Color inactiveColor;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  const _CenterLogoButton({
+    required this.isActive,
+    required this.isMenuOpen,
+    required this.activeColor,
+    required this.inactiveColor,
+    required this.onTap,
+    required this.onLongPress,
+  });
+
+  @override
+  State<_CenterLogoButton> createState() => _CenterLogoButtonState();
+}
+
+class _CenterLogoButtonState extends State<_CenterLogoButton> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // ── Center capsule button (painted first = lower hit-test priority) ──
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.deferToChild,
+            onTap: () {
+              if (!widget.isMenuOpen) {
+                widget.onTap();
+              }
+            },
+            onLongPress: widget.onLongPress,
+            onTapDown: (_) => setState(() => _isPressed = true),
+            onTapUp: (_) => setState(() => _isPressed = false),
+            onTapCancel: () => setState(() => _isPressed = false),
+            child: AnimatedScale(
+              scale: _isPressed ? 0.92 : 1.0,
+              duration: const Duration(milliseconds: 120),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      widget.isMenuOpen
+                          ? const Color(0xFF9B7AFF)
+                          : widget.isActive
+                          ? const Color(0xFF9B7AFF)
+                          : const Color(0xFF9A5AB0),
+                      widget.isMenuOpen
+                          ? const Color(0xFF5A3AD4)
+                          : widget.isActive
+                          ? const Color(0xFF5A3AD4)
+                          : const Color(0xFF6A3A80),
+                    ],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color:
+                          (widget.isMenuOpen
+                                  ? const Color(0xFF7D56F5)
+                                  : widget.isActive
+                                  ? const Color(0xFF7D56F5)
+                                  : const Color(0xFF7A4A8A))
+                              .withValues(
+                                alpha: widget.isMenuOpen
+                                    ? 0.6
+                                    : widget.isActive
+                                    ? 0.5
+                                    : 0.25,
+                              ),
+                      blurRadius: 20,
+                      spreadRadius: 2,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: ClipOval(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withValues(alpha: 0.08),
+                      ),
+                      padding: const EdgeInsets.all(12),
+                      child: AnimatedRotation(
+                        turns: widget.isMenuOpen ? 0.125 : 0,
+                        duration: const Duration(milliseconds: 300),
+                        child: Opacity(
+                          opacity: widget.isMenuOpen || widget.isActive
+                              ? 1.0
+                              : 0.65,
+                          child: Image.asset(
+                            'assets/images/WeDo-Logo.png',
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Icon(
+                                Icons.casino,
+                                color: widget.isActive
+                                    ? widget.activeColor
+                                    : widget.inactiveColor,
+                                size: 28,
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Popup circle button ────────────────────────────────────────────────────
+
+class _PopupCircle extends StatelessWidget {
+  final String icon;
   final VoidCallback onTap;
 
-  const _NavItem({
-    required this.icon,
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-  });
+  const _PopupCircle({required this.icon, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.blue : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              color: isSelected ? Colors.white : Colors.black54,
+      child: SizedBox(
+        width: 52,
+        height: 52,
+        child: Container(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.white.withValues(alpha: 0.25),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.35),
+              width: 1,
             ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                color: isSelected ? Colors.white : Colors.black54,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+          ),
+          child: Center(
+            child: SizedBox(
+              width: 26,
+              height: 26,
+              child: Image.asset(
+                icon,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) {
+                  return Icon(
+                    Icons.circle,
+                    color: Colors.white.withValues(alpha: 0.6),
+                    size: 12,
+                  );
+                },
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Nav icon button ─────────────────────────────────────────────────────────
+
+class _NavIconButton extends StatefulWidget {
+  final _NavDef item;
+  final bool isActive;
+  final Color activeColor;
+  final Color iconColor;
+  final VoidCallback onTap;
+  final String? avatarAsset;
+  final String? photoUrl;
+
+  const _NavIconButton({
+    required this.item,
+    required this.isActive,
+    required this.activeColor,
+    required this.iconColor,
+    required this.onTap,
+    this.avatarAsset,
+    this.photoUrl,
+  });
+
+  @override
+  State<_NavIconButton> createState() => _NavIconButtonState();
+}
+
+class _NavIconButtonState extends State<_NavIconButton> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.isActive ? widget.activeColor : widget.iconColor;
+    final hasAvatarAsset = widget.avatarAsset != null && widget.avatarAsset!.isNotEmpty;
+    final hasPhotoUrl = widget.photoUrl != null && widget.photoUrl!.isNotEmpty;
+    final hasProfileImage = hasAvatarAsset || hasPhotoUrl;
+
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) {
+        setState(() => _isPressed = false);
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _isPressed = false),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedScale(
+        scale: _isPressed ? 0.90 : (widget.isActive ? 1.12 : 1.0),
+        duration: const Duration(milliseconds: 120),
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: hasProfileImage
+              ? ClipOval(
+                  child: Container(
+                    width: widget.item.size ?? 26,
+                    height: widget.item.size ?? 26,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: widget.isActive ? widget.activeColor : Colors.transparent,
+                        width: 2,
+                      ),
+                    ),
+                    child: hasAvatarAsset
+                        ? Image.asset(
+                            widget.avatarAsset!,
+                            width: widget.item.size ?? 26,
+                            height: widget.item.size ?? 26,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Icon(
+                                Icons.person,
+                                color: color,
+                                size: widget.item.size ?? 26,
+                              );
+                            },
+                          )
+                        : Image.network(
+                            widget.photoUrl!,
+                            width: widget.item.size ?? 26,
+                            height: widget.item.size ?? 26,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Icon(
+                                Icons.person,
+                                color: color,
+                                size: widget.item.size ?? 26,
+                              );
+                            },
+                          ),
+                  ),
+                )
+              : ColorFiltered(
+                  colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+                  child: Image.asset(
+                    widget.item.asset,
+                    width: widget.item.size ?? 26,
+                    height: widget.item.size ?? 26,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Icon(
+                        Icons.circle,
+                        color: color,
+                        size: widget.item.size ?? 26,
+                      );
+                    },
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Nav definition ──────────────────────────────────────────────────────────
+
+class _NavDef {
+  final int index;
+  final String asset;
+  final double? size;
+
+  const _NavDef({required this.index, required this.asset, this.size});
+}
+
+// ── Hourglass connector painter ─────────────────────────────────────────────
+
+class _HourglassConnectorPainter extends CustomPainter {
+  final Color color;
+  const _HourglassConnectorPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final path = Path();
+    final double pinch = size.height * 0.5;
+    final double bulge = size.height * 0.3;
+    final double midY = size.height / 2;
+    final double midX = size.width / 2;
+
+    // Start at top-left
+    path.moveTo(0, 0);
+    // Top edge: bows inward (downward toward center)
+    path.quadraticBezierTo(midX, pinch, size.width, 0);
+    // Right edge: bows outward (rightward)
+    path.quadraticBezierTo(size.width + bulge, midY, size.width, size.height);
+    // Bottom edge: bows inward (upward toward center)
+    path.quadraticBezierTo(midX, size.height - pinch, 0, size.height);
+    // Left edge: bows outward (leftward)
+    path.quadraticBezierTo(-bulge, midY, 0, 0);
+
+    path.close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _HourglassConnectorPainter oldDelegate) =>
+      oldDelegate.color != color;
+}
+
+// ── Home tab content ────────────────────────────────────────────────────────
+
+class _FeatureCardData {
+  final String image;
+  final String badge;
+  final String title;
+  final String description;
+  final Color badgeColor;
+
+  const _FeatureCardData({
+    required this.image,
+    required this.badge,
+    required this.title,
+    required this.description,
+    required this.badgeColor,
+  });
+}
+
+const _featureCards = [
+  _FeatureCardData(
+    image: 'assets/images/Flashcards.png',
+    badge: 'TRY NOW',
+    title: 'Flashcards Mode',
+    description: 'Learn faster, one card at a time.',
+    badgeColor: Color(0xFF800DD8),
+  ),
+  _FeatureCardData(
+    image: 'assets/images/TriRace.png',
+    badge: 'RACE NOW',
+    title: 'TriRace',
+    description: 'Race your friends in a thrilling tri-challenge.',
+    badgeColor: Color(0xFFFF6B35),
+  ),
+  _FeatureCardData(
+    image: 'assets/images/SpinWheel.png',
+    badge: 'SPIN IT',
+    title: 'Cyber Spin Wheel',
+    description: 'Spin the wheel, let it choose your next move.',
+    badgeColor: Color(0xFFFFD93D),
+  ),
+];
+
+class _HomeTab extends StatefulWidget {
+  const _HomeTab();
+
+  @override
+  State<_HomeTab> createState() => _HomeTabState();
+}
+
+class _HomeTabState extends State<_HomeTab> {
+  final _auth = FirebaseAuth.instance;
+  final _userService = UserService();
+  final _notificationService = NotificationService();
+  final _friendService = FriendService();
+  String _displayName = '';
+  bool _showNotifications = false;
+
+  String get _uid => _auth.currentUser?.uid ?? '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUser();
+  }
+
+  Future<void> _loadUser() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+    final user = await _userService.getUserDocument(uid);
+    if (user != null && mounted) {
+      setState(() => _displayName = user.displayName);
+    }
+  }
+
+  Future<void> _acceptRequest(String friendshipId, String notificationId) async {
+    await _friendService.acceptRequest(
+      friendshipId,
+      acceptorUid: _uid,
+      acceptorNotificationId: notificationId,
+    );
+  }
+
+  Future<void> _declineRequest(String friendshipId, String notificationId) async {
+    await _friendService.declineRequest(
+      friendshipId,
+      declinerUid: _uid,
+      declinerNotificationId: notificationId,
+    );
+  }
+
+  String _greeting() {
+    final hour = DateTime.now().hour;
+    if (hour >= 5 && hour < 12) return 'Good Morning';
+    if (hour >= 12 && hour < 18) return 'Good Afternoon';
+    return 'Good Night';
+  }
+
+  Widget _buildNotificationBell() {
+    return GestureDetector(
+      onTap: () => setState(() => _showNotifications = !_showNotifications),
+      child: SizedBox(
+        width: 36,
+        height: 36,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Center(
+              child: Image.asset(
+                'assets/icons/notification.png',
+                width: 30,
+                height: 30,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) => Icon(
+                  Icons.notifications_outlined,
+                  color: Colors.white.withValues(alpha: 0.85),
+                  size: 30,
+                ),
+              ),
+            ),
+            StreamBuilder<int>(
+              stream: _notificationService.getUnreadCount(_uid),
+              builder: (context, snapshot) {
+                final count = snapshot.data ?? 0;
+                if (count == 0) return const SizedBox.shrink();
+                return Positioned(
+                  right: -2,
+                  top: -2,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF800DD8),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Text(
+                        count > 9 ? '9+' : '$count',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          fontFamily: 'Poppins',
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationsPanel() {
+    return Positioned(
+      top: 70,
+      right: 0,
+      left: 0,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            constraints: const BoxConstraints(maxHeight: 400),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2A1450).withValues(alpha: 0.95),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.12),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Notifications',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                          fontFamily: 'Poppins',
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () async {
+                              await _notificationService.markAllAsRead(_uid);
+                            },
+                            child: Text(
+                              'Mark all read',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.white.withValues(alpha: 0.5),
+                                fontFamily: 'Poppins',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          GestureDetector(
+                            onTap: () => setState(() => _showNotifications = false),
+                            child: Icon(
+                              Icons.close,
+                              size: 20,
+                              color: Colors.white.withValues(alpha: 0.5),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Divider(height: 1, color: Colors.white.withValues(alpha: 0.08)),
+                StreamBuilder<List<NotificationEntity>>(
+                  stream: _notificationService.getNotificationsStream(_uid),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 40),
+                        child: Center(
+                          child: CircularProgressIndicator(color: Color(0xFFFE4EF0)),
+                        ),
+                      );
+                    }
+                    final notifications = snapshot.data ?? [];
+                    if (notifications.isEmpty) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 40),
+                        child: Text(
+                          'No notifications yet',
+                          style: TextStyle(
+                            color: Colors.white38,
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                          ),
+                        ),
+                      );
+                    }
+                    return Flexible(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        itemCount: notifications.length,
+                        itemBuilder: (context, index) {
+                          final notif = notifications[index];
+                          return _NotificationItem(
+                            notification: notif,
+                            onAccept: notif.type == NotificationType.friendRequest &&
+                                    notif.status == NotificationStatus.pending
+                                ? () => _acceptRequest(
+                                    notif.relatedId ?? '', notif.notificationId)
+                                : null,
+                            onDecline: notif.type == NotificationType.friendRequest &&
+                                    notif.status == NotificationStatus.pending
+                                ? () => _declineRequest(
+                                    notif.relatedId ?? '', notif.notificationId)
+                                : null,
+                            onTap: () async {
+                              if (!notif.isRead) {
+                                await _notificationService.markAsRead(
+                                    _uid, notif.notificationId);
+                              }
+                            },
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Stack(
+        children: [
+          SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Row(
+                        children: [
+                          Image.asset(
+                            'assets/images/WeDo-Logo.png',
+                            width: 60,
+                            height: 60,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Icon(
+                                Icons.casino,
+                                color: Color(0xFFFE4EF0),
+                                size: 40,
+                              );
+                            },
+                          ),
+                          const SizedBox(width: 10),
+                          ShaderMask(
+                            shaderCallback: (bounds) => const LinearGradient(
+                              colors: [Color(0xFFFE4EF0), Color(0xFF800DD8)],
+                            ).createShader(bounds),
+                            child: const Text(
+                              'WeDo',
+                              style: TextStyle(
+                                fontFamily: 'PressStart2P',
+                                fontSize: 26,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      _buildNotificationBell(),
+                    ],
+                  ),
+              const SizedBox(height: 5),
+              Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: RichText(
+                  text: TextSpan(
+                    children: [
+                      TextSpan(
+                        text: '${_greeting()}, ',
+                        style: const TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                      TextSpan(
+                        text: '$_displayName!',
+                        style: const TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFFFE4EF0),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const _FeatureCarousel(),
+              const SizedBox(height: 24),
+              const _NowPlayingSection(),
+              const SizedBox(height: 28),
+              const _StackedCards(),
+              const SizedBox(height: 120),
+            ],
+          ),
+        ),
+      ),
+          if (_showNotifications)
+            GestureDetector(
+              onTap: () => setState(() => _showNotifications = false),
+              child: Container(
+                color: Colors.black.withValues(alpha: 0.2),
+              ),
+            ),
+          if (_showNotifications)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: _buildNotificationsPanel(),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Notification item ───────────────────────────────────────────────────────
+class _NotificationItem extends StatelessWidget {
+  final NotificationEntity notification;
+  final VoidCallback? onAccept;
+  final VoidCallback? onDecline;
+  final VoidCallback? onTap;
+
+  const _NotificationItem({
+    required this.notification,
+    this.onAccept,
+    this.onDecline,
+    this.onTap,
+  });
+
+  IconData _typeIcon() {
+    switch (notification.type) {
+      case NotificationType.friendRequest:
+        return Icons.person_add;
+      case NotificationType.friendRequestAccepted:
+        return Icons.check_circle;
+      case NotificationType.pollVote:
+        return Icons.how_to_vote;
+    }
+  }
+
+  Color _typeColor() {
+    switch (notification.type) {
+      case NotificationType.friendRequest:
+        return const Color(0xFFFE4EF0);
+      case NotificationType.friendRequestAccepted:
+        return const Color(0xFF4CAF50);
+      case NotificationType.pollVote:
+        return const Color(0xFFE91E63);
+    }
+  }
+
+  String _timeAgo() {
+    final diff = DateTime.now().difference(notification.createdAt);
+    if (diff.inSeconds < 60) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${(diff.inDays / 7).floor()}w ago';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isPending = notification.type == NotificationType.friendRequest &&
+        notification.status == NotificationStatus.pending;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: notification.isRead
+              ? Colors.transparent
+              : Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: _typeColor().withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(_typeIcon(), size: 18, color: _typeColor()),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    notification.title,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: notification.isRead ? FontWeight.w500 : FontWeight.w700,
+                      color: Colors.white,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    notification.message,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.6),
+                      fontFamily: 'Poppins',
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _timeAgo(),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.white.withValues(alpha: 0.4),
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                  if (isPending) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        GestureDetector(
+                          onTap: onAccept,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFE4EF0),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              'Accept',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                                fontFamily: 'Poppins',
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: onDecline,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                            ),
+                            child: const Text(
+                              'Decline',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white70,
+                                fontFamily: 'Poppins',
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ] else if (notification.type == NotificationType.friendRequest) ...[
+                    const SizedBox(height: 8),
+                    if (notification.status == NotificationStatus.accepted)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF4CAF50).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.check_circle, size: 12, color: Color(0xFF4CAF50)),
+                            SizedBox(width: 4),
+                            Text('Accepted',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF4CAF50),
+                                    fontFamily: 'Poppins')),
+                          ],
+                        ),
+                      )
+                    else if (notification.status == NotificationStatus.declined)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.cancel_outlined, size: 12, color: Colors.white54),
+                            SizedBox(width: 4),
+                            Text('Declined',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white54,
+                                    fontFamily: 'Poppins')),
+                          ],
+                        ),
+                      ),
+                  ],
+                ],
+              ),
+            ),
+            if (!notification.isRead)
+              Container(
+                width: 8,
+                height: 8,
+                margin: const EdgeInsets.only(top: 6, left: 6),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFE4EF0),
+                  shape: BoxShape.circle,
+                ),
+              ),
           ],
         ),
       ),
@@ -134,219 +1420,1084 @@ class _NavItem extends StatelessWidget {
   }
 }
 
-class _HomeTab extends StatelessWidget {
-  const _HomeTab();
+// ── Feature carousel ────────────────────────────────────────────────────────
+
+class _FeatureCarousel extends StatefulWidget {
+  const _FeatureCarousel();
+
+  @override
+  State<_FeatureCarousel> createState() => _FeatureCarouselState();
+}
+
+class _FeatureCarouselState extends State<_FeatureCarousel>
+    with SingleTickerProviderStateMixin {
+  int _currentIndex = 0;
+  late final AnimationController _controller;
+
+  static const _autoScrollInterval = 10;
+  static const _animDuration = Duration(milliseconds: 800);
+
+  @override
+  void initState() {
+    super.initState();
+    _controller =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(seconds: _autoScrollInterval),
+        )..addStatusListener((status) {
+          if (status == AnimationStatus.completed) {
+            _advance();
+            _controller.reset();
+            _controller.forward();
+          }
+        });
+    _controller.forward();
+  }
+
+  void _advance() {
+    if (!mounted) return;
+    setState(() {
+      _currentIndex = (_currentIndex + 1) % _featureCards.length;
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final bg = const Color(0xFFE7ECEF);
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'WeDo',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
-              ),
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: bg,
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0xFFFFFFFF),
-                      offset: Offset(-4, -4),
-                      blurRadius: 8,
-                    ),
-                    BoxShadow(
-                      color: Color(0xFFB8C6CC),
-                      offset: Offset(4, 4),
-                      blurRadius: 8,
-                    ),
-                  ],
-                ),
-                child: const Icon(Icons.person_outline, color: Colors.blue),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Welcome back!',
-            style: TextStyle(color: Colors.black54, fontSize: 15),
-          ),
-          const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: bg,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0xFFFFFFFF),
-                  offset: Offset(-8, -8),
-                  blurRadius: 16,
-                ),
-                BoxShadow(
-                  color: Color(0xFFB8C6CC),
-                  offset: Offset(8, 8),
-                  blurRadius: 16,
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: Colors.blue,
-                    shape: BoxShape.circle,
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0xFF2A6FD6),
-                        offset: Offset(0, 6),
-                        blurRadius: 10,
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.casino,
-                    color: Colors.white,
-                    size: 32,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                const Text(
-                  'Flip the dice to decide',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Create a topic and let fate decide',
-                  style: TextStyle(color: Colors.black54),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 18),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'Start a decision',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            'Recent activity',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 12),
-          for (int i = 0; i < 3; i++)
-            Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: bg,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0xFFFFFFFF),
-                    offset: Offset(-6, -6),
-                    blurRadius: 12,
-                  ),
-                  BoxShadow(
-                    color: Color(0xFFB8C6CC),
-                    offset: Offset(6, 6),
-                    blurRadius: 12,
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.casino_outlined,
-                      color: Colors.blue,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Decision #$i',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 2),
-                        const Text(
-                          'Placeholder topic',
-                          style: TextStyle(
-                            color: Colors.black54,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(Icons.chevron_right, color: Colors.black26),
-                ],
-              ),
-            ),
-        ],
+    final data = _featureCards[_currentIndex];
+
+    return AnimatedSwitcher(
+      duration: _animDuration,
+      switchInCurve: Curves.easeInOut,
+      switchOutCurve: Curves.easeInOut,
+      transitionBuilder: (child, animation) {
+        final slideOffset = Tween<Offset>(
+          begin: const Offset(0.15, 0.0),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutQuint));
+        return SlideTransition(
+          position: slideOffset,
+          child: FadeTransition(opacity: animation, child: child),
+        );
+      },
+      child: _FeatureCarouselCard(
+        key: ValueKey(_currentIndex),
+        data: data,
+        showActionIcon: _currentIndex == 0,
       ),
     );
   }
 }
 
-class _PlaceholderTab extends StatelessWidget {
-  final IconData icon;
-  final String label;
+class _FeatureCarouselCard extends StatelessWidget {
+  final _FeatureCardData data;
+  final bool showActionIcon;
 
-  const _PlaceholderTab({required this.icon, required this.label});
+  const _FeatureCarouselCard({
+    super.key,
+    required this.data,
+    this.showActionIcon = false,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 64, color: Colors.black26),
-          const SizedBox(height: 12),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: Colors.black54,
+    return SizedBox(
+      height: 220,
+      width: MediaQuery.of(context).size.width * 0.9,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // ── Background image ──
+            Image.asset(
+              data.image,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  color: const Color(0xFF1A1025),
+                  child: const Icon(
+                    Icons.image,
+                    color: Colors.white24,
+                    size: 48,
+                  ),
+                );
+              },
             ),
-          ),
-        ],
+
+            // ── Gradient overlay ──
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.1),
+                    Colors.black.withValues(alpha: 0.85),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── Content ──
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: data.badgeColor,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      data.badge,
+                      style: const TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    data.title,
+                    style: const TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    data.description,
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.white.withValues(alpha: 0.75),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Action icon ──
+            if (showActionIcon)
+              Positioned(
+                top: 14,
+                right: 14,
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.play_arrow_rounded,
+                    color: Colors.white.withValues(alpha: 0.9),
+                    size: 18,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
+}
+
+// ── Now Playing section ─────────────────────────────────────────────────────
+
+class _NowPlayingCard {
+  final String imagePath;
+  final String title;
+  final String statusLabel;
+  final Color statusColor;
+
+  const _NowPlayingCard({
+    required this.imagePath,
+    required this.title,
+    required this.statusLabel,
+    required this.statusColor,
+  });
+}
+
+const _nowPlayingGames = [
+  _NowPlayingCard(
+    imagePath: 'assets/images/Flashcards.png',
+    title: 'Flashcards Mode',
+    statusLabel: '856 Online',
+    statusColor: Colors.greenAccent,
+  ),
+  _NowPlayingCard(
+    imagePath: 'assets/images/SpinWheel.png',
+    title: 'Spin the Wheel',
+    statusLabel: '1.2k Online',
+    statusColor: Colors.greenAccent,
+  ),
+  _NowPlayingCard(
+    imagePath: 'assets/images/TriRace.png',
+    title: 'TriRace',
+    statusLabel: 'Local Match',
+    statusColor: Colors.pinkAccent,
+  ),
+];
+
+class _NowPlayingSection extends StatelessWidget {
+  const _NowPlayingSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Now Playing',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+              GestureDetector(
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const AllGamesScreen(),
+                    ),
+                  );
+                },
+                child: const Text(
+                  'See all',
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFFFE4EF0),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 170,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: _nowPlayingGames.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 12),
+            itemBuilder: (context, index) {
+              return _NowPlayingCardWidget(data: _nowPlayingGames[index]);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _NowPlayingCardWidget extends StatelessWidget {
+  final _NowPlayingCard data;
+
+  const _NowPlayingCardWidget({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        if (data.title == 'Flashcards Mode') {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const SessionEntryScreen()),
+          );
+        } else if (data.title == 'Spin the Wheel') {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const WheelScreen()),
+          );
+        } else if (data.title == 'TriRace') {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const TriRaceEntryScreen()),
+          );
+        }
+      },
+      child: SizedBox(
+        width: 250,
+        height: 160,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: Colors.deepPurpleAccent.withValues(alpha: 0.3),
+              width: 1.5,
+            ),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.asset(
+                data.imagePath,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    color: const Color(0xFF1A1025),
+                    child: const Icon(
+                      Icons.gamepad,
+                      color: Colors.white24,
+                      size: 40,
+                    ),
+                  );
+                },
+              ),
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, Colors.black87],
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 10,
+                bottom: 10,
+                right: 10,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      data.title,
+                      style: const TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: data.statusColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          data.statusLabel,
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 11,
+                            fontWeight: FontWeight.w400,
+                            color: Colors.white.withValues(alpha: 0.7),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+    );
+  }
+}
+
+// ── Stacked slanted cards ──────────────────────────────────────────────────
+
+Path _slantedCardPath(Size size, double slant, double radius) {
+  final w = size.width;
+  final h = size.height;
+  final path = Path();
+
+  path.moveTo(radius, slant * radius / w);
+  path.lineTo(w - radius, slant * (w - radius) / w);
+  path.quadraticBezierTo(w, slant, w, slant + radius);
+  path.lineTo(w, h + slant - radius);
+  path.quadraticBezierTo(w, h + slant, w - radius, h + slant);
+  path.lineTo(radius, h + slant * radius / w);
+  path.quadraticBezierTo(0, h, 0, h - radius);
+  path.lineTo(0, radius);
+  path.quadraticBezierTo(0, 0, radius, slant * radius / w);
+  path.close();
+  return path;
+}
+
+class _StackedCards extends StatefulWidget {
+  const _StackedCards();
+
+  @override
+  State<_StackedCards> createState() => _StackedCardsState();
+}
+
+class _StackedCardsState extends State<_StackedCards>
+    with SingleTickerProviderStateMixin {
+  int _userCount = 0;
+  int _selectedRating = 0;
+  late final AnimationController _swapCtrl;
+  late Animation<double> _leftOffsetX;
+  late Animation<double> _leftAngle;
+  late Animation<double> _rightOffsetX;
+  late Animation<double> _rightAngle;
+  bool _isLeftFront = true;
+  bool _animating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchUserCount();
+
+    _swapCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+
+    _initAnimations();
+
+    _swapCtrl.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        setState(() {
+          _isLeftFront = !_isLeftFront;
+          _animating = false;
+        });
+      }
+    });
+  }
+
+  void _initAnimations() {
+    _leftOffsetX = TweenSequence<double>(
+      [
+        TweenSequenceItem(tween: Tween(begin: 0.0, end: -60.0), weight: 1),
+        TweenSequenceItem(tween: Tween(begin: -60.0, end: 0.0), weight: 1),
+      ],
+    ).animate(CurvedAnimation(parent: _swapCtrl, curve: Curves.easeInOutCubic));
+
+    _leftAngle = TweenSequence<double>(
+      [
+        TweenSequenceItem(tween: Tween(begin: -0.03, end: -0.78), weight: 1),
+        TweenSequenceItem(tween: Tween(begin: -0.78, end: -0.03), weight: 1),
+      ],
+    ).animate(CurvedAnimation(parent: _swapCtrl, curve: Curves.easeInOutCubic));
+
+    _rightOffsetX = TweenSequence<double>(
+      [
+        TweenSequenceItem(tween: Tween(begin: 30.0, end: 90.0), weight: 1),
+        TweenSequenceItem(tween: Tween(begin: 90.0, end: 30.0), weight: 1),
+      ],
+    ).animate(CurvedAnimation(parent: _swapCtrl, curve: Curves.easeInOutCubic));
+
+    _rightAngle = TweenSequence<double>(
+      [
+        TweenSequenceItem(tween: Tween(begin: -0.04, end: -0.78), weight: 1),
+        TweenSequenceItem(tween: Tween(begin: -0.78, end: -0.04), weight: 1),
+      ],
+    ).animate(CurvedAnimation(parent: _swapCtrl, curve: Curves.easeInOutCubic));
+  }
+
+  @override
+  void dispose() {
+    _swapCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onSwapTap() {
+    if (_animating) return;
+    _animating = true;
+    _swapCtrl.forward(from: 0.0);
+  }
+
+  Future<void> _fetchUserCount() async {
+    final snapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .count()
+        .get();
+    if (mounted) {
+      setState(() => _userCount = snapshot.count ?? 0);
+    }
+  }
+
+  // ── Card builders ───────────────────────────────────────────────
+
+  Widget _buildLeftCard(double slant, double cornerR, Size cardSize) {
+    return ClipPath(
+      clipper: _SlantedCardClipper(slant: slant, cornerRadius: cornerR),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Stack(
+          children: [
+            CustomPaint(
+              size: cardSize,
+              painter: _GlassCardPainter(slant: slant),
+            ),
+            Positioned(
+              left: 21,
+              top: 32,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFE4EF0),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  "LET'S WEDO",
+                  style: TextStyle(
+                    fontFamily: 'ArialNBI',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+            const Positioned(
+              left: 21,
+              top: 66,
+              child: Text(
+                'Make Every Choice\nMore Fun!',
+                style: TextStyle(
+                  fontFamily: 'ArialNBI',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  height: 1.2,
+                ),
+              ),
+            ),
+            Positioned(
+              left: 21,
+              top: 116,
+              child: Row(
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: const BoxDecoration(
+                      color: Colors.green,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '$_userCount active players',
+                    style: const TextStyle(
+                      fontFamily: 'ArialNBI',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white70,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              left: 21,
+              top: 138,
+              right: 130,
+              child: Text(
+                "WeDo makes everyday decisions easier and more exciting. Whether you're choosing what to eat, what movie to watch, where to go, or what to do next, WeDo helps you decide with a little more fun and a lot less overthinking.",
+                style: TextStyle(
+                  fontFamily: 'ArialNBI',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.white.withValues(alpha: 0.6),
+                  height: 1.4,
+                ),
+                maxLines: 7,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Positioned(
+              right: 15,
+              top: 120,
+              child: Image.asset(
+                'assets/images/WeDo-Logo.png',
+                width: 100,
+                height: 100,
+                errorBuilder: (context, error, stackTrace) {
+                  return const Icon(
+                    Icons.casino,
+                    color: Color(0xFFFE4EF0),
+                    size: 60,
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRightCard(double slant, double cornerR, Size cardSize) {
+    return ClipPath(
+      clipper: _SlantedCardClipper(slant: slant, cornerRadius: cornerR),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Stack(
+          children: [
+            CustomPaint(
+              size: cardSize,
+              painter: _RateUsBackgroundPainter(slant: slant),
+            ),
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // ── Mascot placeholder ──
+                    _buildMascotPlaceholder(),
+                    const SizedBox(height: 10),
+                    // ── Heading ──
+                    const Text(
+                      'PLEASE RATE US',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    // ── Subtitle ──
+                    Text(
+                      'Enjoying WeDo? Your feedback\nhelps us grow and improve!',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        color: Colors.white.withValues(alpha: 0.75),
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    // ── Star rating ──
+                    _buildStarRating(),
+                    const SizedBox(height: 4),
+                    // ── Tap hint ──
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Transform(
+                          alignment: Alignment.center,
+                          transform: Matrix4.identity()..rotateZ(-math.pi / 4),
+                          child: const Icon(
+                            Icons.arrow_back,
+                            size: 12,
+                            color: Color(0xFFD100D1),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Text(
+                          'Tap a star to rate',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            fontStyle: FontStyle.italic,
+                            color: Color(0xFFD100D1),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    // ── Buttons ──
+                    Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => _launchAppStore(),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(24),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.35),
+                                  width: 1.2,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.edit_outlined,
+                                    size: 14,
+                                    color: Colors.white.withValues(alpha: 0.9),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'WRITE A REVIEW',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white.withValues(alpha: 0.9),
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              HapticFeedback.lightImpact();
+                              _onSwapTap();
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(24),
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFFFE4EF0), Color(0xFF800DD8)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                              ),
+                                child: const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.favorite_border,
+                                      size: 14,
+                                      color: Colors.white,
+                                    ),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      'MAYBE LATER',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    // ── Footer ──
+                    Text(
+                      'Thank you for being awesome! 💜',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 10,
+                        fontWeight: FontWeight.w400,
+                        color: Colors.white.withValues(alpha: 0.55),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMascotPlaceholder() {
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
+      children: [
+        // Sparkle decorations
+        ...List.generate(5, (i) {
+          final angle = (i * 72) * math.pi / 180;
+          final radius = 28.0 + (i % 2) * 8;
+          return Positioned(
+            left: 40 + radius * math.cos(angle) - 4,
+            top: 20 + radius * math.sin(angle) - 4,
+            child: Icon(
+              i % 2 == 0 ? Icons.star : Icons.auto_awesome,
+              size: i % 2 == 0 ? 8 : 10,
+              color: const Color(0xFFFE4EF0),
+            ),
+          );
+        }),
+        // Heart bubble
+        Positioned(
+          right: 22,
+          top: 8,
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: const BoxDecoration(
+              color: Color(0xFFFE4EF0),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.favorite, size: 8, color: Colors.white),
+          ),
+        ),
+        // Mascot body (WeDo logo as placeholder)
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: const Color(0xFF800DD8),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFD100D1).withValues(alpha: 0.4),
+                blurRadius: 16,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Image.asset(
+            'assets/images/WeDo-Logo.png',
+            width: 28,
+            height: 28,
+            errorBuilder: (context, error, stackTrace) {
+              return const Icon(
+                Icons.casino,
+                color: Colors.white,
+                size: 24,
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStarRating() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(5, (index) {
+        final isSelected = index < _selectedRating;
+        return GestureDetector(
+          onTap: () {
+            HapticFeedback.lightImpact();
+            setState(() => _selectedRating = index + 1);
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Icon(
+              isSelected ? Icons.star_rounded : Icons.star_outline_rounded,
+              size: 40,
+              color: const Color(0xFFD100D1),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
+  Future<void> _launchAppStore() async {
+    const iosUrl = 'https://apps.apple.com/app/id000000000';
+    const androidUrl = 'https://play.google.com/store/apps/details?id=com.choosly.wedo';
+    final url = Theme.of(context).platform == TargetPlatform.iOS
+        ? Uri.parse(iosUrl)
+        : Uri.parse(androidUrl);
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const cardW = 300.0;
+    const cardH = 300.0;
+    const slant = 30.0;
+    const cornerR = 28.0;
+
+    const cardSize = Size(cardW, cardH);
+
+    return AnimatedBuilder(
+      animation: _swapCtrl,
+      builder: (context, _) {
+        final leftOffset = _leftOffsetX.value;
+        final leftAng = _leftAngle.value;
+        final rightOffset = _rightOffsetX.value;
+        final rightAng = _rightAngle.value;
+
+        final leftCard = Transform.translate(
+          offset: Offset(leftOffset, 0),
+          child: Transform.rotate(
+            angle: leftAng,
+            alignment: Alignment.bottomCenter,
+            child: _buildLeftCard(slant, cornerR, cardSize),
+          ),
+        );
+
+        final rightCard = Transform.translate(
+          offset: Offset(rightOffset, 0),
+          child: Transform(
+            alignment: Alignment.bottomCenter,
+            transform: Matrix4.identity()
+              ..rotateZ(rightAng),
+            child: _buildRightCard(slant, cornerR, cardSize),
+          ),
+        );
+
+        final frontCard = GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _onSwapTap,
+          child: _isLeftFront ? leftCard : rightCard,
+        );
+
+        final backCard = _isLeftFront ? rightCard : leftCard;
+
+        return SizedBox(
+          width: cardW + 40,
+          height: cardH + 50,
+          child: Stack(
+            alignment: Alignment.center,
+            clipBehavior: Clip.none,
+            children: [backCard, frontCard],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ── Clipper for the slanted card shape ─────────────────────────────────────
+
+class _SlantedCardClipper extends CustomClipper<Path> {
+  final double slant;
+  final double cornerRadius;
+
+  const _SlantedCardClipper({required this.slant, required this.cornerRadius});
+
+  @override
+  Path getClip(Size size) => _slantedCardPath(size, slant, cornerRadius);
+
+  @override
+  bool shouldReclip(covariant _SlantedCardClipper old) =>
+      old.slant != slant || old.cornerRadius != cornerRadius;
+}
+
+// ── Glassmorphism fill painter (front card) ────────────────────────────────
+
+class _GlassCardPainter extends CustomPainter {
+  final double slant;
+
+  const _GlassCardPainter({required this.slant});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = _slantedCardPath(size, slant, 28);
+
+    // Frosted fill: semi-transparent white
+    final fillPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.10)
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(path, fillPaint);
+
+    // Subtle light border
+    final strokePaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.18)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+    canvas.drawPath(path, strokePaint);
+
+    // Inner highlight along top edge
+    final highlightPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Colors.white.withValues(alpha: 0.22),
+          Colors.white.withValues(alpha: 0.0),
+        ],
+        stops: const [0.0, 0.35],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height * 0.4));
+    canvas.drawPath(path, highlightPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _GlassCardPainter old) => old.slant != slant;
+}
+
+class _RateUsBackgroundPainter extends CustomPainter {
+  final double slant;
+
+  const _RateUsBackgroundPainter({required this.slant});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = _slantedCardPath(size, slant, 28);
+
+    // Deep purple gradient fill
+    final fillPaint = Paint()
+      ..shader = const LinearGradient(
+        colors: [Color(0xFF2D1456), Color(0xFF190831)],
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(path, fillPaint);
+
+    // Neon magenta border glow
+    final glowPaint = Paint()
+      ..shader = const LinearGradient(
+        colors: [Color(0x80D100D1), Color(0x40FE4EF0)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    canvas.drawPath(path, glowPaint);
+
+    // Inner highlight along top edge
+    final highlightPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          const Color(0xFFFE4EF0).withValues(alpha: 0.15),
+          Colors.white.withValues(alpha: 0.0),
+        ],
+        stops: const [0.0, 0.3],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height * 0.35));
+    canvas.drawPath(path, highlightPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _RateUsBackgroundPainter old) => old.slant != slant;
 }

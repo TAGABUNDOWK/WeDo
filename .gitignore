@@ -33,6 +33,7 @@ app.*.symbols
 app.*.map.json
 
 # Native Android Build Output
+/android/build/
 /android/app/debug
 /android/app/profile
 /android/app/release

@@ -1,6 +1,6 @@
 {
-    "name": "choosly",
-    "short_name": "choosly",
+    "name": "WeDo",
+    "short_name": "WeDo",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
