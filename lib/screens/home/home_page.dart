@@ -12,6 +12,8 @@ import '../../features/spin_wheel/screens/wheel_screen.dart';
 import '../tri_race/tri_race_entry_screen.dart';
 import '../games/all_games_screen.dart';
 import '../chat/chat_tab.dart';
+import '../chat/group/group_chat_screen.dart';
+import '../chat/direct/direct_chat_screen.dart';
 import '../../widgets/animated_background.dart';
 import '../../services/auth/user_service.dart';
 import '../../services/friends/friend_service.dart';
@@ -1006,6 +1008,32 @@ class _HomeTabState extends State<_HomeTab> {
                                 await _notificationService.markAsRead(
                                     _uid, notif.notificationId);
                               }
+                              if (mounted) {
+                                setState(() => _showNotifications = false);
+                              }
+                              if (notif.type == NotificationType.eventCreated ||
+                                  notif.type == NotificationType.pollCreated) {
+                                final groupId = notif.groupId;
+                                final chatId = notif.chatId;
+                                if (groupId != null) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => GroupChatScreen(groupId: groupId),
+                                    ),
+                                  );
+                                } else if (chatId != null && notif.otherUid != null) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => DirectChatScreen(
+                                        chatId: chatId,
+                                        otherUid: notif.otherUid!,
+                                      ),
+                                    ),
+                                  );
+                                }
+                              }
                             },
                           );
                         },
@@ -1146,7 +1174,9 @@ class _NotificationItem extends StatelessWidget {
         return Icons.person_add;
       case NotificationType.friendRequestAccepted:
         return Icons.check_circle;
-      case NotificationType.pollVote:
+      case NotificationType.eventCreated:
+        return Icons.event;
+      case NotificationType.pollCreated:
         return Icons.how_to_vote;
     }
   }
@@ -1157,8 +1187,10 @@ class _NotificationItem extends StatelessWidget {
         return const Color(0xFFFE4EF0);
       case NotificationType.friendRequestAccepted:
         return const Color(0xFF4CAF50);
-      case NotificationType.pollVote:
-        return const Color(0xFFE91E63);
+      case NotificationType.eventCreated:
+        return const Color(0xFF2196F3);
+      case NotificationType.pollCreated:
+        return const Color(0xFF9C27B0);
     }
   }
 

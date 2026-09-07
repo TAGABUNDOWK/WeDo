@@ -3,11 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
 import '../../models/poll.dart';
 import '../../utils/constants.dart';
-import '../notification/notification_service.dart';
 
 class PollService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final NotificationService _notificationService = NotificationService();
 
   CollectionReference<Map<String, dynamic>> _polls(String? chatId, {String? groupId}) {
     if (groupId != null) {
@@ -177,8 +175,6 @@ class PollService {
 
     if (!isNewVote) return;
 
-    await _notifyPollCreator(pollId, uid, false, chatId: chatId, groupId: groupId);
-
     if (voterName != null && voterName.isNotEmpty) {
       final displayName = voterName.length > 12 ? '${voterName.substring(0, 12)}…' : voterName;
       await _sendVoteSystemMessage(
@@ -254,8 +250,6 @@ class PollService {
     });
 
     if (!isNewVote) return;
-
-    await _notifyPollCreator(pollId, uid, true, chatId: chatId, groupId: groupId);
 
     await _sendVoteSystemMessage(
       pollId: pollId,
@@ -337,33 +331,5 @@ class PollService {
       }
     }
     return votersByOption;
-  }
-
-  Future<void> _notifyPollCreator(
-    String pollId,
-    String voterId,
-    bool isSecret, {
-    String? chatId,
-    String? groupId,
-  }) async {
-    try {
-      final poll = await getPoll(pollId, chatId: chatId, groupId: groupId);
-      if (poll == null || poll.createdBy == voterId) return;
-
-      final voterDoc = await _db
-          .collection(AppConstants.usersCollection)
-          .doc(voterId)
-          .get();
-      final voterName = voterDoc.data()?['display_name'] as String? ?? 'Someone';
-
-      await _notificationService.createPollVoteNotification(
-        creatorId: poll.createdBy,
-        voterId: voterId,
-        voterName: voterName,
-        pollId: pollId,
-        question: poll.question,
-        isSecret: isSecret,
-      );
-    } catch (_) {}
   }
 }
