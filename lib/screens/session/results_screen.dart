@@ -19,6 +19,8 @@ class _ResultsScreenState extends State<ResultsScreen> with TickerProviderStateM
   static const _shieldBlue = Color(0xFF2196F3);
 
   late final AnimationController _shieldPulseController;
+  final Map<String, String> _displayNames = {};
+  final Set<String> _nameQueued = {};
 
   @override
   void initState() {
@@ -33,6 +35,16 @@ class _ResultsScreenState extends State<ResultsScreen> with TickerProviderStateM
   void dispose() {
     _shieldPulseController.dispose();
     super.dispose();
+  }
+
+  void _resolveNames(List<String> userIds) {
+    final missing = userIds.where((id) => !_nameQueued.contains(id)).toList();
+    if (missing.isEmpty) return;
+    _nameQueued.addAll(missing);
+    _service.fetchDisplayNames(missing).then((names) {
+      if (!mounted) return;
+      setState(() => _displayNames.addAll(names));
+    });
   }
 
   @override
@@ -92,6 +104,8 @@ class _ResultsScreenState extends State<ResultsScreen> with TickerProviderStateM
     final totalParticipants = results['totalParticipants'] as int? ?? 0;
     final standings = results['standings'] as Map<String, dynamic>? ?? {};
     final speedShieldCardId = results['speedShieldWinnerCardId'] as String? ?? '';
+
+    _resolveNames(standings.keys.toList());
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -399,9 +413,11 @@ class _ResultsScreenState extends State<ResultsScreen> with TickerProviderStateM
       itemBuilder: (context, index) {
         final entry = entries[index];
         final data = entry.value as Map<String, dynamic>;
+        final storedName = data['userName'] as String? ?? 'Player';
+        final resolvedName = _displayNames[entry.key] ?? storedName;
         return _buildStandingCard(
           rank: index + 1,
-          userName: data['userName'] as String? ?? 'Player',
+          userName: resolvedName,
           elapsedTimeMs: data['elapsedTimeMs'] as int? ?? 0,
           timeoutCount: data['timeoutCount'] as int? ?? 0,
         );

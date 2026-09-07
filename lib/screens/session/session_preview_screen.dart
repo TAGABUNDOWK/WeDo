@@ -18,6 +18,54 @@ class _SessionPreviewScreenState extends State<SessionPreviewScreen> {
   final _currentUser = FirebaseAuth.instance.currentUser;
   bool _isJoining = false;
   String? _error;
+  final Map<String, String> _displayNames = {};
+  final Set<String> _nameQueued = {};
+  final Map<String, String> _profileUrls = {};
+  final Set<String> _photoQueued = {};
+  final Map<String, String> _avatarAssets = {};
+  final Set<String> _avatarAssetsQueued = {};
+
+  void _resolveNames(List<ParticipantEntity> participants) {
+    final missing = participants
+        .map((p) => p.id)
+        .where((id) => !_nameQueued.contains(id))
+        .toList();
+    if (missing.isEmpty) return;
+    _nameQueued.addAll(missing);
+    _service.fetchDisplayNames(missing).then((names) {
+      if (!mounted) return;
+      setState(() => _displayNames.addAll(names));
+    });
+  }
+
+  void _resolveProfilePhotos(List<ParticipantEntity> participants) {
+    final missing = participants
+        .map((p) => p.id)
+        .where((id) => !_photoQueued.contains(id))
+        .toList();
+    if (missing.isEmpty) return;
+    _photoQueued.addAll(missing);
+    _service.fetchProfilePhotos(missing).then((photos) {
+      if (!mounted) return;
+      setState(() => _profileUrls.addAll(photos));
+    });
+  }
+
+  void _resolveAvatarAssets(List<ParticipantEntity> participants) {
+    final missing = participants
+        .map((p) => p.id)
+        .where((id) => !_avatarAssetsQueued.contains(id))
+        .toList();
+    if (missing.isEmpty) return;
+    _avatarAssetsQueued.addAll(missing);
+    _service.fetchAvatarAssets(missing).then((assets) {
+      if (!mounted) return;
+      setState(() => _avatarAssets.addAll(assets));
+    });
+  }
+
+  String _participantName(ParticipantEntity p) =>
+      _displayNames[p.id] ?? p.userName;
 
   String _getTopicEmoji(String topic) {
     final lower = topic.toLowerCase();
@@ -178,6 +226,10 @@ class _SessionPreviewScreenState extends State<SessionPreviewScreen> {
               final participants = snapshot.data ?? [];
               if (participants.isEmpty) return const SizedBox.shrink();
 
+              _resolveNames(participants);
+              _resolveProfilePhotos(participants);
+              _resolveAvatarAssets(participants);
+
               return Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -199,6 +251,10 @@ class _SessionPreviewScreenState extends State<SessionPreviewScreen> {
                       runSpacing: 8,
                       alignment: WrapAlignment.center,
                       children: participants.take(8).map((p) {
+                        final name = _participantName(p);
+                        final photoUrl = _profileUrls[p.id];
+                        final avatarAsset = _avatarAssets[p.id];
+                        final hasImage = photoUrl != null || avatarAsset != null;
                         return Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -208,21 +264,37 @@ class _SessionPreviewScreenState extends State<SessionPreviewScreen> {
                               decoration: BoxDecoration(
                                 color: Colors.white.withValues(alpha: 0.10),
                                 shape: BoxShape.circle,
+                                image: photoUrl != null
+                                    ? DecorationImage(
+                                        image: NetworkImage(photoUrl),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : null,
                               ),
-                              child: Center(
-                                child: Text(
-                                  p.userName.isNotEmpty ? p.userName[0].toUpperCase() : '?',
-                                  style: const TextStyle(
-                                    color: Color(0xFFFE4EF0),
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ),
+                              alignment: Alignment.center,
+                              child: hasImage
+                                  ? (avatarAsset != null && photoUrl == null
+                                      ? ClipOval(
+                                          child: Image.asset(
+                                            avatarAsset,
+                                            width: 40,
+                                            height: 40,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        )
+                                      : null)
+                                  : Text(
+                                      name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                      style: const TextStyle(
+                                        color: Color(0xFFFE4EF0),
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 14,
+                                      ),
+                                    ),
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              p.userName,
+                              name,
                               style: const TextStyle(color: Colors.white70, fontSize: 10),
                             ),
                           ],

@@ -173,6 +173,75 @@ class SessionService {
     });
   }
 
+  /// Resolves the real profile display names (users/{id}.display_name) for the
+  /// given userIds. Keys with no stored name are omitted so callers can fall
+  /// back to the participant userName.
+  Future<Map<String, String>> fetchDisplayNames(List<String> userIds) async {
+    final unique = userIds.toSet();
+    if (unique.isEmpty) return const {};
+
+    final names = <String, String>{};
+    try {
+      final docs = await Future.wait(
+        unique.map((id) => _db.collection('users').doc(id).get()),
+      );
+      for (final doc in docs) {
+        if (!doc.exists) continue;
+        final data = doc.data();
+        final name = (data?['display_name'] as String? ?? data?['displayName'] as String?)
+            ?.trim();
+        if (name != null && name.isNotEmpty) names[doc.id] = name;
+      }
+    } catch (_) {}
+
+    return names;
+  }
+
+  /// Resolves profile photo URLs (users/{id}.photo_url) for the given userIds.
+  /// Keys with no photo are omitted so callers can fall back to a default avatar.
+  Future<Map<String, String>> fetchProfilePhotos(List<String> userIds) async {
+    final unique = userIds.toSet();
+    if (unique.isEmpty) return const {};
+
+    final photos = <String, String>{};
+    try {
+      final docs = await Future.wait(
+        unique.map((id) => _db.collection('users').doc(id).get()),
+      );
+      for (final doc in docs) {
+        if (!doc.exists) continue;
+        final data = doc.data();
+        final photoUrl = (data?['photo_url'] as String?)?.trim();
+        if (photoUrl != null && photoUrl.isNotEmpty) photos[doc.id] = photoUrl;
+      }
+    } catch (_) {}
+
+    return photos;
+  }
+
+  /// Resolves preset avatar asset paths (users/{id}.avatar_asset) for the given
+  /// userIds. Keys with no asset are omitted so callers can fall back to a
+  /// default avatar.
+  Future<Map<String, String>> fetchAvatarAssets(List<String> userIds) async {
+    final unique = userIds.toSet();
+    if (unique.isEmpty) return const {};
+
+    final assets = <String, String>{};
+    try {
+      final docs = await Future.wait(
+        unique.map((id) => _db.collection('users').doc(id).get()),
+      );
+      for (final doc in docs) {
+        if (!doc.exists) continue;
+        final data = doc.data();
+        final asset = (data?['avatar_asset'] as String?)?.trim();
+        if (asset != null && asset.isNotEmpty) assets[doc.id] = asset;
+      }
+    } catch (_) {}
+
+    return assets;
+  }
+
   /// Fetches completed sessions where the user was host (one-time read).
   Future<List<SessionEntity>> getHostCompletedSessions(String uid, {int limit = 3}) async {
     try {
@@ -403,10 +472,11 @@ class SessionService {
       }
 
       // ── Standings: sorted by elapsed time (fastest first) ──
+      final resolvedNames = await fetchDisplayNames(finished.map((p) => p.id).toList());
       final Map<String, dynamic> standings = {};
       for (final p in finished) {
         standings[p.id] = {
-          'userName': p.userName,
+          'userName': resolvedNames[p.id] ?? p.userName,
           'elapsedTimeMs': p.elapsedTimeMs,
           'timeoutCount': p.timeoutCount,
           'chosenWinnerCardId': p.chosenWinnerCardId,

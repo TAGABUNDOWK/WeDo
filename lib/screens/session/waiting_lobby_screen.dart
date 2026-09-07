@@ -30,6 +30,12 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
   bool _isConfirmingLeave = false;
   Timer? _hostPresenceTimer;
   SessionStatus? _currentSessionStatus;
+  final Map<String, String> _displayNames = {};
+  final Set<String> _nameQueued = {};
+  final Map<String, String> _profileUrls = {};
+  final Set<String> _photoQueued = {};
+  final Map<String, String> _avatarAssets = {};
+  final Set<String> _avatarAssetsQueued = {};
 
   @override
   void initState() {
@@ -77,6 +83,48 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
     LobbyReturnStore.instance.park(sessionId: widget.sessionId, isHost: widget.isHost, lobbyType: LobbyType.session);
     if (mounted) Navigator.of(context).pop();
   }
+
+  void _resolveNames(List<ParticipantEntity> participants) {
+    final missing = participants
+        .map((p) => p.id)
+        .where((id) => !_nameQueued.contains(id))
+        .toList();
+    if (missing.isEmpty) return;
+    _nameQueued.addAll(missing);
+    _service.fetchDisplayNames(missing).then((names) {
+      if (!mounted) return;
+      setState(() => _displayNames.addAll(names));
+    });
+  }
+
+  void _resolveProfilePhotos(List<ParticipantEntity> participants) {
+    final missing = participants
+        .map((p) => p.id)
+        .where((id) => !_photoQueued.contains(id))
+        .toList();
+    if (missing.isEmpty) return;
+    _photoQueued.addAll(missing);
+    _service.fetchProfilePhotos(missing).then((photos) {
+      if (!mounted) return;
+      setState(() => _profileUrls.addAll(photos));
+    });
+  }
+
+  void _resolveAvatarAssets(List<ParticipantEntity> participants) {
+    final missing = participants
+        .map((p) => p.id)
+        .where((id) => !_avatarAssetsQueued.contains(id))
+        .toList();
+    if (missing.isEmpty) return;
+    _avatarAssetsQueued.addAll(missing);
+    _service.fetchAvatarAssets(missing).then((assets) {
+      if (!mounted) return;
+      setState(() => _avatarAssets.addAll(assets));
+    });
+  }
+
+  String _participantName(ParticipantEntity p) =>
+      _displayNames[p.id] ?? p.userName;
 
   Future<void> _confirmCancel() async {
     if (_isConfirmingLeave) return;
@@ -259,6 +307,10 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
                   );
                 }
 
+                _resolveNames(participants);
+                _resolveProfilePhotos(participants);
+                _resolveAvatarAssets(participants);
+
                 return GridView.builder(
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 4,
@@ -269,7 +321,7 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
                   itemBuilder: (context, index) {
                     final p = participants[index];
                     final isMe = p.id == _currentUser?.uid;
-                    return _buildPlayerAvatar(p.userName, isMe);
+                    return _buildPlayerAvatar(p, isMe);
                   },
                 );
               },
@@ -326,8 +378,12 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
     );
   }
 
-  Widget _buildPlayerAvatar(String name, bool isMe) {
+  Widget _buildPlayerAvatar(ParticipantEntity p, bool isMe) {
+    final name = _participantName(p);
     final initials = name.isNotEmpty ? name[0].toUpperCase() : '?';
+    final photoUrl = _profileUrls[p.id];
+    final avatarAsset = _avatarAssets[p.id];
+    final hasImage = photoUrl != null || avatarAsset != null;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -337,17 +393,33 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
           decoration: BoxDecoration(
             color: isMe ? const Color(0xFFFE4EF0) : Colors.white.withValues(alpha: 0.10),
             shape: BoxShape.circle,
+            image: photoUrl != null
+                ? DecorationImage(
+                    image: NetworkImage(photoUrl),
+                    fit: BoxFit.cover,
+                  )
+                : null,
           ),
-          child: Center(
-            child: Text(
-              initials,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: isMe ? Colors.white : const Color(0xFFFE4EF0),
-              ),
-            ),
-          ),
+          alignment: Alignment.center,
+          child: hasImage
+              ? (avatarAsset != null && photoUrl == null
+                  ? ClipOval(
+                      child: Image.asset(
+                        avatarAsset,
+                        width: 52,
+                        height: 52,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  : null)
+              : Text(
+                  initials,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: isMe ? Colors.white : const Color(0xFFFE4EF0),
+                  ),
+                ),
         ),
         const SizedBox(height: 4),
         Text(
