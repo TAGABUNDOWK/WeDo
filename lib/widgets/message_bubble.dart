@@ -13,11 +13,88 @@ import 'event_message_card.dart';
 import 'poll_message_card.dart';
 import 'reaction_picker.dart';
 
-const _sentBubbleColor = Color(0xFFD9FDD3);
-const _receivedBubbleColor = Color(0xFFFFFFFF);
-const _textPrimary = Color(0xFF111B21);
-const _textSecondary = Color(0xFF667781);
+const _bubbleColor = Color(0x80800DD8);
+const _sentBubbleColor = Color(0x80800DD8);
+const _textSecondary = Color(0xB3FFFFFF);
 const _accent = Color(0xFF25D366);
+const _senderTagColor = Color(0xFFFFFFFF);
+
+/// Inside-bubble sender tag: friend → name bottom-right + send-by icon
+/// pointing right; own → flipped send-by icon pointing left + name
+/// bottom-left. Uses assets/icons/send-by.png for both directions.
+class _SenderTag extends StatelessWidget {
+  final String? senderName;
+  final bool isMe;
+  const _SenderTag({required this.senderName, required this.isMe});
+
+  @override
+  Widget build(BuildContext context) {
+    final name = (senderName ?? '').trim();
+    if (name.isEmpty) return const SizedBox.shrink();
+    const icon = 'assets/icons/send-by.png';
+    Widget directionIcon(bool flip) {
+      final img = Image.asset(
+        icon,
+        width: 16,
+        height: 16,
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) => Icon(
+          flip ? Icons.arrow_back : Icons.arrow_forward,
+          size: 14,
+          color: _senderTagColor.withValues(alpha: 0.9),
+        ),
+      );
+      if (!flip) return img;
+      return Transform(
+        alignment: Alignment.center,
+        transform: Matrix4.identity()..scaleByDouble(-1.0, 1.0, 1.0, 1.0),
+        child: img,
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment:
+            isMe ? MainAxisAlignment.start : MainAxisAlignment.end,
+        children: isMe
+            ? [
+                directionIcon(true),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    name,
+                    style: const TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: _senderTagColor,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ]
+            : [
+                Flexible(
+                  child: Text(
+                    name,
+                    style: const TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: _senderTagColor,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                directionIcon(false),
+              ],
+      ),
+    );
+  }
+}
 
 class MessageBubble extends StatefulWidget {
   final String content;
@@ -200,9 +277,9 @@ class _MessageBubbleState extends State<MessageBubble> {
   Widget build(BuildContext context) {
     final t = widget.theme;
     final sentBg = t?.sentBubble ?? _sentBubbleColor;
-    final recvBg = t?.receivedBubble ?? _receivedBubbleColor;
-    final txtPri = t?.textPrimary ?? _textPrimary;
-    final txtSec = t?.textSecondary ?? _textSecondary;
+    // Fixed light text: bubbles are always #800DD8 @ 50% now, so theme
+    // dark text colors would be unreadable on purple.
+    final txtSec = Colors.white.withValues(alpha: 0.7);
     final accent = t?.accent ?? _accent;
 
     if (widget.isSystem) {
@@ -416,41 +493,31 @@ class _MessageBubbleState extends State<MessageBubble> {
                   child: Column(
                     crossAxisAlignment: widget.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                     children: [
-                      if (widget.senderName != null && !widget.isMe && widget.isFirstInGroup)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 12, bottom: 2),
-                          child: Text(
-                            widget.senderName!,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: accent,
-                            ),
-                          ),
-                        ),
                       Stack(
                         clipBehavior: Clip.none,
                         children: [
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
-                              color: widget.isMe ? sentBg : recvBg,
-                              borderRadius: BorderRadius.only(
-                                topLeft: const Radius.circular(18),
-                                topRight: const Radius.circular(18),
-                                bottomLeft: Radius.circular(widget.isMe ? 18 : 4),
-                                bottomRight: Radius.circular(widget.isMe ? 4 : 18),
+                              color: _bubbleColor,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.12),
+                                width: 1,
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.04),
-                                  blurRadius: 3,
-                                  offset: const Offset(0, 1),
+                                  color: Colors.black.withValues(alpha: 0.15),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
                                 ),
                               ],
                             ),
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                              crossAxisAlignment: widget.isMe
+                                  ? CrossAxisAlignment.end
+                                  : CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 if (widget.replyToContent != null)
                                   Container(
@@ -532,12 +599,16 @@ class _MessageBubbleState extends State<MessageBubble> {
                                 if (widget.content.isNotEmpty)
                                   Text(
                                     widget.content,
-                                    style: TextStyle(
+                                    style: const TextStyle(
                                       fontSize: 15,
-                                      color: txtPri,
+                                      color: Colors.white,
                                       height: 1.3,
                                     ),
                                   ),
+                                _SenderTag(
+                                  senderName: widget.senderName,
+                                  isMe: widget.isMe,
+                                ),
                               ],
                             ),
                           ),
@@ -771,12 +842,9 @@ class _AudioMessageBubbleState extends State<_AudioMessageBubble> {
 
   @override
   Widget build(BuildContext context) {
-    final t = widget.theme;
-    final sentBg = t?.sentBubble ?? _sentBubbleColor;
-    final recvBg = t?.receivedBubble ?? _receivedBubbleColor;
-    final txtPri = t?.textPrimary ?? _textPrimary;
-    final txtSec = t?.textSecondary ?? _textSecondary;
-    final accent = t?.accent ?? _accent;
+    // Fixed light text: audio bubbles are always #800DD8 @ 50% now.
+    const txtPri = Colors.white;
+    final txtSec = Colors.white.withValues(alpha: 0.7);
 
     return Align(
       alignment: widget.isMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -791,39 +859,32 @@ class _AudioMessageBubbleState extends State<_AudioMessageBubble> {
           crossAxisAlignment:
               widget.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            if (widget.senderName != null && !widget.isMe)
-              Padding(
-                padding: const EdgeInsets.only(left: 12, bottom: 2),
-                child: Text(
-                  widget.senderName!,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: accent,
-                  ),
-                ),
-              ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: widget.isMe ? sentBg : recvBg,
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(12),
-                  topRight: const Radius.circular(12),
-                  bottomLeft: Radius.circular(widget.isMe ? 12 : 4),
-                  bottomRight: Radius.circular(widget.isMe ? 4 : 12),
+                color: _bubbleColor,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  width: 1,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06),
-                    blurRadius: 2,
-                    offset: const Offset(0, 1),
+                    color: Colors.black.withValues(alpha: 0.15),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
-              child: Row(
+              child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: widget.isMe
+                    ? CrossAxisAlignment.end
+                    : CrossAxisAlignment.start,
                 children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                   GestureDetector(
                     onTap: () async {
                       if (_isPlaying) {
@@ -834,9 +895,7 @@ class _AudioMessageBubbleState extends State<_AudioMessageBubble> {
                     },
                     child: Icon(
                       _isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
-                      color: widget.isMe
-                          ? txtPri.withValues(alpha: 0.7)
-                          : accent,
+                      color: Colors.white.withValues(alpha: 0.9),
                       size: 36,
                     ),
                   ),
@@ -850,15 +909,11 @@ class _AudioMessageBubbleState extends State<_AudioMessageBubble> {
                           data: SliderTheme.of(context).copyWith(
                             trackHeight: 3,
                             thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
-                            activeTrackColor: widget.isMe
-                                ? txtPri.withValues(alpha: 0.4)
-                                : accent,
-                            inactiveTrackColor: widget.isMe
-                                ? txtPri.withValues(alpha: 0.15)
-                                : accent.withValues(alpha: 0.2),
-                            thumbColor: widget.isMe
-                                ? txtPri.withValues(alpha: 0.6)
-                                : accent,
+                            activeTrackColor:
+                                Colors.white.withValues(alpha: 0.8),
+                            inactiveTrackColor:
+                                Colors.white.withValues(alpha: 0.25),
+                            thumbColor: Colors.white,
                           ),
                           child: Slider(
                             value: _position.inMilliseconds.toDouble().clamp(
@@ -882,6 +937,12 @@ class _AudioMessageBubbleState extends State<_AudioMessageBubble> {
                         ),
                       ),
                     ],
+                  ),
+                    ],
+                  ),
+                  _SenderTag(
+                    senderName: widget.senderName,
+                    isMe: widget.isMe,
                   ),
                 ],
               ),

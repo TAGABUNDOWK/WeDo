@@ -27,8 +27,6 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int _currentIndex = 0;
-  String? _avatarAsset;
-  String? _photoUrl;
 
   static const _tabs = [
     _HomeTab(),
@@ -41,24 +39,6 @@ class _HomePageState extends State<HomePage> {
 
   static const _activeColor = Color(0xFF7D56F5);
   static const _inactiveColor = Color(0x80FFFFFF);
-
-  @override
-  void initState() {
-    super.initState();
-    _loadUserProfile();
-  }
-
-  Future<void> _loadUserProfile() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-    final user = await UserService().getUserDocument(uid);
-    if (user != null && mounted) {
-      setState(() {
-        _avatarAsset = user.avatarAsset;
-        _photoUrl = user.photoUrl;
-      });
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -105,8 +85,6 @@ class _HomePageState extends State<HomePage> {
                 currentIndex: _currentIndex,
                 activeColor: _activeColor,
                 inactiveColor: _inactiveColor,
-                avatarAsset: _avatarAsset,
-                photoUrl: _photoUrl,
                 onTap: (index) => setState(() => _currentIndex = index),
               ),
             ),
@@ -124,8 +102,6 @@ class BlobNavBar extends StatefulWidget {
   final Color activeColor;
   final Color inactiveColor;
   final ValueChanged<int> onTap;
-  final String? avatarAsset;
-  final String? photoUrl;
 
   const BlobNavBar({
     super.key,
@@ -133,8 +109,6 @@ class BlobNavBar extends StatefulWidget {
     required this.activeColor,
     required this.inactiveColor,
     required this.onTap,
-    this.avatarAsset,
-    this.photoUrl,
   });
 
   static const _iconColor = Color(0x80FFFFFF);
@@ -329,14 +303,11 @@ class _BlobNavBarState extends State<BlobNavBar>
                         item: const _NavDef(
                           index: 4,
                           asset: 'assets/icons/avatar.png',
-                          size: 20,
                         ),
                         isActive: widget.currentIndex == 4,
                         activeColor: widget.activeColor,
                         iconColor: BlobNavBar._iconColor,
                         onTap: () => widget.onTap(4),
-                        avatarAsset: widget.avatarAsset,
-                        photoUrl: widget.photoUrl,
                       ),
                     ],
                   ),
@@ -655,8 +626,6 @@ class _NavIconButton extends StatefulWidget {
   final Color activeColor;
   final Color iconColor;
   final VoidCallback onTap;
-  final String? avatarAsset;
-  final String? photoUrl;
 
   const _NavIconButton({
     required this.item,
@@ -664,8 +633,6 @@ class _NavIconButton extends StatefulWidget {
     required this.activeColor,
     required this.iconColor,
     required this.onTap,
-    this.avatarAsset,
-    this.photoUrl,
   });
 
   @override
@@ -678,9 +645,6 @@ class _NavIconButtonState extends State<_NavIconButton> {
   @override
   Widget build(BuildContext context) {
     final color = widget.isActive ? widget.activeColor : widget.iconColor;
-    final hasAvatarAsset = widget.avatarAsset != null && widget.avatarAsset!.isNotEmpty;
-    final hasPhotoUrl = widget.photoUrl != null && widget.photoUrl!.isNotEmpty;
-    final hasProfileImage = hasAvatarAsset || hasPhotoUrl;
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _isPressed = true),
@@ -695,63 +659,22 @@ class _NavIconButtonState extends State<_NavIconButton> {
         duration: const Duration(milliseconds: 120),
         child: Padding(
           padding: const EdgeInsets.all(6),
-          child: hasProfileImage
-              ? ClipOval(
-                  child: Container(
-                    width: widget.item.size ?? 26,
-                    height: widget.item.size ?? 26,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: widget.isActive ? widget.activeColor : Colors.transparent,
-                        width: 2,
-                      ),
-                    ),
-                    child: hasAvatarAsset
-                        ? Image.asset(
-                            widget.avatarAsset!,
-                            width: widget.item.size ?? 26,
-                            height: widget.item.size ?? 26,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Icon(
-                                Icons.person,
-                                color: color,
-                                size: widget.item.size ?? 26,
-                              );
-                            },
-                          )
-                        : Image.network(
-                            widget.photoUrl!,
-                            width: widget.item.size ?? 26,
-                            height: widget.item.size ?? 26,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Icon(
-                                Icons.person,
-                                color: color,
-                                size: widget.item.size ?? 26,
-                              );
-                            },
-                          ),
-                  ),
-                )
-              : ColorFiltered(
-                  colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
-                  child: Image.asset(
-                    widget.item.asset,
-                    width: widget.item.size ?? 26,
-                    height: widget.item.size ?? 26,
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Icon(
-                        Icons.circle,
-                        color: color,
-                        size: widget.item.size ?? 26,
-                      );
-                    },
-                  ),
-                ),
+          child: ColorFiltered(
+            colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+            child: Image.asset(
+              widget.item.asset,
+              width: widget.item.size ?? 26,
+              height: widget.item.size ?? 26,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) {
+                return Icon(
+                  Icons.circle,
+                  color: color,
+                  size: widget.item.size ?? 26,
+                );
+              },
+            ),
+          ),
         ),
       ),
     );

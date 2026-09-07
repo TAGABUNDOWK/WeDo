@@ -104,17 +104,18 @@ class _AudioRecorderButtonState extends State<AudioRecorderButton>
             child: child,
           );
         },
-        child: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: _isRecording ? Colors.red : Colors.grey[200],
-            shape: BoxShape.circle,
-          ),
-          child: Icon(
+        child: Image.asset(
+          'assets/icons/microphone.png',
+          width: 26,
+          height: 26,
+          fit: BoxFit.contain,
+          // No circle behind the icon; recording state is shown by
+          // tinting the mic red (pulse scale animation is kept).
+          color: _isRecording ? Colors.red : null,
+          errorBuilder: (context, error, stackTrace) => Icon(
             _isRecording ? Icons.stop : Icons.mic,
-            color: _isRecording ? Colors.white : Colors.grey[600],
-            size: 22,
+            color: _isRecording ? Colors.red : Colors.grey[600],
+            size: 26,
           ),
         ),
       ),

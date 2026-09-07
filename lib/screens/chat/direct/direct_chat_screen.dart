@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
@@ -13,6 +14,7 @@ import '../../../services/direct/direct_service.dart';
 import '../../../services/event/event_service.dart';
 import '../../../services/poll/poll_service.dart';
 import '../../../services/call/call_service.dart';
+import '../../../services/call/call_manager.dart';
 import '../../../services/theme/chat_theme_resolver.dart';
 import '../../../utils/time_format.dart';
 import '../../../widgets/message_bubble.dart';
@@ -346,6 +348,19 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     }
   }
 
+  Future<void> _openChatInfo() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DirectChatInfoScreen(
+          chatId: widget.chatId,
+          otherUid: widget.otherUid,
+        ),
+      ),
+    );
+    _loadData();
+  }
+
   Future<void> _startCall(CallType type) async {
     if (_currentUser == null) return;
 
@@ -448,181 +463,389 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   Widget build(BuildContext context) {
     final t = _chatTheme;
     return Scaffold(
-      backgroundColor: t.background,
-      appBar: AppBar(
-        backgroundColor: t.appBarBackground,
-        title: StreamBuilder<UserEntity?>(
-          stream: _otherUserStream,
-          builder: (context, snapshot) {
-            final user = snapshot.data;
-            final name = _nicknames[widget.otherUid] ??
-                user?.displayName ??
-                widget.otherUid;
-            final photoUrl = user?.photoUrl;
-            final avatarAsset = user?.avatarAsset;
-            final hasAvatarAsset = avatarAsset != null && avatarAsset.isNotEmpty;
-            final hasPhotoUrl = photoUrl != null && photoUrl.isNotEmpty;
-            return Row(
-              children: [
-                CircleAvatar(
-                  radius: 14,
-                  backgroundColor: Colors.white.withValues(alpha: 0.2),
-                  backgroundImage: hasAvatarAsset
-                      ? AssetImage(avatarAsset)
-                      : hasPhotoUrl
-                          ? NetworkImage(photoUrl)
-                          : null,
-                  child: !hasAvatarAsset && !hasPhotoUrl
-                      ? const Icon(Icons.person, color: Colors.white, size: 16)
-                      : null,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-        iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.phone),
-            tooltip: 'Audio call',
-            onPressed: () => _startCall(CallType.audio),
-          ),
-          IconButton(
-            icon: const Icon(Icons.videocam),
-            tooltip: 'Video call',
-            onPressed: () => _startCall(CallType.video),
-          ),
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            onPressed: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => DirectChatInfoScreen(
-                    chatId: widget.chatId,
-                    otherUid: widget.otherUid,
-                  ),
-                ),
-              );
-              _loadData();
-            },
-          ),
-        ],
-      ),
-      body: Column(
+      backgroundColor: const Color(0xFF190831),
+      body: Stack(
         children: [
-          if (_isUploading)
-            const LinearProgressIndicator(backgroundColor: Colors.transparent),
-          Expanded(
-            child: Stack(
-              children: [
-                Container(
-                  color: t.background,
-                  child: StreamBuilder<List<ChatMessage>>(
-                stream: _messagesStream,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  final messages = snapshot.data ?? [];
-                  if (messages.isEmpty) {
-                    return Center(
-                      child: Text(
-                        'No messages yet',
-                        style: TextStyle(color: t.textSecondary),
-                      ),
-                    );
-                  }
+          // ── Background: base + dotted grid + overlays ──
+          Container(color: const Color(0xFF190831)),
+          const _ChatDottedGrid(),
+          Positioned(
+            top: 60,
+            left: -300,
+            child: Transform.rotate(
+              angle: -0.285,
+              child: Opacity(
+                opacity: 0.05,
+                child: Image.asset(
+                  'assets/images/Ears-overlay1.png',
+                  width: 800,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            // Offset by the keyboard inset so the overlay stays pinned to
+            // the physical screen bottom instead of riding up with it.
+            bottom: -10 - MediaQuery.of(context).viewInsets.bottom,
+            right: -255,
+            child: Transform.rotate(
+              angle: -0.3454,
+              child: Opacity(
+                opacity: 0.05,
+                child: Image.asset(
+                  'assets/images/Eyes-overlay1.png',
+                  width: 750,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+          ),
+          Column(
+            children: [
+              // ── Rounded glass header ──
+              SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Positioned(
+                              left: 0,
+                              top: 0,
+                              bottom: 0,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                            GestureDetector(
+                              onTap: () => Navigator.maybePop(context),
+                              child: Image.asset(
+                                'assets/icons/back-nav.png',
+                                width: 22,
+                                height: 22,
+                                fit: BoxFit.contain,
+                                errorBuilder:
+                                    (context, error, stackTrace) =>
+                                        const Icon(
+                                  Icons.arrow_back,
+                                  color: Colors.white,
+                                  size: 22,
+                                ),
+                              ),
+                            ),
+                            if (_newMessageCount > 0) ...[
+                              const SizedBox(width: 8),
+                              const _HeartbeatDot(),
+                              const SizedBox(width: 4),
+                              const Text(
+                                'NEW',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                                ],
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: _openChatInfo,
+                              behavior: HitTestBehavior.opaque,
+                              child: Tooltip(
+                                message: 'Chat info',
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 80),
+                                  child: StreamBuilder<UserEntity?>(
+                                stream: _otherUserStream,
+                                builder: (context, snapshot) {
+                                  final user = snapshot.data;
+                                  final name =
+                                      _nicknames[widget.otherUid] ??
+                                          user?.displayName ??
+                                          widget.otherUid;
+                                  final photoUrl = user?.photoUrl;
+                                  final avatarAsset = user?.avatarAsset;
+                                  final hasAvatarAsset = avatarAsset != null &&
+                                      avatarAsset.isNotEmpty;
+                                  final hasPhotoUrl = photoUrl != null &&
+                                      photoUrl.isNotEmpty;
+                                  return Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 16,
+                                        backgroundColor: Colors.white
+                                            .withValues(alpha: 0.2),
+                                        backgroundImage: hasAvatarAsset
+                                            ? AssetImage(avatarAsset)
+                                            : hasPhotoUrl
+                                                ? NetworkImage(photoUrl)
+                                                : null,
+                                        child: !hasAvatarAsset && !hasPhotoUrl
+                                            ? const Icon(
+                                                Icons.person,
+                                                color: Colors.white,
+                                                size: 18,
+                                              )
+                                            : null,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Flexible(
+                                        child: Text(
+                                          name,
+                                          style: const TextStyle(
+                                            fontFamily: 'Poppins',
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 15,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+                            Positioned(
+                              right: 0,
+                              top: 0,
+                              bottom: 0,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                            ListenableBuilder(
+                              listenable: CallManager(),
+                              builder: (context, _) {
+                                final mgr = CallManager();
+                                bool matches(String? id) =>
+                                    id == widget.chatId;
+                                final active = mgr.activeCall;
+                                final outgoing = mgr.outgoingCall;
+                                final inCall = (active != null &&
+                                        matches(active.chatId)) ||
+                                    (outgoing != null &&
+                                        matches(outgoing.chatId));
+                                final activeType = active != null &&
+                                        matches(active.chatId)
+                                    ? active.callType
+                                    : (outgoing != null &&
+                                            matches(outgoing.chatId)
+                                        ? outgoing.callType
+                                        : null);
+                                final audioActive =
+                                    inCall && activeType == CallType.audio;
+                                final videoActive =
+                                    inCall && activeType == CallType.video;
+                                Widget callBtn(
+                                    String asset, IconData fallback,
+                                    bool beating, VoidCallback onTap,
+                                    String tooltip) {
+                                  final btn = GestureDetector(
+                                    onTap: onTap,
+                                    child: Image.asset(
+                                      asset,
+                                      width: 24,
+                                      height: 24,
+                                      fit: BoxFit.contain,
+                                      errorBuilder:
+                                          (context, error, stackTrace) => Icon(
+                                        fallback,
+                                        color: Colors.white,
+                                        size: 22,
+                                      ),
+                                    ),
+                                  );
+                                  if (!beating) return btn;
+                                  return _BeatingCircle(child: btn);
+                                }
 
-                  final newMessageCount = messages.length - _lastMessageCount;
-                  if (newMessageCount > 0) {
-                    _lastMessageCount = messages.length;
-                    if (_isAtBottom) {
+                                return Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    callBtn(
+                                      'assets/icons/call.png',
+                                      Icons.phone,
+                                      audioActive,
+                                      () => _startCall(CallType.audio),
+                                      'Audio call',
+                                    ),
+                                    const SizedBox(width: 12),
+                                    callBtn(
+                                      'assets/icons/video-call.png',
+                                      Icons.videocam,
+                                      videoActive,
+                                      () => _startCall(CallType.video),
+                                      'Video call',
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      ],
+                    ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (_isUploading)
+                const LinearProgressIndicator(
+                    backgroundColor: Colors.transparent),
+              Expanded(
+                child: Stack(
+                  children: [
+                    StreamBuilder<List<ChatMessage>>(
+                    stream: _messagesStream,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      final messages = snapshot.data ?? [];
+                      if (messages.isEmpty) {
+                        return Center(
+                          child: Text(
+                            'No messages yet',
+                            style: TextStyle(
+                                color:
+                                    Colors.white.withValues(alpha: 0.6)),
+                          ),
+                        );
+                      }
+
+                      final newMessageCount =
+                          messages.length - _lastMessageCount;
+                      if (newMessageCount > 0) {
+                        _lastMessageCount = messages.length;
+                        if (_isAtBottom) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (_scrollCtrl.hasClients) _scrollCtrl.jumpTo(0);
+                          });
+                        } else {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) {
+                              setState(
+                                () => _newMessageCount += newMessageCount,
+                              );
+                            }
+                          });
+                        }
+                      }
+
                       WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (_scrollCtrl.hasClients) _scrollCtrl.jumpTo(0);
-                      });
-                    } else {
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (mounted) {
-                          setState(() => _newMessageCount += newMessageCount);
+                        for (final m in messages) {
+                          if ((m.type == MessageType.event ||
+                                  m.type == MessageType.poll) &&
+                              m.refId != null) {
+                            _loadEventPollData(m);
+                          }
                         }
                       });
-                    }
-                  }
 
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    for (final m in messages) {
-                      if ((m.type == MessageType.event || m.type == MessageType.poll) &&
-                          m.refId != null) {
-                        _loadEventPollData(m);
-                      }
-                    }
-                  });
+                      return ListView.builder(
+                        reverse: true,
+                        controller: _scrollCtrl,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 8,
+                        ),
+                        itemCount: messages.length,
+                        itemBuilder: (context, index) {
+                          final msg = messages[index];
+                          final isMe = msg.senderId == _currentUser?.uid;
+                          final isSystem = msg.type == MessageType.system;
 
-                    return ListView.builder(
-                      reverse: true,
-                      controller: _scrollCtrl,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 8,
-                      ),
-                      itemCount: messages.length,
-                      itemBuilder: (context, index) {
-                        final msg = messages[index];
-                        final isMe = msg.senderId == _currentUser?.uid;
-                        final isSystem = msg.type == MessageType.system;
+                          final sameSenderAsNextOlder =
+                              index + 1 < messages.length &&
+                              messages[index + 1].senderId == msg.senderId &&
+                              isSameDay(
+                                msg.createdAt,
+                                messages[index + 1].createdAt,
+                              );
+                          final sameSenderAsPrevNewer =
+                              index - 1 >= 0 &&
+                              messages[index - 1].senderId == msg.senderId &&
+                              isSameDay(
+                                msg.createdAt,
+                                messages[index - 1].createdAt,
+                              );
+                          final isFirstInGroup = !sameSenderAsNextOlder;
+                          final isLastInGroup = !sameSenderAsPrevNewer;
 
-                        final sameSenderAsNextOlder =
-                            index + 1 < messages.length &&
-                            messages[index + 1].senderId == msg.senderId &&
-                            isSameDay(
-                              msg.createdAt,
-                              messages[index + 1].createdAt,
-                            );
-                        final sameSenderAsPrevNewer =
-                            index - 1 >= 0 &&
-                            messages[index - 1].senderId == msg.senderId &&
-                            isSameDay(
-                              msg.createdAt,
-                              messages[index - 1].createdAt,
-                            );
-                        final isFirstInGroup = !sameSenderAsNextOlder;
-                        final isLastInGroup = !sameSenderAsPrevNewer;
+                          final showDateSeparator =
+                              index == 0 ||
+                              !isSameDay(
+                                messages[index].createdAt,
+                                messages[index - 1].createdAt,
+                              );
 
-                        final showDateSeparator =
-                            index == 0 ||
-                            !isSameDay(
-                              messages[index].createdAt,
-                              messages[index - 1].createdAt,
-                            );
+                          Widget buildMessage() {
+                            if (isSystem) {
+                              return MessageBubble(
+                                content: msg.content,
+                                isMe: false,
+                                senderName: msg.senderName.isNotEmpty
+                                    ? msg.senderName
+                                    : null,
+                                time: formatChatTime(msg.createdAt),
+                                isSystem: true,
+                                theme: t,
+                                isFirstInGroup: isFirstInGroup,
+                                isLastInGroup: isLastInGroup,
+                                createdAt: msg.createdAt,
+                              );
+                            }
 
-                        Widget buildMessage() {
-                          if (isSystem) {
-                            return MessageBubble(
-                              content: msg.content,
-                              isMe: false,
-                              senderName: msg.senderName.isNotEmpty
-                                  ? msg.senderName
-                                  : null,
-                              time: formatChatTime(msg.createdAt),
-                              isSystem: true,
-                              theme: t,
-                              isFirstInGroup: isFirstInGroup,
-                              isLastInGroup: isLastInGroup,
-                              createdAt: msg.createdAt,
-                            );
-                          }
+                            if (msg.type == MessageType.event &&
+                                msg.refId != null) {
+                              final evt = _events[msg.refId];
+                              return MessageBubble(
+                                content: msg.content,
+                                isMe: isMe,
+                                senderName: msg.senderName.isNotEmpty
+                                    ? msg.senderName
+                                    : null,
+                                time: formatChatTime(msg.createdAt),
+                                event: evt,
+                                currentUid: _currentUser?.uid,
+                                theme: t,
+                                onEventTap: evt != null
+                                    ? () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => EventDetailScreen(
+                                              eventId: evt.id,
+                                              chatId: widget.chatId,
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    : null,
+                              );
+                            }
 
                       if (msg.type == MessageType.event && msg.refId != null) {
                         final evt = _events[msg.refId];
@@ -688,7 +911,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                               content: msg.content,
                               imageUrl: msg.imageUrl,
                               isMe: isMe,
-                              senderName: !isMe ? _otherName : null,
+                              senderName: isMe ? _ownDisplayName() : _getDisplayName(),
                               time: formatChatTime(msg.createdAt),
                               theme: t,
                               isFirstInGroup: isFirstInGroup,
@@ -719,7 +942,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                               audioUrl: msg.audioUrl,
                               durationSeconds: msg.durationSeconds,
                               isMe: isMe,
-                              senderName: !isMe ? _otherName : null,
+                              senderName: isMe ? _ownDisplayName() : _getDisplayName(),
                               time: formatChatTime(msg.createdAt),
                               theme: t,
                               isFirstInGroup: isFirstInGroup,
@@ -782,7 +1005,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                           return MessageBubble(
                             content: msg.content,
                             isMe: isMe,
-                            senderName: !isMe ? _otherName : null,
+                            senderName: isMe ? _ownDisplayName() : _getDisplayName(),
                             time: formatChatTime(msg.createdAt),
                             theme: t,
                             isFirstInGroup: isFirstInGroup,
@@ -831,10 +1054,9 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                     );
                   },
                 ),
-              ),
-              if (_newMessageCount > 0)
-                Positioned(
-                  bottom: 16,
+                if (_newMessageCount > 0)
+                  Positioned(
+                    bottom: 16,
                     left: 0,
                     right: 0,
                     child: Center(
@@ -884,10 +1106,10 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-            color: t.composerBackground,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 4, 16, 6),
             child: SafeArea(
+              top: false,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -896,7 +1118,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       margin: const EdgeInsets.only(bottom: 4),
                       decoration: BoxDecoration(
-                        color: t.inputBackground,
+                        color: Colors.white.withValues(alpha: 0.10),
                         borderRadius: BorderRadius.circular(8),
                         border: Border(
                           left: BorderSide(color: t.accent, width: 3),
@@ -910,8 +1132,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  _replyingTo!.senderName?.isNotEmpty == true
-                                      ? _replyingTo!.senderName!
+                                  _replyingTo!.senderName.isNotEmpty
+                                      ? _replyingTo!.senderName
                                       : 'You',
                                   style: TextStyle(
                                     fontSize: 12,
@@ -926,7 +1148,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     fontSize: 13,
-                                    color: t.textSecondary,
+                                    color: Colors.white.withValues(alpha: 0.6),
                                   ),
                                 ),
                               ],
@@ -934,59 +1156,120 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                           ),
                           GestureDetector(
                             onTap: _cancelReply,
-                            child: Icon(Icons.close, size: 18, color: t.textSecondary),
+                            child: Icon(Icons.close,
+                                size: 18,
+                                color:
+                                    Colors.white.withValues(alpha: 0.6)),
                           ),
                         ],
                       ),
                     ),
                   Row(
                     children: [
-                      IconButton(
-                        icon: Icon(
-                          Icons.add_circle_outline,
-                          color: t.textSecondary,
-                        ),
-                        onPressed: _showAttachMenu,
-                      ),
-                      AudioRecorderButton(onRecordingComplete: _onAudioRecorded),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: TextField(
-                          controller: _messageCtrl,
-                          textCapitalization: TextCapitalization.sentences,
-                          decoration: InputDecoration(
-                            hintText: _replyingTo != null ? 'Reply...' : 'Message',
-                            hintStyle: TextStyle(color: t.textSecondary),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(24),
-                              borderSide: BorderSide.none,
-                            ),
-                            filled: true,
-                            fillColor: t.inputBackground,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 10,
+                      Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: GestureDetector(
+                          onTap: _showAttachMenu,
+                          child: Image.asset(
+                            'assets/icons/app.png',
+                            width: 26,
+                            height: 26,
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) =>
+                                Icon(
+                              Icons.add_circle_outline,
+                              color: t.textSecondary,
                             ),
                           ),
                         ),
                       ),
                       const SizedBox(width: 6),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: t.accent,
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          onPressed: _sendMessage,
-                          icon: const Icon(
-                            Icons.send,
-                            color: Colors.white,
-                            size: 20,
+                      Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: AudioRecorderButton(
+                            onRecordingComplete: _onAudioRecorded),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(35),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                            child: TextField(
+                              controller: _messageCtrl,
+                              textCapitalization:
+                                  TextCapitalization.sentences,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: InputDecoration(
+                                hintText: _replyingTo != null
+                                    ? 'Reply...'
+                                    : 'Message',
+                                hintStyle: TextStyle(
+                                    color: Colors.white
+                                        .withValues(alpha: 0.5)),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(35),
+                                  borderSide: BorderSide.none,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(35),
+                                  borderSide: BorderSide.none,
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(35),
+                                  borderSide: BorderSide.none,
+                                ),
+                                filled: true,
+                                fillColor:
+                                    Colors.white.withValues(alpha: 0.10),
+                                contentPadding:
+                                    const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 10,
+                                ),
+                                suffixIcon: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Image.asset(
+                                    'assets/icons/emoji.png',
+                                    width: 17,
+                                    height: 17,
+                                    fit: BoxFit.contain,
+                                    errorBuilder:
+                                        (context, error, stackTrace) =>
+                                            Icon(
+                                      Icons.emoji_emotions_outlined,
+                                      size: 17,
+                                      color: Colors.white
+                                          .withValues(alpha: 0.6),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                            minWidth: 40,
-                            minHeight: 40,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      GestureDetector(
+                        onTap: _sendMessage,
+                        child: Image.asset(
+                          'assets/icons/send.png',
+                          width: 28,
+                          height: 28,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) =>
+                              Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: t.accent,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.send,
+                              color: Colors.white,
+                              size: 15,
+                            ),
                           ),
                         ),
                       ),
@@ -998,6 +1281,157 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
           ),
         ],
       ),
+        ],
+      ),
+    );
+  }
+
+  String _ownDisplayName() {
+    final u = _currentUser;
+    if (u == null) return 'You';
+    final name = (u.displayName ?? '').trim();
+    if (name.isNotEmpty) return name;
+    final email = (u.email ?? '').trim();
+    if (email.isNotEmpty) return email;
+    return 'You';
+  }
+}
+
+// ── Chat background dotted grid (same pattern as Home screen) ────────────────
+
+class _ChatDottedGrid extends StatelessWidget {
+  const _ChatDottedGrid();
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(size: Size.infinite, painter: _ChatGridPainter());
+  }
+}
+
+class _ChatGridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.2)
+      ..style = PaintingStyle.fill;
+
+    const spacingX = 28.0;
+    const spacingY = 28.0;
+    const dotRadius = 1.5;
+
+    for (double x = spacingX / 2; x < size.width; x += spacingX) {
+      for (double y = spacingY / 2; y < size.height; y += spacingY) {
+        canvas.drawCircle(Offset(x, y), dotRadius, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// ── Animated beating-heart NEW indicator ─────────────────────────────────────
+
+class _HeartbeatDot extends StatefulWidget {
+  const _HeartbeatDot();
+
+  @override
+  State<_HeartbeatDot> createState() => _HeartbeatDotState();
+}
+
+class _HeartbeatDotState extends State<_HeartbeatDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) {
+        final scale = 1.0 + (_ctrl.value * 0.25);
+        return Transform.scale(
+          scale: scale,
+          child: Container(
+            width: 22,
+            height: 22,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFFFE4EF0).withValues(alpha: 0.9),
+            ),
+            child: const Icon(
+              Icons.favorite,
+              color: Colors.white,
+              size: 13,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ── Beating-circle wrapper for an active call icon ───────────────────────────
+
+class _BeatingCircle extends StatefulWidget {
+  final Widget child;
+  const _BeatingCircle({required this.child});
+
+  @override
+  State<_BeatingCircle> createState() => _BeatingCircleState();
+}
+
+class _BeatingCircleState extends State<_BeatingCircle>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) {
+        return Container(
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: const Color(0xFFFE4EF0)
+                  .withValues(alpha: 0.4 + (_ctrl.value * 0.5)),
+              width: 2,
+            ),
+          ),
+          child: widget.child,
+        );
+      },
     );
   }
 }
