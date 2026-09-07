@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
@@ -13,6 +14,7 @@ import '../../../services/group/group_service.dart';
 import '../../../services/event/event_service.dart';
 import '../../../services/poll/poll_service.dart';
 import '../../../services/call/call_service.dart';
+import '../../../services/call/call_manager.dart';
 import '../../../services/theme/chat_theme_resolver.dart';
 import '../../../utils/time_format.dart';
 import '../../../widgets/message_bubble.dart';
@@ -388,6 +390,15 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     }
   }
 
+  Future<void> _openGroupInfo() async {
+    await Navigator.pushNamed(
+      context,
+      '/group-info',
+      arguments: widget.groupId,
+    );
+    _loadGroupInfo();
+  }
+
   Future<void> _startCall(CallType type) async {
     if (_currentUser == null) return;
 
@@ -495,77 +506,251 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   Widget build(BuildContext context) {
     final t = _chatTheme;
     return Scaffold(
-      backgroundColor: t.background,
-      appBar: AppBar(
-        backgroundColor: t.appBarBackground,
-        title: StreamBuilder<GroupChat?>(
-          stream: _groupStream,
-          builder: (context, snapshot) {
-            final group = snapshot.data;
-            final photoUrl = group?.photoUrl ?? _groupPhotoUrl;
-            return Row(
-              children: [
-                CircleAvatar(
-                  key: ValueKey(photoUrl),
-                  radius: 14,
-                  backgroundColor: Colors.white.withValues(alpha: 0.2),
-                  backgroundImage: photoUrl != null && photoUrl.isNotEmpty
-                      ? NetworkImage(photoUrl)
-                      : null,
-                  child: photoUrl == null || photoUrl.isEmpty
-                      ? const Icon(Icons.group, color: Colors.white, size: 16)
-                      : null,
+      backgroundColor: const Color(0xFF190831),
+      body: Stack(
+        children: [
+          // ── Background: base + dotted grid + overlays ──
+          Container(color: const Color(0xFF190831)),
+          const _ChatDottedGrid(),
+          Positioned(
+            top: 60,
+            left: -300,
+            child: Transform.rotate(
+              angle: -0.285,
+              child: Opacity(
+                opacity: 0.05,
+                child: Image.asset(
+                  'assets/images/Ears-overlay1.png',
+                  width: 800,
+                  fit: BoxFit.contain,
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    group?.name ?? _groupName,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Positioned(
+            // Offset by the keyboard inset so the overlay stays pinned to
+            // the physical screen bottom instead of riding up with it.
+            bottom: -10 - MediaQuery.of(context).viewInsets.bottom,
+            right: -255,
+            child: Transform.rotate(
+              angle: -0.3454,
+              child: Opacity(
+                opacity: 0.05,
+                child: Image.asset(
+                  'assets/images/Eyes-overlay1.png',
+                  width: 750,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+          ),
+          Column(
+            children: [
+              // ── Rounded glass header ──
+              SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Positioned(
+                              left: 0,
+                              top: 0,
+                              bottom: 0,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                            GestureDetector(
+                              onTap: () => Navigator.maybePop(context),
+                              child: Image.asset(
+                                'assets/icons/back-nav.png',
+                                width: 22,
+                                height: 22,
+                                fit: BoxFit.contain,
+                                errorBuilder:
+                                    (context, error, stackTrace) =>
+                                        const Icon(
+                                  Icons.arrow_back,
+                                  color: Colors.white,
+                                  size: 22,
+                                ),
+                              ),
+                            ),
+                            if (_newMessageCount > 0) ...[
+                              const SizedBox(width: 8),
+                              const _HeartbeatDot(),
+                              const SizedBox(width: 4),
+                              const Text(
+                                'NEW',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                                ],
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: _openGroupInfo,
+                              behavior: HitTestBehavior.opaque,
+                              child: Tooltip(
+                                message: 'Group info',
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 80),
+                                  child: StreamBuilder<GroupChat?>(
+                                stream: _groupStream,
+                                builder: (context, snapshot) {
+                                  final group = snapshot.data;
+                                  final photoUrl =
+                                      group?.photoUrl ?? _groupPhotoUrl;
+                                  return Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      CircleAvatar(
+                                        key: ValueKey(photoUrl),
+                                        radius: 16,
+                                        backgroundColor: Colors.white
+                                            .withValues(alpha: 0.2),
+                                        backgroundImage: photoUrl != null &&
+                                                photoUrl.isNotEmpty
+                                            ? NetworkImage(photoUrl)
+                                            : null,
+                                        child: photoUrl == null ||
+                                                photoUrl.isEmpty
+                                            ? const Icon(
+                                                Icons.group,
+                                                color: Colors.white,
+                                                size: 18,
+                                              )
+                                            : null,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Flexible(
+                                        child: Text(
+                                          group?.name ?? _groupName,
+                                          style: const TextStyle(
+                                            fontFamily: 'Poppins',
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 15,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+                            Positioned(
+                              right: 0,
+                              top: 0,
+                              bottom: 0,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                            ListenableBuilder(
+                              listenable: CallManager(),
+                              builder: (context, _) {
+                                final mgr = CallManager();
+                                bool matches(String? id) =>
+                                    id == widget.groupId;
+                                final active = mgr.activeCall;
+                                final outgoing = mgr.outgoingCall;
+                                final inCall = (active != null &&
+                                        matches(active.groupId)) ||
+                                    (outgoing != null &&
+                                        matches(outgoing.groupId));
+                                final activeType = active != null &&
+                                        matches(active.groupId)
+                                    ? active.callType
+                                    : (outgoing != null &&
+                                            matches(outgoing.groupId)
+                                        ? outgoing.callType
+                                        : null);
+                                final audioActive =
+                                    inCall && activeType == CallType.audio;
+                                final videoActive =
+                                    inCall && activeType == CallType.video;
+                                Widget callBtn(
+                                    String asset, IconData fallback,
+                                    bool beating, VoidCallback onTap) {
+                                  final btn = GestureDetector(
+                                    onTap: onTap,
+                                    child: Image.asset(
+                                      asset,
+                                      width: 24,
+                                      height: 24,
+                                      fit: BoxFit.contain,
+                                      errorBuilder:
+                                          (context, error, stackTrace) => Icon(
+                                        fallback,
+                                        color: Colors.white,
+                                        size: 22,
+                                      ),
+                                    ),
+                                  );
+                                  if (!beating) return btn;
+                                  return _BeatingCircle(child: btn);
+                                }
+
+                                return Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    callBtn(
+                                      'assets/icons/call.png',
+                                      Icons.phone,
+                                      audioActive,
+                                      () => _startCall(CallType.audio),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    callBtn(
+                                      'assets/icons/video-call.png',
+                                      Icons.videocam,
+                                      videoActive,
+                                      () => _startCall(CallType.video),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      ],
                     ),
-                    overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   ),
                 ),
-              ],
-            );
-          },
-        ),
-        iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.phone),
-            tooltip: 'Audio call',
-            onPressed: () => _startCall(CallType.audio),
-          ),
-          IconButton(
-            icon: const Icon(Icons.videocam),
-            tooltip: 'Video call',
-            onPressed: () => _startCall(CallType.video),
-          ),
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            onPressed: () async {
-              await Navigator.pushNamed(
-                context,
-                '/group-info',
-                arguments: widget.groupId,
-              );
-              _loadGroupInfo();
-            },
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          if (_isUploading)
-            const LinearProgressIndicator(backgroundColor: Colors.transparent),
-          Expanded(
-            child: Stack(
-              children: [
-                Container(
-                  color: t.background,
-                  child: StreamBuilder<List<ChatMessage>>(
+              ),
+              if (_isUploading)
+                const LinearProgressIndicator(
+                    backgroundColor: Colors.transparent),
+              Expanded(
+                child: Stack(
+                  children: [
+                    StreamBuilder<List<ChatMessage>>(
                     stream: _messagesStream,
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
@@ -576,7 +761,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                         return Center(
                           child: Text(
                             'No messages yet',
-                            style: TextStyle(color: t.textSecondary),
+                            style: TextStyle(
+                                color:
+                                    Colors.white.withValues(alpha: 0.6)),
                           ),
                         );
                       }
@@ -731,8 +918,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                               imageUrl: msg.imageUrl,
                               isMe: isMe,
                               senderName: isMe
-                                  ? null
-                                  : (isFirstInGroup ? displayName : null),
+                                  ? _ownDisplayName()
+                                  : displayName,
                               time: formatChatTime(msg.createdAt),
                               theme: t,
                               isFirstInGroup: isFirstInGroup,
@@ -768,8 +955,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                               durationSeconds: msg.durationSeconds,
                               isMe: isMe,
                               senderName: isMe
-                                  ? null
-                                  : (isFirstInGroup ? displayName : null),
+                                  ? _ownDisplayName()
+                                  : displayName,
                               time: formatChatTime(msg.createdAt),
                               theme: t,
                               isFirstInGroup: isFirstInGroup,
@@ -903,11 +1090,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             ],
                           );
                         }
-                        return wrapWithSwipe(buildMessage());
+                          return wrapWithSwipe(buildMessage());
                       },
                     );
                   },
-                ),
                 ),
                 if (_newMessageCount > 0)
                   Positioned(
@@ -961,10 +1147,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-            color: t.composerBackground,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 4, 16, 6),
             child: SafeArea(
+              top: false,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -973,7 +1159,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       margin: const EdgeInsets.only(bottom: 4),
                       decoration: BoxDecoration(
-                        color: t.inputBackground,
+                        color: Colors.white.withValues(alpha: 0.10),
                         borderRadius: BorderRadius.circular(8),
                         border: Border(
                           left: BorderSide(color: t.accent, width: 3),
@@ -1003,7 +1189,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     fontSize: 13,
-                                    color: t.textSecondary,
+                                    color: Colors.white.withValues(alpha: 0.6),
                                   ),
                                 ),
                               ],
@@ -1011,59 +1197,120 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                           ),
                           GestureDetector(
                             onTap: _cancelReply,
-                            child: Icon(Icons.close, size: 18, color: t.textSecondary),
+                            child: Icon(Icons.close,
+                                size: 18,
+                                color:
+                                    Colors.white.withValues(alpha: 0.6)),
                           ),
                         ],
                       ),
                     ),
                   Row(
                     children: [
-                      IconButton(
-                        icon: Icon(
-                          Icons.add_circle_outline,
-                          color: t.textSecondary,
-                        ),
-                        onPressed: _showComposerMenu,
-                      ),
-                      AudioRecorderButton(onRecordingComplete: _onAudioRecorded),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: TextField(
-                          controller: _messageCtrl,
-                          textCapitalization: TextCapitalization.sentences,
-                          decoration: InputDecoration(
-                            hintText: _replyingTo != null ? 'Reply...' : 'Message',
-                            hintStyle: TextStyle(color: t.textSecondary),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(24),
-                              borderSide: BorderSide.none,
-                            ),
-                            filled: true,
-                            fillColor: t.inputBackground,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 10,
+                      Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: GestureDetector(
+                          onTap: _showComposerMenu,
+                          child: Image.asset(
+                            'assets/icons/app.png',
+                            width: 26,
+                            height: 26,
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) =>
+                                Icon(
+                              Icons.add_circle_outline,
+                              color: t.textSecondary,
                             ),
                           ),
                         ),
                       ),
                       const SizedBox(width: 6),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: t.accent,
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          onPressed: _sendMessage,
-                          icon: const Icon(
-                            Icons.send,
-                            color: Colors.white,
-                            size: 20,
+                      Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: AudioRecorderButton(
+                            onRecordingComplete: _onAudioRecorded),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(35),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                            child: TextField(
+                              controller: _messageCtrl,
+                              textCapitalization:
+                                  TextCapitalization.sentences,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: InputDecoration(
+                                hintText: _replyingTo != null
+                                    ? 'Reply...'
+                                    : 'Message',
+                                hintStyle: TextStyle(
+                                    color: Colors.white
+                                        .withValues(alpha: 0.5)),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(35),
+                                  borderSide: BorderSide.none,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(35),
+                                  borderSide: BorderSide.none,
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(35),
+                                  borderSide: BorderSide.none,
+                                ),
+                                filled: true,
+                                fillColor:
+                                    Colors.white.withValues(alpha: 0.10),
+                                contentPadding:
+                                    const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 10,
+                                ),
+                                suffixIcon: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Image.asset(
+                                    'assets/icons/emoji.png',
+                                    width: 17,
+                                    height: 17,
+                                    fit: BoxFit.contain,
+                                    errorBuilder:
+                                        (context, error, stackTrace) =>
+                                            Icon(
+                                      Icons.emoji_emotions_outlined,
+                                      size: 17,
+                                      color: Colors.white
+                                          .withValues(alpha: 0.6),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                            minWidth: 40,
-                            minHeight: 40,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      GestureDetector(
+                        onTap: _sendMessage,
+                        child: Image.asset(
+                          'assets/icons/send.png',
+                          width: 28,
+                          height: 28,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) =>
+                              Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: t.accent,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.send,
+                              color: Colors.white,
+                              size: 15,
+                            ),
                           ),
                         ),
                       ),
@@ -1075,6 +1322,159 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           ),
         ],
       ),
+        ],
+      ),
+    );
+  }
+
+  String _ownDisplayName() {
+    final u = _currentUser;
+    if (u == null) return 'You';
+    final name = _getDisplayName(
+      u.uid,
+      (u.displayName ?? '').trim().isNotEmpty
+          ? u.displayName!
+          : (u.email ?? 'You'),
+    );
+    return name.isNotEmpty ? name : 'You';
+  }
+}
+
+// ── Chat background dotted grid (same pattern as Home screen) ────────────────
+
+class _ChatDottedGrid extends StatelessWidget {
+  const _ChatDottedGrid();
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(size: Size.infinite, painter: _ChatGridPainter());
+  }
+}
+
+class _ChatGridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.2)
+      ..style = PaintingStyle.fill;
+
+    const spacingX = 28.0;
+    const spacingY = 28.0;
+    const dotRadius = 1.5;
+
+    for (double x = spacingX / 2; x < size.width; x += spacingX) {
+      for (double y = spacingY / 2; y < size.height; y += spacingY) {
+        canvas.drawCircle(Offset(x, y), dotRadius, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// ── Animated beating-heart NEW indicator ─────────────────────────────────────
+
+class _HeartbeatDot extends StatefulWidget {
+  const _HeartbeatDot();
+
+  @override
+  State<_HeartbeatDot> createState() => _HeartbeatDotState();
+}
+
+class _HeartbeatDotState extends State<_HeartbeatDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) {
+        final scale = 1.0 + (_ctrl.value * 0.25);
+        return Transform.scale(
+          scale: scale,
+          child: Container(
+            width: 22,
+            height: 22,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFFFE4EF0).withValues(alpha: 0.9),
+            ),
+            child: const Icon(
+              Icons.favorite,
+              color: Colors.white,
+              size: 13,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ── Beating-circle wrapper for an active call icon ───────────────────────────
+
+class _BeatingCircle extends StatefulWidget {
+  final Widget child;
+  const _BeatingCircle({required this.child});
+
+  @override
+  State<_BeatingCircle> createState() => _BeatingCircleState();
+}
+
+class _BeatingCircleState extends State<_BeatingCircle>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) {
+        return Container(
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: const Color(0xFFFE4EF0)
+                  .withValues(alpha: 0.4 + (_ctrl.value * 0.5)),
+              width: 2,
+            ),
+          ),
+          child: widget.child,
+        );
+      },
     );
   }
 }
