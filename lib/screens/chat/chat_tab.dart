@@ -8,7 +8,7 @@ import '../../models/user_entity.dart';
 import '../../services/group/group_service.dart';
 import '../../services/direct/direct_service.dart';
 import '../../utils/time_format.dart';
-import '../account/account_screen.dart';
+import '../../utils/responsive.dart';
 import 'group/group_chat_screen.dart';
 import 'group/create_group_screen.dart';
 import 'direct/direct_chat_screen.dart';
@@ -29,9 +29,6 @@ class _ChatTabState extends State<ChatTab> {
   final Map<String, UserEntity?> _userCache = {};
   final _searchCtrl = TextEditingController();
 
-  Stream<UserEntity?>? _currentUserStream;
-  String? _currentUid;
-  StreamSubscription<User?>? _authSub;
   _ChatFilter _filter = _ChatFilter.all;
   String _query = '';
   bool _showDirects = true;
@@ -41,10 +38,6 @@ class _ChatTabState extends State<ChatTab> {
   @override
   void initState() {
     super.initState();
-    _watchCurrentUser(notify: false);
-    _authSub = FirebaseAuth.instance.authStateChanges().listen((_) {
-      _watchCurrentUser();
-    });
     _searchCtrl.addListener(() {
       if (mounted) setState(() => _query = _searchCtrl.text.trim().toLowerCase());
     });
@@ -52,20 +45,8 @@ class _ChatTabState extends State<ChatTab> {
 
   @override
   void dispose() {
-    _authSub?.cancel();
     _searchCtrl.dispose();
     super.dispose();
-  }
-
-  /// Rebinds the live current-user stream (avatar + border + photo).
-  /// Any profile write repaints the top bar with no manual refresh.
-  void _watchCurrentUser({bool notify = true}) {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == _currentUid && _currentUserStream != null) return;
-    _currentUid = uid;
-    _currentUserStream =
-        uid == null ? null : _directService.getUserStream(uid);
-    if (notify && mounted) setState(() {});
   }
 
   Future<UserEntity?> _getCachedUser(String uid) async {
@@ -85,7 +66,19 @@ class _ChatTabState extends State<ChatTab> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (_) => Container(
+      isScrollControlled: true,
+      builder: (_) {
+        final w = MediaQuery.of(context).size.width;
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints:
+                    BoxConstraints(maxWidth: Responsive.sheetMaxWidth(w)),
+                child: Container(
         margin: const EdgeInsets.all(16),
         padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
@@ -153,7 +146,12 @@ class _ChatTabState extends State<ChatTab> {
             ),
           ],
         ),
-      ),
+              ),
+            ),
+          ),
+        ),
+        );
+      },
     );
   }
 
@@ -161,7 +159,19 @@ class _ChatTabState extends State<ChatTab> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
+      isScrollControlled: true,
+      builder: (ctx) {
+        final w = MediaQuery.of(ctx).size.width;
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints:
+                    BoxConstraints(maxWidth: Responsive.sheetMaxWidth(w)),
+                child: StatefulBuilder(
         builder: (ctx, setSheetState) => Container(
           margin: const EdgeInsets.all(16),
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
@@ -243,8 +253,13 @@ class _ChatTabState extends State<ChatTab> {
               ),
             ],
           ),
+              ),
+            ),
+          ),
         ),
-      ),
+        ),
+        );
+      },
     );
   }
 
@@ -296,15 +311,6 @@ class _ChatTabState extends State<ChatTab> {
     });
   }
 
-  void _openAccount() {
-    // No manual refresh needed: the top-bar avatar follows the live
-    // current-user stream, so profile writes repaint it automatically.
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const AccountScreen()),
-    );
-  }
-
   bool _isNew(DateTime? lastAt, String? senderId, String currentUid) {
     if (lastAt == null || senderId == null || senderId == currentUid) return false;
     return DateTime.now().difference(lastAt) <= const Duration(hours: 24);
@@ -318,21 +324,26 @@ class _ChatTabState extends State<ChatTab> {
   @override
   Widget build(BuildContext context) {
     final currentUser = FirebaseAuth.instance.currentUser;
+    final screenH = MediaQuery.of(context).size.height;
+    final fabSize = Responsive.fabSize(
+      MediaQuery.of(context).size.width,
+      screenH,
+    );
     // Transparent so the shared HomePage AnimatedBackground
     // (gradient + animated circles + dots) shows through.
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: Padding(
         // Clear the floating glass nav bar in HomePage.
-        padding: const EdgeInsets.only(bottom: 100),
+        padding: EdgeInsets.only(bottom: Responsive.fabBottom(context)),
         child: Tooltip(
           message: 'New chat',
           child: ClipOval(
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
               child: Container(
-                width: 56,
-                height: 56,
+                width: fabSize,
+                height: fabSize,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: Colors.white.withValues(alpha: 0.10),
@@ -350,13 +361,13 @@ class _ChatTabState extends State<ChatTab> {
                     child: Center(
                       child: Image.asset(
                         'assets/icons/add-chat.png',
-                        width: 28,
-                        height: 28,
+                        width: fabSize * 0.5,
+                        height: fabSize * 0.5,
                         fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => const Icon(
+                        errorBuilder: (_, __, ___) => Icon(
                           Icons.add_comment_outlined,
-                          color: Color(0xFFFE4EF0),
-                          size: 28,
+                          color: const Color(0xFFFE4EF0),
+                          size: fabSize * 0.5,
                         ),
                       ),
                     ),
@@ -374,16 +385,25 @@ class _ChatTabState extends State<ChatTab> {
                 style: TextStyle(color: Colors.white54),
               ),
             )
-          : LayoutBuilder(
+          : GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: () {
+                final f = FocusScope.of(context);
+                if (f.hasFocus) f.unfocus();
+              },
+              child: LayoutBuilder(
               builder: (context, constraints) {
                 final w = constraints.maxWidth;
-                // Responsive scale: small <360, medium <600, large <1024, xl+.
-                final isSmall = w < 360;
-                final isXl = w > 1024;
-                final hPad = (w * 0.05).clamp(16.0, 32.0);
-                final contentMax = isXl ? 720.0 : w;
-                final logoSize = (w * 0.155).clamp(62.0, 84.0);
-                final avatarSize = (w * 0.105).clamp(40.0, 52.0);
+                // S <360, M 360-400, L 400-480, XL phone 480+.
+                // Tablets/XL keep centered single column (max 720).
+                final isSmall = Responsive.isSmallPhone(w);
+                final h = constraints.maxHeight.isFinite && constraints.maxHeight > 0
+                    ? constraints.maxHeight
+                    : MediaQuery.of(context).size.height;
+                final hPad = Responsive.hPad(w);
+                final contentMax = Responsive.contentMax(w);
+                final logoSize = Responsive.chatLogoSize(w);
+                final topVPad = Responsive.chatTopVPad(w, h);
 
                 return SafeArea(
                   child: Center(
@@ -395,15 +415,16 @@ class _ChatTabState extends State<ChatTab> {
                           Padding(
                             padding: EdgeInsets.fromLTRB(
                               hPad,
-                              isSmall ? 8 : 12,
+                              topVPad,
                               hPad,
                               4,
                             ),
                             child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              mainAxisAlignment: MainAxisAlignment.start,
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                Row(
+                                Flexible(
+                                  child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Image.asset(
@@ -418,7 +439,8 @@ class _ChatTabState extends State<ChatTab> {
                                       ),
                                     ),
                                     SizedBox(width: (w * 0.025).clamp(8.0, 12.0)),
-                                    Padding(
+                                    Flexible(
+                                      child: Padding(
                                       padding: const EdgeInsets.only(top: 8.0),
                                       child: ShaderMask(
                                         shaderCallback: (bounds) =>
@@ -428,33 +450,27 @@ class _ChatTabState extends State<ChatTab> {
                                             Color(0xFF800DD8)
                                           ],
                                         ).createShader(bounds),
-                                        child: Text(
+                                        child: MediaQuery(
+                                          data: MediaQuery.of(context).copyWith(
+                                            textScaler: Responsive.cappedTextScaler(
+                                                context),
+                                          ),
+                                          child: Text(
                                           'WeDo',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
                                             fontFamily: 'PressStart2P',
-                                            fontSize: (w * 0.075).clamp(24.0, 35.0),
+                                            fontSize: Responsive.chatTitleSize(w),
                                             color: Colors.white,
                                           ),
                                         ),
+                                        ),
                                       ),
+                                    ),
                                     ),
                                   ],
                                 ),
-                                GestureDetector(
-                                  onTap: _openAccount,
-                                  child: _currentUserStream == null
-                                      ? _DecoratedAvatar(
-                                          user: null,
-                                          size: avatarSize,
-                                        )
-                                      : StreamBuilder<UserEntity?>(
-                                          stream: _currentUserStream,
-                                          builder: (context, snap) =>
-                                              _DecoratedAvatar(
-                                            user: snap.data,
-                                            size: avatarSize,
-                                          ),
-                                        ),
                                 ),
                               ],
                             ),
@@ -463,7 +479,7 @@ class _ChatTabState extends State<ChatTab> {
                           Padding(
                             padding: EdgeInsets.fromLTRB(
                               hPad,
-                              isSmall ? 8 : 12,
+                              2,
                               hPad,
                               4,
                             ),
@@ -472,6 +488,7 @@ class _ChatTabState extends State<ChatTab> {
                               child: BackdropFilter(
                                 filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
                                 child: Container(
+                                  constraints: const BoxConstraints(minHeight: 48),
                                   decoration: BoxDecoration(
                                     color: Colors.white.withValues(alpha: 0.08),
                                     borderRadius: BorderRadius.circular(28),
@@ -500,6 +517,11 @@ class _ChatTabState extends State<ChatTab> {
                                       Expanded(
                                         child: TextField(
                                           controller: _searchCtrl,
+                                          textInputAction: TextInputAction.search,
+                                          onSubmitted: (_) =>
+                                              FocusScope.of(context).unfocus(),
+                                          onTapOutside: (_) =>
+                                              FocusScope.of(context).unfocus(),
                                           style: const TextStyle(
                                             color: Colors.white,
                                             fontFamily: 'Poppins',
@@ -541,8 +563,8 @@ class _ChatTabState extends State<ChatTab> {
                                             return Container(
                                               margin: const EdgeInsets.only(
                                                   right: 8),
-                                              width: 36,
-                                              height: 36,
+                                              width: 40,
+                                              height: 40,
                                               decoration: BoxDecoration(
                                                 color: filtersActive
                                                     ? Colors.white.withValues(
@@ -605,31 +627,43 @@ class _ChatTabState extends State<ChatTab> {
                               hPad,
                               6,
                             ),
-                            child: Row(
-                              children: [
-                                _TabPill(
-                                  label: 'All Messages',
-                                  selected: _filter == _ChatFilter.all,
-                                  compact: isSmall,
-                                  onTap: () => setState(() => _filter = _ChatFilter.all),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  mainAxisAlignment: MainAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    _TabPill(
+                                      label: 'All Messages',
+                                      selected: _filter == _ChatFilter.all,
+                                      compact: isSmall,
+                                      onTap: () =>
+                                          setState(() => _filter = _ChatFilter.all),
+                                    ),
+                                    SizedBox(
+                                        width: (w * 0.02).clamp(6.0, 10.0)),
+                                    _TabPill(
+                                      label: 'New',
+                                      selected: _filter == _ChatFilter.fresh,
+                                      compact: isSmall,
+                                      onTap: () => setState(
+                                          () => _filter = _ChatFilter.fresh),
+                                    ),
+                                    SizedBox(
+                                        width: (w * 0.02).clamp(6.0, 10.0)),
+                                    _TabPill(
+                                      label: 'Unread',
+                                      selected: _filter == _ChatFilter.unread,
+                                      compact: isSmall,
+                                      onTap: () => setState(
+                                          () => _filter = _ChatFilter.unread),
+                                    ),
+                                  ],
                                 ),
-                                SizedBox(width: (w * 0.02).clamp(6.0, 10.0)),
-                                _TabPill(
-                                  label: 'New',
-                                  selected: _filter == _ChatFilter.fresh,
-                                  compact: isSmall,
-                                  onTap: () =>
-                                      setState(() => _filter = _ChatFilter.fresh),
-                                ),
-                                SizedBox(width: (w * 0.02).clamp(6.0, 10.0)),
-                                _TabPill(
-                                  label: 'Unread',
-                                  selected: _filter == _ChatFilter.unread,
-                                  compact: isSmall,
-                                  onTap: () =>
-                                      setState(() => _filter = _ChatFilter.unread),
-                                ),
-                              ],
+                              ),
                             ),
                           ),
                           // ── 4. Chat list ──
@@ -687,18 +721,153 @@ class _ChatTabState extends State<ChatTab> {
                                       return bTime.compareTo(aTime);
                                     });
 
+                                    // Pre-filter synchronously so hidden chats
+                                    // never occupy a ListView slot. Returning
+                                    // SizedBox.shrink() inside itemBuilder
+                                    // still leaves separators behind, which
+                                    // caused uneven/phantom gaps on larger
+                                    // phones when many items were filtered.
+                                    // Direct names use the cache (fallback to
+                                    // uid); FutureBuilder below only fills in
+                                    // avatar/name, it no longer decides
+                                    // visibility for type/tab filters.
+                                    final visibleChats = <_ChatItem>[];
+                                    for (final item in allChats) {
+                                      if (item.isGroup) {
+                                        final group = item.group!;
+                                        final hasUnread = group.lastMessage !=
+                                                    null &&
+                                                group.lastMessageSenderId !=
+                                                    null &&
+                                                group.lastMessageSenderId !=
+                                                    currentUser.uid &&
+                                                !group.lastMessageReadBy
+                                                    .contains(currentUser.uid);
+                                        final isNew = _isNew(
+                                          group.lastMessageAt,
+                                          group.lastMessageSenderId,
+                                          currentUser.uid,
+                                        );
+                                        if (_passesFilters(
+                                          isGroup: true,
+                                          hasUnread: hasUnread,
+                                          isNew: isNew,
+                                          lastAt: group.lastMessageAt,
+                                          name: group.name,
+                                          lastMessage: group.lastMessage,
+                                        )) {
+                                          visibleChats.add(item);
+                                        }
+                                      } else {
+                                        final chat = item.direct!;
+                                        final otherUid = chat.otherUserId(
+                                            currentUser.uid);
+                                        final hasUnread =
+                                            chat.lastMessage != null &&
+                                                chat.lastMessageSenderId !=
+                                                    null &&
+                                                chat.lastMessageSenderId !=
+                                                    currentUser.uid &&
+                                                !chat.lastMessageReadBy
+                                                    .contains(currentUser.uid);
+                                        final isNew = _isNew(
+                                          chat.lastMessageAt,
+                                          chat.lastMessageSenderId,
+                                          currentUser.uid,
+                                        );
+                                        if (!_passesTypeAndTabFilters(
+                                          isGroup: false,
+                                          hasUnread: hasUnread,
+                                          isNew: isNew,
+                                          lastAt: chat.lastMessageAt,
+                                        )) {
+                                          continue;
+                                        }
+                                        final cachedName =
+                                            _userCache[otherUid]
+                                                    ?.displayName ??
+                                                otherUid;
+                                        if (_passesSearch(
+                                          cachedName,
+                                          chat.lastMessage,
+                                        )) {
+                                          visibleChats.add(item);
+                                        }
+                                      }
+                                    }
+
+                                    if (visibleChats.isEmpty) {
+                                      final filtering = _query.isNotEmpty ||
+                                          _filter != _ChatFilter.all ||
+                                          _recentOnly ||
+                                          !_showDirects ||
+                                          !_showGroups;
+                                      if (!filtering) {
+                                        return _EmptyChats(
+                                            onCreate: _showNewChatMenu);
+                                      }
+                                      return Center(
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 32),
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.search_off_outlined,
+                                                size: 40,
+                                                color: Colors.white.withValues(
+                                                    alpha: 0.4),
+                                              ),
+                                              const SizedBox(height: 12),
+                                              const Text(
+                                                'No conversations match',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.w600,
+                                                  fontFamily: 'Poppins',
+                                                ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                'Try a different search or reset filters.',
+                                                textAlign: TextAlign.center,
+                                                style: TextStyle(
+                                                  color: Colors.white.withValues(
+                                                      alpha: 0.55),
+                                                  fontSize: 12,
+                                                  fontFamily: 'Poppins',
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    }
+
+                                    // Fixed separator keeps rhythm identical on
+                                    // small / medium / large / XL phones.
+                                    // Spacing no longer depends on how many
+                                    // items were filtered out.
+                                    final separatorHeight =
+                                        Responsive.chatSeparator(w);
+
                                     return ListView.separated(
+                                      keyboardDismissBehavior:
+                                          ScrollViewKeyboardDismissBehavior.onDrag,
                                       padding: EdgeInsets.fromLTRB(
                                         hPad,
                                         6,
                                         hPad,
-                                        120,
+                                        Responsive.listBottom(context),
                                       ),
-                                      itemCount: allChats.length,
+                                      itemCount: visibleChats.length,
                                       separatorBuilder: (_, __) =>
-                                          const SizedBox(height: 10),
+                                          SizedBox(
+                                              height: separatorHeight),
                                       itemBuilder: (context, index) {
-                                        final item = allChats[index];
+                                        final item = visibleChats[index];
                                         if (item.isGroup) {
                                           final group = item.group!;
                                           final hasUnread = group.lastMessage !=
@@ -714,17 +883,9 @@ class _ChatTabState extends State<ChatTab> {
                                             group.lastMessageSenderId,
                                             currentUser.uid,
                                           );
-                                          if (!_passesFilters(
-                                            isGroup: true,
-                                            hasUnread: hasUnread,
-                                            isNew: isNew,
-                                            lastAt: group.lastMessageAt,
-                                            name: group.name,
-                                            lastMessage: group.lastMessage,
-                                          )) {
-                                            return const SizedBox.shrink();
-                                          }
+                                          // Already pre-filtered above.
                                           return _RedesignedChatRow(
+                                            parentWidth: w,
                                             name: group.name,
                                             lastMessage: group.lastMessage,
                                             lastMessageAt:
@@ -755,14 +916,13 @@ class _ChatTabState extends State<ChatTab> {
                                             chat.lastMessageSenderId,
                                             currentUser.uid,
                                           );
-                                          if (!_passesTypeAndTabFilters(
-                                            isGroup: false,
-                                            hasUnread: hasUnread,
-                                            isNew: isNew,
-                                            lastAt: chat.lastMessageAt,
-                                          )) {
-                                            return const SizedBox.shrink();
-                                          }
+                                          // Type/tab already pre-filtered.
+                                          // Search was pre-filtered with cached
+                                          // name; re-check after load and hide
+                                          // transiently if it now fails. The
+                                          // next rebuild drops it from
+                                          // visibleChats so no phantom gap
+                                          // remains.
                                           return FutureBuilder<UserEntity?>(
                                             future:
                                                 _getCachedUser(otherUid),
@@ -780,6 +940,7 @@ class _ChatTabState extends State<ChatTab> {
                                                 return const SizedBox.shrink();
                                               }
                                               return _RedesignedChatRow(
+                                                parentWidth: w,
                                                 name: displayName,
                                                 lastMessage:
                                                     chat.lastMessage,
@@ -812,6 +973,7 @@ class _ChatTabState extends State<ChatTab> {
                 );
               },
             ),
+          ),
     );
   }
 
@@ -872,93 +1034,6 @@ class _ChatItem {
       isGroup ? group?.lastMessageAt : direct?.lastMessageAt;
 }
 
-// ── Top-bar avatar with decorative frame border ──
-
-class _DecoratedAvatar extends StatelessWidget {
-  final UserEntity? user;
-  final double size;
-
-  const _DecoratedAvatar({required this.user, required this.size});
-
-  @override
-  Widget build(BuildContext context) {
-    final hasAsset =
-        user?.avatarAsset != null && user!.avatarAsset!.isNotEmpty;
-    final hasPhoto =
-        user?.photoUrl != null && user!.photoUrl!.isNotEmpty;
-    final frameAsset = (user?.frameAsset != null &&
-            user!.frameAsset!.isNotEmpty)
-        ? user!.frameAsset!
-        : 'assets/icons/Frame-1.png';
-
-    Widget inner;
-    if (hasAsset) {
-      inner = Image.asset(
-        user!.avatarAsset!,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _fallbackIcon(),
-      );
-    } else if (hasPhoto) {
-      inner = Image.network(
-        user!.photoUrl!,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _fallbackIcon(),
-      );
-    } else {
-      inner = _fallbackIcon();
-    }
-
-    return SizedBox(
-      width: size + 8,
-      height: size + 8,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          CircleAvatar(
-            radius: size / 2,
-            backgroundColor:
-                const Color(0xFFFE4EF0).withValues(alpha: 0.25),
-            child: ClipOval(
-              child: SizedBox(width: size, height: size, child: inner),
-            ),
-          ),
-          // Decorative avatar border / frame.
-          IgnorePointer(
-            child: Image.asset(
-              frameAsset,
-              width: size + 8,
-              height: size + 8,
-              fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => Container(
-                width: size + 8,
-                height: size + 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: const Color(0xFFFE4EF0),
-                    width: 2,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _fallbackIcon() {
-    return Container(
-      color: const Color(0xFFFE4EF0).withValues(alpha: 0.2),
-      child: Icon(
-        Icons.person,
-        color: Colors.white.withValues(alpha: 0.85),
-        size: size * 0.5,
-      ),
-    );
-  }
-}
-
 // ── Filter tabs ──
 
 class _TabPill extends StatelessWidget {
@@ -980,9 +1055,11 @@ class _TabPill extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
+        constraints: const BoxConstraints(minHeight: 32),
+        alignment: Alignment.center,
         padding: EdgeInsets.symmetric(
           horizontal: compact ? 14 : 18,
-          vertical: compact ? 8 : 10,
+          vertical: compact ? 6 : 7,
         ),
         decoration: BoxDecoration(
           color: selected
@@ -1124,6 +1201,7 @@ class _GlassIconCircle extends StatelessWidget {
 // ── Redesigned chat row ──
 
 class _RedesignedChatRow extends StatelessWidget {
+  final double parentWidth;
   final String name;
   final String? lastMessage;
   final DateTime? lastMessageAt;
@@ -1135,6 +1213,7 @@ class _RedesignedChatRow extends StatelessWidget {
   final VoidCallback onTap;
 
   const _RedesignedChatRow({
+    required this.parentWidth,
     required this.name,
     required this.lastMessage,
     required this.lastMessageAt,
@@ -1148,8 +1227,9 @@ class _RedesignedChatRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final w = MediaQuery.of(context).size.width;
-    final avatarRadius = (w * 0.062).clamp(22.0, 28.0);
+    // Uses parent constraints width so split-screen / foldables match layout.
+    final w = parentWidth;
+    final avatarRadius = Responsive.chatAvatarRadius(w);
     final hasAsset = avatarAsset != null && avatarAsset!.isNotEmpty;
     final hasUrl = avatarUrl != null && avatarUrl!.isNotEmpty;
     final preview = (lastMessage?.isNotEmpty ?? false)
@@ -1159,6 +1239,10 @@ class _RedesignedChatRow extends StatelessWidget {
     final previewColor = hasUnread
         ? const Color(0xFFFE4EF0)
         : const Color(0xFFFE4EF0).withValues(alpha: 0.5);
+    final timeText = formatListTime(lastMessageAt);
+    // Single gate: fresh (<=24h, not mine) + unread. Covers text, event,
+    // poll, invite, system. Otherwise fully hidden (zero size, no gap).
+    final showNew = isNew && hasUnread;
 
     return Material(
       color: Colors.transparent,
@@ -1172,9 +1256,10 @@ class _RedesignedChatRow extends StatelessWidget {
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
             child: Container(
+              constraints: const BoxConstraints(minHeight: 68),
               padding: EdgeInsets.symmetric(
-                horizontal: (w * 0.035).clamp(12.0, 16.0),
-                vertical: (w * 0.03).clamp(10.0, 14.0),
+                horizontal: Responsive.chatRowHPad(w),
+                vertical: Responsive.chatRowVPad(w),
               ),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.06),
@@ -1205,69 +1290,89 @@ class _RedesignedChatRow extends StatelessWidget {
                           )
                         : null,
                   ),
-                  SizedBox(width: (w * 0.03).clamp(10.0, 14.0)),
+                  SizedBox(width: Responsive.chatRowGap(w)),
                   Expanded(
-                    child: Column(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.max,
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Text(
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
                                 name,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   fontFamily: 'Poppins',
                                   fontWeight: FontWeight.w600,
-                                  fontSize: (w * 0.038).clamp(14.0, 16.0),
+                                  fontSize: Responsive.chatNameSize(w),
                                   color: Colors.white,
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              formatListTime(lastMessageAt),
-                              style: TextStyle(
-                                fontSize: (w * 0.03).clamp(10.0, 12.0),
-                                fontFamily: 'Poppins',
-                                color: Colors.white.withValues(alpha: 0.6),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
+                              const SizedBox(height: 6),
+                              Text(
                                 preview,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  fontSize: (w * 0.034).clamp(12.0, 14.0),
+                                  fontSize: Responsive.chatPreviewSize(w),
                                   fontFamily: 'Poppins',
                                   color: previewColor,
                                 ),
                               ),
-                            ),
-                            if (isNew && hasUnread) ...[
-                              const SizedBox(width: 8),
-                              const _PulseDot(),
-                              const SizedBox(width: 4),
-                              const Text(
-                                'NEW',
-                                style: TextStyle(
-                                  color: Color(0xFFFE4EF0),
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.6,
-                                  fontFamily: 'Poppins',
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (timeText.isEmpty)
+                              const SizedBox.shrink()
+                            else
+                              Padding(
+                                padding: const EdgeInsets.only(top: 3),
+                                child: Text(
+                                  timeText,
+                                  maxLines: 1,
+                                  softWrap: false,
+                                  overflow: TextOverflow.clip,
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                    fontSize: Responsive.chatTimeSize(w),
+                                    fontFamily: 'Poppins',
+                                    color: Colors.white.withValues(alpha: 0.6),
+                                  ),
                                 ),
                               ),
-                            ],
+                            const SizedBox(height: 10),
+                            if (showNew)
+                              const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _PulseDot(),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'NEW',
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    overflow: TextOverflow.clip,
+                                    style: TextStyle(
+                                      color: Color(0xFFFE4EF0),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.6,
+                                      fontFamily: 'Poppins',
+                                    ),
+                                  ),
+                                ],
+                              )
+                            else
+                              const SizedBox.shrink(),
                           ],
                         ),
                       ],
@@ -1348,22 +1453,30 @@ class _EmptyChats extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final w = MediaQuery.of(context).size.width;
+    final iconSize = Responsive.emptyIconSize(w);
     return Center(
-      child: Column(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 88,
-            height: 88,
+            width: iconSize,
+            height: iconSize,
             decoration: BoxDecoration(
               color: const Color(0xFFFE4EF0).withValues(alpha: 0.2),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.forum_outlined, size: 40, color: Color(0xFFFE4EF0)),
+            child: Icon(
+                Icons.forum_outlined,
+                size: iconSize * 0.45,
+                color: const Color(0xFFFE4EF0)),
           ),
           const SizedBox(height: 20),
           const Text(
             'No chats yet',
+            textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
@@ -1373,6 +1486,7 @@ class _EmptyChats extends StatelessWidget {
           const SizedBox(height: 6),
           const Text(
             'Start a conversation with friends',
+            textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white54),
           ),
           const SizedBox(height: 24),
@@ -1380,11 +1494,14 @@ class _EmptyChats extends StatelessWidget {
             onPressed: onCreate,
             style: FilledButton.styleFrom(
               backgroundColor: const Color(0xFFFE4EF0),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+              minimumSize: const Size(48, 48),
             ),
             icon: const Icon(Icons.message),
             label: const Text('New chat'),
           ),
         ],
+        ),
       ),
     );
   }
