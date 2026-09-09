@@ -49,7 +49,7 @@ class PlacesToGoScreen extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: const Text(
-          'Places to go',
+          'Nearby Go to Places',
           style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
         ),
       ),

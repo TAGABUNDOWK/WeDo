@@ -5,18 +5,22 @@ class TopicCard extends StatelessWidget {
   final String label;
   final Widget icon;
   final VoidCallback? onTap;
+  final double? width;
+  final double? height;
 
   const TopicCard({
     super.key,
     required this.label,
     required this.icon,
     this.onTap,
+    this.width,
+    this.height,
   });
 
   @override
   Widget build(BuildContext context) {
-    final w = Responsive.cardWidth(context);
-    final h = Responsive.cardHeight(context);
+    final w = width ?? Responsive.cardWidth(context);
+    final h = height ?? Responsive.cardHeight(context);
     final iconSize = Responsive.topicIconSize(context);
     final fontSize = Responsive.topicLabelSize(context);
 
