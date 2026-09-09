@@ -502,24 +502,26 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
             ),
           ),
           Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // ── Rounded glass header ──
               SafeArea(
                 bottom: false,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(24),
                     child: BackdropFilter(
                       filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
                       child: Container(
+                        width: double.infinity,
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 8,
+                          horizontal: 14,
+                          vertical: 12,
                         ),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.10),
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(24),
                         ),
                         child: Stack(
                           alignment: Alignment.center,
@@ -535,15 +537,15 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                               onTap: () => Navigator.maybePop(context),
                               child: Image.asset(
                                 'assets/icons/back-nav.png',
-                                width: 22,
-                                height: 22,
+                                width: 30,
+                                height: 30,
                                 fit: BoxFit.contain,
                                 errorBuilder:
                                     (context, error, stackTrace) =>
                                         const Icon(
                                   Icons.arrow_back,
                                   color: Colors.white,
-                                  size: 22,
+                                  size: 30,
                                 ),
                               ),
                             ),
@@ -659,19 +661,25 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                                 Widget callBtn(
                                     String asset, IconData fallback,
                                     bool beating, VoidCallback onTap,
-                                    String tooltip) {
-                                  final btn = GestureDetector(
-                                    onTap: onTap,
-                                    child: Image.asset(
-                                      asset,
-                                      width: 24,
-                                      height: 24,
-                                      fit: BoxFit.contain,
-                                      errorBuilder:
-                                          (context, error, stackTrace) => Icon(
-                                        fallback,
-                                        color: Colors.white,
-                                        size: 22,
+                                    String tooltip,
+                                    {double size = 24,
+                                    double fallbackSize = 22}) {
+                                  final btn = Tooltip(
+                                    message: tooltip,
+                                    child: GestureDetector(
+                                      onTap: onTap,
+                                      child: Image.asset(
+                                        asset,
+                                        width: size,
+                                        height: size,
+                                        fit: BoxFit.contain,
+                                        errorBuilder: (context, error,
+                                                stackTrace) =>
+                                            Icon(
+                                          fallback,
+                                          color: Colors.white,
+                                          size: fallbackSize,
+                                        ),
                                       ),
                                     ),
                                   );
@@ -688,14 +696,22 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                                       audioActive,
                                       () => _startCall(CallType.audio),
                                       'Audio call',
+                                      size: 18,
+                                      fallbackSize: 16,
                                     ),
-                                    const SizedBox(width: 12),
-                                    callBtn(
-                                      'assets/icons/video-call.png',
-                                      Icons.videocam,
-                                      videoActive,
-                                      () => _startCall(CallType.video),
-                                      'Video call',
+                                    const SizedBox(width: 14),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 4),
+                                      child: callBtn(
+                                        'assets/icons/video-call.png',
+                                        Icons.videocam,
+                                        videoActive,
+                                        () => _startCall(CallType.video),
+                                        'Video call',
+                                        size: 28,
+                                        fallbackSize: 26,
+                                      ),
                                     ),
                                   ],
                                 );

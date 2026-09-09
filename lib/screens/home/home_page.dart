@@ -18,7 +18,11 @@ import '../../widgets/animated_background.dart';
 import '../../services/auth/user_service.dart';
 import '../../services/friends/friend_service.dart';
 import '../../services/notification/notification_service.dart';
+import '../../services/group/group_service.dart';
+import '../../services/direct/direct_service.dart';
 import '../../models/notification_entity.dart';
+import '../../models/group_chat.dart';
+import '../../models/direct_chat.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -39,7 +43,7 @@ class _HomePageState extends State<HomePage> {
     AllGamesScreen(),
   ];
 
-  static const _activeColor = Color(0xFF7D56F5);
+  static const _activeColor = Color(0xFFFE4EF0);
   static const _inactiveColor = Color(0x80FFFFFF);
 
   @override
@@ -83,11 +87,18 @@ class _HomePageState extends State<HomePage> {
               left: 16,
               right: 16,
               bottom: bottomPadding + 20,
-              child: BlobNavBar(
-                currentIndex: _currentIndex,
-                activeColor: _activeColor,
-                inactiveColor: _inactiveColor,
-                onTap: (index) => setState(() => _currentIndex = index),
+              child: StreamBuilder<User?>(
+                stream: FirebaseAuth.instance.authStateChanges(),
+                initialData: FirebaseAuth.instance.currentUser,
+                builder: (context, authSnap) {
+                  return BlobNavBar(
+                    currentIndex: _currentIndex,
+                    activeColor: _activeColor,
+                    inactiveColor: _inactiveColor,
+                    uid: authSnap.data?.uid ?? '',
+                    onTap: (index) => setState(() => _currentIndex = index),
+                  );
+                },
               ),
             ),
           ],
@@ -104,6 +115,7 @@ class BlobNavBar extends StatefulWidget {
   final Color activeColor;
   final Color inactiveColor;
   final ValueChanged<int> onTap;
+  final String uid;
 
   const BlobNavBar({
     super.key,
@@ -111,6 +123,7 @@ class BlobNavBar extends StatefulWidget {
     required this.activeColor,
     required this.inactiveColor,
     required this.onTap,
+    this.uid = '',
   });
 
   static const _iconColor = Color(0x80FFFFFF);
@@ -275,6 +288,7 @@ class _BlobNavBarState extends State<BlobNavBar>
                         activeColor: widget.activeColor,
                         iconColor: BlobNavBar._iconColor,
                         onTap: () => widget.onTap(1),
+                        badge: _ChatNavBadge(uid: widget.uid),
                       ),
                     ],
                   ),
@@ -305,6 +319,7 @@ class _BlobNavBarState extends State<BlobNavBar>
                         item: const _NavDef(
                           index: 4,
                           asset: 'assets/icons/avatar.png',
+                          size: 20,
                         ),
                         isActive: widget.currentIndex == 4,
                         activeColor: widget.activeColor,
@@ -628,6 +643,7 @@ class _NavIconButton extends StatefulWidget {
   final Color activeColor;
   final Color iconColor;
   final VoidCallback onTap;
+  final Widget? badge;
 
   const _NavIconButton({
     required this.item,
@@ -635,6 +651,7 @@ class _NavIconButton extends StatefulWidget {
     required this.activeColor,
     required this.iconColor,
     required this.onTap,
+    this.badge,
   });
 
   @override
@@ -661,20 +678,193 @@ class _NavIconButtonState extends State<_NavIconButton> {
         duration: const Duration(milliseconds: 120),
         child: Padding(
           padding: const EdgeInsets.all(6),
-          child: ColorFiltered(
-            colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
-            child: Image.asset(
-              widget.item.asset,
-              width: widget.item.size ?? 26,
-              height: widget.item.size ?? 26,
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) {
-                return Icon(
-                  Icons.circle,
-                  color: color,
-                  size: widget.item.size ?? 26,
-                );
-              },
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              ColorFiltered(
+                colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+                child: Image.asset(
+                  widget.item.asset,
+                  width: widget.item.size ?? 26,
+                  height: widget.item.size ?? 26,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Icon(
+                      Icons.circle,
+                      color: color,
+                      size: widget.item.size ?? 26,
+                    );
+                  },
+                ),
+              ),
+              if (widget.badge != null)
+                Positioned(
+                  right: -2,
+                  top: 0,
+                  child: IgnorePointer(child: widget.badge!),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Chat unread-conversation badge ──────────────────────────────────────────
+
+class _ChatNavBadge extends StatelessWidget {
+  final String uid;
+  const _ChatNavBadge({required this.uid});
+
+  bool _groupUnread(GroupChat g, String uid) {
+    return g.lastMessage != null &&
+        g.lastMessageSenderId != null &&
+        g.lastMessageSenderId != uid &&
+        !g.lastMessageReadBy.contains(uid);
+  }
+
+  bool _directUnread(DirectChat d, String uid) {
+    return d.lastMessage != null &&
+        d.lastMessageSenderId != null &&
+        d.lastMessageSenderId != uid &&
+        !d.lastMessageReadBy.contains(uid);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (uid.isEmpty) return const SizedBox.shrink();
+    final groupService = GroupService();
+    final directService = DirectService();
+    return StreamBuilder<List<GroupChat>>(
+      stream: groupService.getUserGroupsStream(uid),
+      builder: (context, groupSnap) {
+        if (groupSnap.hasError) return const SizedBox.shrink();
+        final groups = groupSnap.data ?? [];
+        return StreamBuilder<List<DirectChat>>(
+          stream: directService.getUserChatsStream(uid),
+          builder: (context, dmSnap) {
+            if (dmSnap.hasError) return const SizedBox.shrink();
+            final directs = dmSnap.data ?? [];
+            var count = 0;
+            for (final g in groups) {
+              if (_groupUnread(g, uid)) count++;
+            }
+            for (final d in directs) {
+              if (_directUnread(d, uid)) count++;
+            }
+            if (count == 0) return const SizedBox.shrink();
+            return _PulsingChatBadge(count: count);
+          },
+        );
+      },
+    );
+  }
+}
+
+// ── Pulsing chat badge (gentle pulse like _PulseDot, 1.1s) ─────────────────
+
+class _PulsingChatBadge extends StatefulWidget {
+  final int count;
+  const _PulsingChatBadge({required this.count});
+
+  @override
+  State<_PulsingChatBadge> createState() => _PulsingChatBadgeState();
+}
+
+class _PulsingChatBadgeState extends State<_PulsingChatBadge>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    )..repeat(reverse: true);
+    _scale = Tween<double>(begin: 1.0, end: 1.3).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.of(context).disableAnimations) {
+      return _badge(1.0);
+    }
+    return AnimatedBuilder(
+      animation: _scale,
+      builder: (_, __) => Stack(
+        alignment: Alignment.center,
+        children: [
+          Transform.scale(
+            scale: _scale.value,
+            child: _circle(_scale.value),
+          ),
+          _label(),
+        ],
+      ),
+    );
+  }
+
+  Widget _badge(double scale) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        _circle(scale),
+        _label(),
+      ],
+    );
+  }
+
+  Widget _label() {
+    return Text(
+      widget.count > 9 ? '9+' : '${widget.count}',
+      style: const TextStyle(
+        fontSize: 8,
+        fontWeight: FontWeight.w700,
+        color: Color(0xFFFE4EF0),
+        fontFamily: 'Poppins',
+        height: 1.0,
+      ),
+    );
+  }
+
+  Widget _circle(double scale) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 0),
+      constraints: const BoxConstraints(minWidth: 10, minHeight: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF190831),
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF190831).withValues(alpha: 0.6),
+            blurRadius: 8 * scale,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      // Invisible sizing text so the animated circle keeps the same
+      // size as the label without scaling the visible number itself.
+      child: Center(
+        child: Opacity(
+          opacity: 0,
+          child: Text(
+            widget.count > 9 ? '9+' : '${widget.count}',
+            style: const TextStyle(
+              fontSize: 8,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Poppins',
+              height: 1.0,
             ),
           ),
         ),
