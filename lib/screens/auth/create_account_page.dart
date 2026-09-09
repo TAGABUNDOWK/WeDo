@@ -520,6 +520,7 @@ class _Step1EmailState extends State<_Step1Email> {
   final _emailCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
+  String? _emailError;
 
   final _authService = AuthService();
   final _otpService = OtpService();
@@ -534,7 +535,10 @@ class _Step1EmailState extends State<_Step1Email> {
   Future<void> _onSubmit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _emailError = null;
+    });
 
     try {
       final email = _emailCtrl.text.trim();
@@ -553,22 +557,9 @@ class _Step1EmailState extends State<_Step1Email> {
         final msg = signUpError.toString();
         debugPrint('[OTP FLOW] signUp FAILED: $msg');
         if (msg.contains('email-already-in-use')) {
-          debugPrint('[OTP FLOW] Email already in use, trying signIn...');
-          try {
-            final credential = await _authService.signIn(
-              email,
-              'temp_placeholder_otp',
-            );
-            userId = credential.user!.uid;
-            debugPrint('[OTP FLOW] signIn SUCCESS: userId=$userId');
-            await FirebaseAuth.instance.signOut();
-            debugPrint('[OTP FLOW] Signed out immediately after signIn');
-          } catch (signInError) {
-            debugPrint('[OTP FLOW] signIn FAILED: $signInError');
-            throw Exception(
-              'This email is already registered. Please log in instead.',
-            );
-          }
+          debugPrint('[OTP FLOW] Email already in use');
+          setState(() => _emailError = 'Email already used');
+          return;
         } else {
           rethrow;
         }
@@ -624,7 +615,12 @@ class _Step1EmailState extends State<_Step1Email> {
                     height: 14,
                   ),
                 ),
+              ).copyWith(
+                errorText: _emailError,
               ),
+              onChanged: (_) {
+                if (_emailError != null) setState(() => _emailError = null);
+              },
               validator: (v) {
                 if (v == null || v.isEmpty) return 'Enter email';
                 if (!v.contains('@')) return 'Enter a valid email';

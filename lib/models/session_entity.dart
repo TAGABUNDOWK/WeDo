@@ -46,7 +46,6 @@ class SessionEntity {
   final List<String> participantUids;
   final DateTime createdAt;
   final DateTime expiresAt;
-  final DateTime? deleteAfter;
   final DateTime? hostLastSeen;
 
   const SessionEntity({
@@ -62,7 +61,6 @@ class SessionEntity {
     this.participantUids = const [],
     required this.createdAt,
     required this.expiresAt,
-    this.deleteAfter,
     this.hostLastSeen,
   });
 
@@ -83,7 +81,6 @@ class SessionEntity {
       participantUids: (map['participantUids'] as List?)?.cast<String>() ?? const [],
       createdAt: _parseTimestamp(map['createdAt']),
       expiresAt: _parseTimestamp(map['expiresAt']),
-      deleteAfter: map['deleteAfter'] != null ? _parseTimestamp(map['deleteAfter']) : null,
       hostLastSeen: map['hostLastSeen'] != null ? _parseTimestamp(map['hostLastSeen']) : null,
     );
   }
@@ -101,7 +98,6 @@ class SessionEntity {
       'participantUids': participantUids,
       'createdAt': Timestamp.fromDate(createdAt),
       'expiresAt': Timestamp.fromDate(expiresAt),
-      if (deleteAfter != null) 'deleteAfter': Timestamp.fromDate(deleteAfter!),
       if (hostLastSeen != null) 'hostLastSeen': Timestamp.fromDate(hostLastSeen!),
     };
   }
@@ -119,7 +115,6 @@ class SessionEntity {
     List<String>? participantUids,
     DateTime? createdAt,
     DateTime? expiresAt,
-    DateTime? deleteAfter,
     DateTime? hostLastSeen,
     bool clearSpeedShieldWinnerId = false,
     bool clearAggregatedResults = false,
@@ -144,7 +139,6 @@ class SessionEntity {
           clearParticipantUids ? const [] : (participantUids ?? this.participantUids),
       createdAt: createdAt ?? this.createdAt,
       expiresAt: expiresAt ?? this.expiresAt,
-      deleteAfter: deleteAfter ?? this.deleteAfter,
       hostLastSeen: clearHostLastSeen ? null : (hostLastSeen ?? this.hostLastSeen),
     );
   }
@@ -165,7 +159,6 @@ class SessionEntity {
         'aggregatedResults: $aggregatedResults, '
         'invitedUserIds: $invitedUserIds, '
         'participantUids: $participantUids, '
-        'deleteAfter: $deleteAfter, '
         'hostLastSeen: $hostLastSeen)';
   }
 

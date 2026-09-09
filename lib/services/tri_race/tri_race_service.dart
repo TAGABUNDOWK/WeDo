@@ -301,6 +301,59 @@ class TriRaceService {
     }
   }
 
+  // ──────────────────────────── User Stats ────────────────────────────────
+
+  /// Counts all finished TriRace sessions for a user (host + participant).
+  Future<int> getUserTotalTriRaces(String uid) async {
+    try {
+      final hostSnap = await _triRaces
+          .where('hostId', isEqualTo: uid)
+          .where('status', isEqualTo: 'finished')
+          .get();
+
+      final participantSnap = await _triRaces
+          .where('participantUids', arrayContains: uid)
+          .where('status', isEqualTo: 'finished')
+          .get();
+
+      final seen = <String>{};
+      for (final d in hostSnap.docs) {
+        seen.add(d.id);
+      }
+      for (final d in participantSnap.docs) {
+        seen.add(d.id);
+      }
+
+      return seen.length;
+    } catch (e) {
+      debugPrint('getUserTotalTriRaces error: $e');
+      return 0;
+    }
+  }
+
+  /// Counts TriRace wins (placement = 1) for a user.
+  Future<int> getUserTriRaceWins(String uid) async {
+    try {
+      final races = await getUserCompletedTriRaces(uid, limit: 1000);
+      int wins = 0;
+
+      for (final race in races) {
+        final participantSnap = await _participants(race.id)
+            .where('userId', isEqualTo: uid)
+            .where('placement', isEqualTo: 1)
+            .count()
+            .get();
+
+        if ((participantSnap.count ?? 0) > 0) wins++;
+      }
+
+      return wins;
+    } catch (e) {
+      debugPrint('getUserTriRaceWins error: $e');
+      return 0;
+    }
+  }
+
   // ──────────────────────────── Race Actions ───────────────────────────────
 
   /// Host starts the race: generates finishTimeMs, placement, speedSeed

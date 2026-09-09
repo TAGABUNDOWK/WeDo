@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import '../../models/topic_entity.dart';
 import '../../models/session_entity.dart';
 import '../../utils/constants.dart';
@@ -80,7 +81,6 @@ class SessionService {
       final code = await _generateUniqueCode();
       final now = DateTime.now();
       final expiresAt = now.add(const Duration(hours: 24));
-      final deleteAfter = now.add(const Duration(days: 30));
 
       final sessionData = {
         'sessionId': code,
@@ -90,7 +90,6 @@ class SessionService {
         'cards': cards,
         'createdAt': Timestamp.fromDate(now),
         'expiresAt': Timestamp.fromDate(expiresAt),
-        'deleteAfter': Timestamp.fromDate(deleteAfter),
         'hostLastSeen': FieldValue.serverTimestamp(),
       };
 
@@ -297,6 +296,38 @@ class SessionService {
     return results.take(limit).toList();
   }
 
+  // ──────────────────────────── User Stats ────────────────────────────────
+
+  /// Counts all completed PickFight sessions for a user (host + participant).
+  /// Uses client-side counting to avoid composite index requirements.
+  Future<int> getUserTotalMatches(String uid) async {
+    try {
+      final sessions = await getUserCompletedSessions(uid, limit: 10000);
+      return sessions.length;
+    } catch (e) {
+      debugPrint('getUserTotalMatches error: $e');
+      return 0;
+    }
+  }
+
+  /// Counts PickFight wins (speed shield winner) for a user.
+  /// Uses client-side counting to avoid composite index requirements.
+  Future<int> getUserPickFightWins(String uid) async {
+    try {
+      final sessions = await getUserCompletedSessions(uid, limit: 10000);
+      int wins = 0;
+      for (final session in sessions) {
+        if (session.speedShieldWinnerId == uid) {
+          wins++;
+        }
+      }
+      return wins;
+    } catch (e) {
+      debugPrint('getUserPickFightWins error: $e');
+      return 0;
+    }
+  }
+
   // ──────────────────────────── Session Actions ───────────────────────────
 
   /// Host starts the session: status "lobby" → "active".
@@ -497,13 +528,16 @@ class SessionService {
 
       // ── Speed Shield: first player to finish gets their card protected ──
       String speedShieldWinnerCardId = '';
+      String speedShieldWinnerId = '';
       if (sortedEntries.isNotEmpty) {
-        final fastest = sortedEntries.first.value;
-        speedShieldWinnerCardId = fastest['chosenWinnerCardId'] as String? ?? '';
+        final fastest = sortedEntries.first;
+        speedShieldWinnerId = fastest.key;
+        speedShieldWinnerCardId = fastest.value['chosenWinnerCardId'] as String? ?? '';
       }
 
       await _sessions.doc(sessionId).update({
         'status': SessionStatus.completed.value,
+        'speedShieldWinnerId': speedShieldWinnerId,
         'aggregatedResults': {
           'cardTally': cardTally,
           'winnerCardId': winnerCardId,

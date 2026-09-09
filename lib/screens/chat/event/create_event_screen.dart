@@ -5,6 +5,7 @@ import '../../../utils/constants.dart';
 import '../../../services/event/event_service.dart';
 import '../../../services/group/group_service.dart';
 import '../../../services/direct/direct_service.dart';
+import '../../../services/notification/notification_service.dart';
 
 class CreateEventScreen extends StatefulWidget {
   final String? groupId;
@@ -28,6 +29,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   final _eventService = EventService();
   final _groupService = GroupService();
   final _directService = DirectService();
+  final _notificationService = NotificationService();
   final _currentUser = FirebaseAuth.instance.currentUser;
 
   DateTime _selectedDate = DateTime.now();
@@ -264,6 +266,11 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
           eventId: eventId,
           title: title,
         );
+        await _sendEventNotifications(
+          eventId: eventId,
+          eventTitle: title,
+          groupId: widget.groupId!,
+        );
       } else if (widget.chatId != null) {
         await _directService.sendEventMessage(
           chatId: widget.chatId!,
@@ -271,6 +278,11 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
           senderName: _currentUser.displayName ?? _currentUser.email ?? 'Unknown',
           eventId: eventId,
           title: title,
+        );
+        await _sendEventNotifications(
+          eventId: eventId,
+          eventTitle: title,
+          chatId: widget.chatId!,
         );
       }
 
@@ -292,6 +304,49 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     } finally {
       if (mounted) setState(() => _isCreating = false);
     }
+  }
+
+  Future<void> _sendEventNotifications({
+    required String eventId,
+    required String eventTitle,
+    String? groupId,
+    String? chatId,
+  }) async {
+    try {
+      final user = _currentUser;
+      if (user == null) return;
+      final senderName = user.displayName ?? user.email ?? 'Unknown';
+
+      if (groupId != null) {
+        final members = await _groupService.getGroupMembersWithNames(groupId);
+        for (final member in members) {
+          final uid = member['uid'] as String;
+          if (uid == user.uid) continue;
+          await _notificationService.createEventCreatedNotification(
+            recipientId: uid,
+            senderId: user.uid,
+            senderName: senderName,
+            eventId: eventId,
+            eventTitle: eventTitle,
+            groupId: groupId,
+          );
+        }
+      } else if (chatId != null) {
+        final chat = await _directService.getChat(chatId);
+        if (chat == null) return;
+        final otherUid = chat.otherUserId(user.uid);
+        if (otherUid.isEmpty) return;
+        await _notificationService.createEventCreatedNotification(
+          recipientId: otherUid,
+          senderId: user.uid,
+          senderName: senderName,
+          eventId: eventId,
+          eventTitle: eventTitle,
+          chatId: chatId,
+          otherUid: user.uid,
+        );
+      }
+    } catch (_) {}
   }
 
   @override

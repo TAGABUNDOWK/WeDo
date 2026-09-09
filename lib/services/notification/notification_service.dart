@@ -89,28 +89,61 @@ class NotificationService {
     await batch.commit();
   }
 
-  Future<void> createPollVoteNotification({
-    required String creatorId,
-    required String voterId,
-    required String voterName,
-    required String pollId,
-    required String question,
-    required bool isSecret,
+  Future<void> createEventCreatedNotification({
+    required String recipientId,
+    required String senderId,
+    required String senderName,
+    required String eventId,
+    required String eventTitle,
+    String? groupId,
+    String? chatId,
+    String? otherUid,
   }) async {
-    if (voterId == creatorId) return;
+    if (recipientId == senderId) return;
 
+    final chatType = groupId != null ? 'Group' : 'Direct Chat';
     final notification = NotificationEntity(
       notificationId: '',
-      type: NotificationType.pollVote,
-      title: 'New vote on your poll',
-      message: isSecret
-          ? 'Someone voted on: $question'
-          : '$voterName voted on: $question',
-      senderId: voterId,
-      relatedId: pollId,
+      type: NotificationType.eventCreated,
+      title: 'New Event Created',
+      message: "$senderName created '$eventTitle' in $chatType",
+      senderId: senderId,
+      relatedId: eventId,
+      groupId: groupId,
+      chatId: chatId,
+      otherUid: otherUid,
       createdAt: DateTime.now(),
     );
 
-    await _userNotifications(creatorId).add(notification.toMap());
+    await _userNotifications(recipientId).add(notification.toMap());
+  }
+
+  Future<void> createPollCreatedNotification({
+    required String recipientId,
+    required String senderId,
+    required String senderName,
+    required String pollId,
+    required String question,
+    String? groupId,
+    String? chatId,
+    String? otherUid,
+  }) async {
+    if (recipientId == senderId) return;
+
+    final chatType = groupId != null ? 'Group' : 'Direct Chat';
+    final notification = NotificationEntity(
+      notificationId: '',
+      type: NotificationType.pollCreated,
+      title: 'New Poll Created',
+      message: "$senderName created a poll in $chatType",
+      senderId: senderId,
+      relatedId: pollId,
+      groupId: groupId,
+      chatId: chatId,
+      otherUid: otherUid,
+      createdAt: DateTime.now(),
+    );
+
+    await _userNotifications(recipientId).add(notification.toMap());
   }
 }

@@ -12,11 +12,17 @@ import '../../features/spin_wheel/screens/wheel_screen.dart';
 import '../tri_race/tri_race_entry_screen.dart';
 import '../games/all_games_screen.dart';
 import '../chat/chat_tab.dart';
+import '../chat/group/group_chat_screen.dart';
+import '../chat/direct/direct_chat_screen.dart';
 import '../../widgets/animated_background.dart';
 import '../../services/auth/user_service.dart';
 import '../../services/friends/friend_service.dart';
 import '../../services/notification/notification_service.dart';
+import '../../services/group/group_service.dart';
+import '../../services/direct/direct_service.dart';
 import '../../models/notification_entity.dart';
+import '../../models/group_chat.dart';
+import '../../models/direct_chat.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -27,8 +33,6 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int _currentIndex = 0;
-  String? _avatarAsset;
-  String? _photoUrl;
 
   static const _tabs = [
     _HomeTab(),
@@ -39,26 +43,8 @@ class _HomePageState extends State<HomePage> {
     AllGamesScreen(),
   ];
 
-  static const _activeColor = Color(0xFF7D56F5);
+  static const _activeColor = Color(0xFFFE4EF0);
   static const _inactiveColor = Color(0x80FFFFFF);
-
-  @override
-  void initState() {
-    super.initState();
-    _loadUserProfile();
-  }
-
-  Future<void> _loadUserProfile() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-    final user = await UserService().getUserDocument(uid);
-    if (user != null && mounted) {
-      setState(() {
-        _avatarAsset = user.avatarAsset;
-        _photoUrl = user.photoUrl;
-      });
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -101,13 +87,18 @@ class _HomePageState extends State<HomePage> {
               left: 16,
               right: 16,
               bottom: bottomPadding + 20,
-              child: BlobNavBar(
-                currentIndex: _currentIndex,
-                activeColor: _activeColor,
-                inactiveColor: _inactiveColor,
-                avatarAsset: _avatarAsset,
-                photoUrl: _photoUrl,
-                onTap: (index) => setState(() => _currentIndex = index),
+              child: StreamBuilder<User?>(
+                stream: FirebaseAuth.instance.authStateChanges(),
+                initialData: FirebaseAuth.instance.currentUser,
+                builder: (context, authSnap) {
+                  return BlobNavBar(
+                    currentIndex: _currentIndex,
+                    activeColor: _activeColor,
+                    inactiveColor: _inactiveColor,
+                    uid: authSnap.data?.uid ?? '',
+                    onTap: (index) => setState(() => _currentIndex = index),
+                  );
+                },
               ),
             ),
           ],
@@ -124,8 +115,7 @@ class BlobNavBar extends StatefulWidget {
   final Color activeColor;
   final Color inactiveColor;
   final ValueChanged<int> onTap;
-  final String? avatarAsset;
-  final String? photoUrl;
+  final String uid;
 
   const BlobNavBar({
     super.key,
@@ -133,8 +123,7 @@ class BlobNavBar extends StatefulWidget {
     required this.activeColor,
     required this.inactiveColor,
     required this.onTap,
-    this.avatarAsset,
-    this.photoUrl,
+    this.uid = '',
   });
 
   static const _iconColor = Color(0x80FFFFFF);
@@ -299,6 +288,7 @@ class _BlobNavBarState extends State<BlobNavBar>
                         activeColor: widget.activeColor,
                         iconColor: BlobNavBar._iconColor,
                         onTap: () => widget.onTap(1),
+                        badge: _ChatNavBadge(uid: widget.uid),
                       ),
                     ],
                   ),
@@ -335,8 +325,6 @@ class _BlobNavBarState extends State<BlobNavBar>
                         activeColor: widget.activeColor,
                         iconColor: BlobNavBar._iconColor,
                         onTap: () => widget.onTap(4),
-                        avatarAsset: widget.avatarAsset,
-                        photoUrl: widget.photoUrl,
                       ),
                     ],
                   ),
@@ -655,8 +643,7 @@ class _NavIconButton extends StatefulWidget {
   final Color activeColor;
   final Color iconColor;
   final VoidCallback onTap;
-  final String? avatarAsset;
-  final String? photoUrl;
+  final Widget? badge;
 
   const _NavIconButton({
     required this.item,
@@ -664,8 +651,7 @@ class _NavIconButton extends StatefulWidget {
     required this.activeColor,
     required this.iconColor,
     required this.onTap,
-    this.avatarAsset,
-    this.photoUrl,
+    this.badge,
   });
 
   @override
@@ -678,9 +664,6 @@ class _NavIconButtonState extends State<_NavIconButton> {
   @override
   Widget build(BuildContext context) {
     final color = widget.isActive ? widget.activeColor : widget.iconColor;
-    final hasAvatarAsset = widget.avatarAsset != null && widget.avatarAsset!.isNotEmpty;
-    final hasPhotoUrl = widget.photoUrl != null && widget.photoUrl!.isNotEmpty;
-    final hasProfileImage = hasAvatarAsset || hasPhotoUrl;
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _isPressed = true),
@@ -695,63 +678,195 @@ class _NavIconButtonState extends State<_NavIconButton> {
         duration: const Duration(milliseconds: 120),
         child: Padding(
           padding: const EdgeInsets.all(6),
-          child: hasProfileImage
-              ? ClipOval(
-                  child: Container(
-                    width: widget.item.size ?? 26,
-                    height: widget.item.size ?? 26,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: widget.isActive ? widget.activeColor : Colors.transparent,
-                        width: 2,
-                      ),
-                    ),
-                    child: hasAvatarAsset
-                        ? Image.asset(
-                            widget.avatarAsset!,
-                            width: widget.item.size ?? 26,
-                            height: widget.item.size ?? 26,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Icon(
-                                Icons.person,
-                                color: color,
-                                size: widget.item.size ?? 26,
-                              );
-                            },
-                          )
-                        : Image.network(
-                            widget.photoUrl!,
-                            width: widget.item.size ?? 26,
-                            height: widget.item.size ?? 26,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Icon(
-                                Icons.person,
-                                color: color,
-                                size: widget.item.size ?? 26,
-                              );
-                            },
-                          ),
-                  ),
-                )
-              : ColorFiltered(
-                  colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
-                  child: Image.asset(
-                    widget.item.asset,
-                    width: widget.item.size ?? 26,
-                    height: widget.item.size ?? 26,
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Icon(
-                        Icons.circle,
-                        color: color,
-                        size: widget.item.size ?? 26,
-                      );
-                    },
-                  ),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              ColorFiltered(
+                colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+                child: Image.asset(
+                  widget.item.asset,
+                  width: widget.item.size ?? 26,
+                  height: widget.item.size ?? 26,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Icon(
+                      Icons.circle,
+                      color: color,
+                      size: widget.item.size ?? 26,
+                    );
+                  },
                 ),
+              ),
+              if (widget.badge != null)
+                Positioned(
+                  right: -2,
+                  top: 0,
+                  child: IgnorePointer(child: widget.badge!),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Chat unread-conversation badge ──────────────────────────────────────────
+
+class _ChatNavBadge extends StatelessWidget {
+  final String uid;
+  const _ChatNavBadge({required this.uid});
+
+  bool _groupUnread(GroupChat g, String uid) {
+    return g.lastMessage != null &&
+        g.lastMessageSenderId != null &&
+        g.lastMessageSenderId != uid &&
+        !g.lastMessageReadBy.contains(uid);
+  }
+
+  bool _directUnread(DirectChat d, String uid) {
+    return d.lastMessage != null &&
+        d.lastMessageSenderId != null &&
+        d.lastMessageSenderId != uid &&
+        !d.lastMessageReadBy.contains(uid);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (uid.isEmpty) return const SizedBox.shrink();
+    final groupService = GroupService();
+    final directService = DirectService();
+    return StreamBuilder<List<GroupChat>>(
+      stream: groupService.getUserGroupsStream(uid),
+      builder: (context, groupSnap) {
+        if (groupSnap.hasError) return const SizedBox.shrink();
+        final groups = groupSnap.data ?? [];
+        return StreamBuilder<List<DirectChat>>(
+          stream: directService.getUserChatsStream(uid),
+          builder: (context, dmSnap) {
+            if (dmSnap.hasError) return const SizedBox.shrink();
+            final directs = dmSnap.data ?? [];
+            var count = 0;
+            for (final g in groups) {
+              if (_groupUnread(g, uid)) count++;
+            }
+            for (final d in directs) {
+              if (_directUnread(d, uid)) count++;
+            }
+            if (count == 0) return const SizedBox.shrink();
+            return _PulsingChatBadge(count: count);
+          },
+        );
+      },
+    );
+  }
+}
+
+// ── Pulsing chat badge (gentle pulse like _PulseDot, 1.1s) ─────────────────
+
+class _PulsingChatBadge extends StatefulWidget {
+  final int count;
+  const _PulsingChatBadge({required this.count});
+
+  @override
+  State<_PulsingChatBadge> createState() => _PulsingChatBadgeState();
+}
+
+class _PulsingChatBadgeState extends State<_PulsingChatBadge>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    )..repeat(reverse: true);
+    _scale = Tween<double>(begin: 1.0, end: 1.3).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.of(context).disableAnimations) {
+      return _badge(1.0);
+    }
+    return AnimatedBuilder(
+      animation: _scale,
+      builder: (_, __) => Stack(
+        alignment: Alignment.center,
+        children: [
+          Transform.scale(
+            scale: _scale.value,
+            child: _circle(_scale.value),
+          ),
+          _label(),
+        ],
+      ),
+    );
+  }
+
+  Widget _badge(double scale) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        _circle(scale),
+        _label(),
+      ],
+    );
+  }
+
+  Widget _label() {
+    return Text(
+      widget.count > 9 ? '9+' : '${widget.count}',
+      style: const TextStyle(
+        fontSize: 8,
+        fontWeight: FontWeight.w700,
+        color: Color(0xFFFE4EF0),
+        fontFamily: 'Poppins',
+        height: 1.0,
+      ),
+    );
+  }
+
+  Widget _circle(double scale) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 0),
+      constraints: const BoxConstraints(minWidth: 10, minHeight: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF190831),
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF190831).withValues(alpha: 0.6),
+            blurRadius: 8 * scale,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      // Invisible sizing text so the animated circle keeps the same
+      // size as the label without scaling the visible number itself.
+      child: Center(
+        child: Opacity(
+          opacity: 0,
+          child: Text(
+            widget.count > 9 ? '9+' : '${widget.count}',
+            style: const TextStyle(
+              fontSize: 8,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Poppins',
+              height: 1.0,
+            ),
+          ),
         ),
       ),
     );
@@ -828,7 +943,7 @@ const _featureCards = [
   _FeatureCardData(
     image: 'assets/images/Flashcards.png',
     badge: 'TRY NOW',
-    title: 'Flashcards Mode',
+    title: 'PickFight',
     description: 'Learn faster, one card at a time.',
     badgeColor: Color(0xFF800DD8),
   ),
@@ -842,7 +957,7 @@ const _featureCards = [
   _FeatureCardData(
     image: 'assets/images/SpinWheel.png',
     badge: 'SPIN IT',
-    title: 'Cyber Spin Wheel',
+    title: 'Wheel',
     description: 'Spin the wheel, let it choose your next move.',
     badgeColor: Color(0xFFFFD93D),
   ),
@@ -1083,6 +1198,32 @@ class _HomeTabState extends State<_HomeTab> {
                                 await _notificationService.markAsRead(
                                     _uid, notif.notificationId);
                               }
+                              if (mounted) {
+                                setState(() => _showNotifications = false);
+                              }
+                              if (notif.type == NotificationType.eventCreated ||
+                                  notif.type == NotificationType.pollCreated) {
+                                final groupId = notif.groupId;
+                                final chatId = notif.chatId;
+                                if (groupId != null) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => GroupChatScreen(groupId: groupId),
+                                    ),
+                                  );
+                                } else if (chatId != null && notif.otherUid != null) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => DirectChatScreen(
+                                        chatId: chatId,
+                                        otherUid: notif.otherUid!,
+                                      ),
+                                    ),
+                                  );
+                                }
+                              }
                             },
                           );
                         },
@@ -1223,7 +1364,9 @@ class _NotificationItem extends StatelessWidget {
         return Icons.person_add;
       case NotificationType.friendRequestAccepted:
         return Icons.check_circle;
-      case NotificationType.pollVote:
+      case NotificationType.eventCreated:
+        return Icons.event;
+      case NotificationType.pollCreated:
         return Icons.how_to_vote;
     }
   }
@@ -1234,8 +1377,10 @@ class _NotificationItem extends StatelessWidget {
         return const Color(0xFFFE4EF0);
       case NotificationType.friendRequestAccepted:
         return const Color(0xFF4CAF50);
-      case NotificationType.pollVote:
-        return const Color(0xFFE91E63);
+      case NotificationType.eventCreated:
+        return const Color(0xFF2196F3);
+      case NotificationType.pollCreated:
+        return const Color(0xFF9C27B0);
     }
   }
 
@@ -1639,20 +1784,20 @@ class _NowPlayingCard {
 const _nowPlayingGames = [
   _NowPlayingCard(
     imagePath: 'assets/images/Flashcards.png',
-    title: 'Flashcards Mode',
-    statusLabel: '856 Online',
+    title: 'PickFight',
+    statusLabel: 'Online Match',
     statusColor: Colors.greenAccent,
   ),
   _NowPlayingCard(
     imagePath: 'assets/images/SpinWheel.png',
     title: 'Spin the Wheel',
-    statusLabel: '1.2k Online',
+    statusLabel: 'Local',
     statusColor: Colors.greenAccent,
   ),
   _NowPlayingCard(
     imagePath: 'assets/images/TriRace.png',
     title: 'TriRace',
-    statusLabel: 'Local Match',
+    statusLabel: 'Online Match',
     statusColor: Colors.pinkAccent,
   ),
 ];
@@ -1727,7 +1872,7 @@ class _NowPlayingCardWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        if (data.title == 'Flashcards Mode') {
+        if (data.title == 'PickFight') {
           Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const SessionEntryScreen()),
           );

@@ -3,7 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 enum NotificationType {
   friendRequest,
   friendRequestAccepted,
-  pollVote;
+  eventCreated,
+  pollCreated;
 
   factory NotificationType.fromString(String? value) {
     return NotificationType.values.firstWhere(
@@ -37,6 +38,9 @@ class NotificationEntity {
   final String message;
   final String? senderId;
   final String? relatedId;
+  final String? groupId;
+  final String? chatId;
+  final String? otherUid;
   final bool isRead;
   final NotificationStatus status;
   final DateTime createdAt;
@@ -48,6 +52,9 @@ class NotificationEntity {
     required this.message,
     this.senderId,
     this.relatedId,
+    this.groupId,
+    this.chatId,
+    this.otherUid,
     this.isRead = false,
     this.status = NotificationStatus.pending,
     required this.createdAt,
@@ -61,6 +68,9 @@ class NotificationEntity {
       message: map['message'] as String? ?? '',
       senderId: map['sender_id'] as String?,
       relatedId: map['related_id'] as String?,
+      groupId: map['group_id'] as String?,
+      chatId: map['chat_id'] as String?,
+      otherUid: map['other_uid'] as String?,
       isRead: map['is_read'] as bool? ?? false,
       status: NotificationStatus.fromString(map['status'] as String?),
       createdAt: _parseTimestamp(map['created_at']),
@@ -74,6 +84,9 @@ class NotificationEntity {
       'message': message,
       'sender_id': senderId,
       'related_id': relatedId,
+      'group_id': groupId,
+      'chat_id': chatId,
+      'other_uid': otherUid,
       'is_read': isRead,
       'status': status.value,
       'created_at': FieldValue.serverTimestamp(),
@@ -87,11 +100,17 @@ class NotificationEntity {
     String? message,
     String? senderId,
     String? relatedId,
+    String? groupId,
+    String? chatId,
+    String? otherUid,
     bool? isRead,
     NotificationStatus? status,
     DateTime? createdAt,
     bool clearSenderId = false,
     bool clearRelatedId = false,
+    bool clearGroupId = false,
+    bool clearChatId = false,
+    bool clearOtherUid = false,
   }) {
     return NotificationEntity(
       notificationId: notificationId ?? this.notificationId,
@@ -100,6 +119,9 @@ class NotificationEntity {
       message: message ?? this.message,
       senderId: clearSenderId ? null : (senderId ?? this.senderId),
       relatedId: clearRelatedId ? null : (relatedId ?? this.relatedId),
+      groupId: clearGroupId ? null : (groupId ?? this.groupId),
+      chatId: clearChatId ? null : (chatId ?? this.chatId),
+      otherUid: clearOtherUid ? null : (otherUid ?? this.otherUid),
       isRead: isRead ?? this.isRead,
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,

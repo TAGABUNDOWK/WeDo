@@ -23,39 +23,6 @@ exports.cleanupUserData = functions.auth.user().onDelete((user) =>
   cleanupUserDataByUid(user.uid)
 );
 
-// ──────────────────── Session Cleanup (runs every 2 days) ────────────────────
-
-async function cleanupExpiredSessions() {
-  const now = new Date();
-  const sessionsRef = db.collection('sessions');
-  const expiredSnap = await sessionsRef
-    .where('deleteAfter', '<=', now)
-    .limit(100)
-    .get();
-
-  if (expiredSnap.empty) return;
-
-  const batch = db.batch();
-
-  for (const sessionDoc of expiredSnap.docs) {
-    // Delete all participants subcollection docs
-    const participantsSnap = await sessionDoc.ref.collection('participants').get();
-    participantsSnap.docs.forEach((pDoc) => batch.delete(pDoc.ref));
-    // Delete the session document itself (safety net — TTL should also handle this)
-    batch.delete(sessionDoc.ref);
-  }
-
-  await batch.commit();
-  console.log(`Cleaned up ${expiredSnap.size} expired sessions`);
-}
-
-exports.scheduledSessionCleanup = functions.pubsub
-  .schedule('0 0 */2 * *')
-  .timeZone('Asia/Manila')
-  .onRun(async (context) => {
-    await cleanupExpiredSessions();
-  });
-
 // ──────────────────── Abandoned Lobby Cleanup (runs every 1 minute) ────────────────────
 
 async function cleanupAbandonedLobbies() {
@@ -493,49 +460,6 @@ exports.scheduledEventReminders = functions.pubsub
   .timeZone('Asia/Manila')
   .onRun(async (context) => {
     await sendEventReminders();
-  });
-
-// ──────────────────── TriRace Cleanup (runs every 2 days) ────────────────────
-
-async function cleanupExpiredTriRaces() {
-  const now = new Date();
-  const triRacesRef = db.collection('triRaces');
-  const expiredSnap = await triRacesRef
-    .where('status', 'in', ['finished', 'cancelled'])
-    .limit(100)
-    .get();
-
-  if (expiredSnap.empty) return;
-
-  const batch = db.batch();
-  let count = 0;
-
-  for (const raceDoc of expiredSnap.docs) {
-    const data = raceDoc.data();
-    const createdAt = data.createdAt?.toDate?.() || new Date(data.createdAt);
-    const ageMs = now.getTime() - createdAt.getTime();
-    const ageDays = ageMs / (1000 * 60 * 60 * 24);
-
-    // Delete after 30 days
-    if (ageDays < 30) continue;
-
-    const participantsSnap = await raceDoc.ref.collection('participants').get();
-    participantsSnap.docs.forEach((pDoc) => batch.delete(pDoc.ref));
-    batch.delete(raceDoc.ref);
-    count++;
-  }
-
-  if (count > 0) {
-    await batch.commit();
-    console.log(`Cleaned up ${count} expired TriRaces`);
-  }
-}
-
-exports.scheduledTriRaceCleanup = functions.pubsub
-  .schedule('0 0 */2 * *')
-  .timeZone('Asia/Manila')
-  .onRun(async (context) => {
-    await cleanupExpiredTriRaces();
   });
 
 // ──────────────────── TriRace Cancelled Notification ────────────────────
