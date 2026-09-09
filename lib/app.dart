@@ -51,23 +51,8 @@ class _MyAppState extends State<MyApp> {
         if (mounted) setState(() => _user = null);
       }
     }
-    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) async {
-      if (user != null) {
-        try {
-          final doc = await _userService.getUserDocument(user.uid);
-          if (doc == null) {
-            await FirebaseAuth.instance.signOut();
-            if (mounted) setState(() => _user = null);
-          } else {
-            if (mounted) setState(() => _user = user);
-          }
-        } catch (e) {
-          await FirebaseAuth.instance.signOut();
-          if (mounted) setState(() => _user = null);
-        }
-      } else {
-        if (mounted) setState(() => _user = null);
-      }
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (mounted) setState(() => _user = user);
     });
   }
 
