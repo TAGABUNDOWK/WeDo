@@ -21,19 +21,14 @@ class CreateSessionScreen extends StatefulWidget {
 class _CreateSessionScreenState extends State<CreateSessionScreen> {
   final _service = SessionService();
   final _currentUser = FirebaseAuth.instance.currentUser;
-  final _scrollController = ScrollController();
+  late final PageController _pageController;
 
   List<TopicEntity> _topics = [];
   List<_TopicEntry> _allTopics = [];
   bool _isLoading = true;
   bool _isCreating = false;
-  bool _isAnimating = false;
   String? _error;
-
-  final List<GlobalKey> _itemKeys = List.generate(20, (_) => GlobalKey());
-  final List<double> _scaleValues = List.filled(20, 1.0);
-  final List<double> _opacityValues = List.filled(20, 1.0);
-  final List<double> _translateYValues = List.filled(20, 0.0);
+  int _currentPage = 0;
 
   static const _hardcodedTopics = [
     _HardcodedTopic(
@@ -41,7 +36,7 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
       iconAsset: 'assets/icons/location.png',
     ),
     _HardcodedTopic(
-      title: 'Places to go',
+      title: 'Nearby Go to Places',
       iconAsset: 'assets/icons/nearby.png',
     ),
     _HardcodedTopic(
@@ -55,7 +50,7 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(_onScroll);
+    _pageController = PageController(viewportFraction: 0.75);
     _loadTopics();
   }
 
@@ -70,9 +65,7 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
 
   @override
   void dispose() {
-    _scrollController
-      ..removeListener(_onScroll)
-      ..dispose();
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -194,77 +187,10 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
   void _navigateHardcoded(String title) {
     if (title == 'Where should we eat?') {
       Navigator.push(context, MaterialPageRoute(builder: (_) => const WhereToEatScreen()));
-    } else if (title == 'Places to go') {
+    } else if (title == 'Nearby Go to Places') {
       Navigator.push(context, MaterialPageRoute(builder: (_) => const PlacesToGoScreen()));
     } else if (title == 'Movies to watch') {
       Navigator.push(context, MaterialPageRoute(builder: (_) => const MovieCategoryScreen()));
-    }
-  }
-
-  // ── Coverflow scroll tracking ──────────────────────────────────────────
-
-  void _onScroll() {
-    if (!_scrollController.hasClients) return;
-    final screenHeight = MediaQuery.of(context).size.height;
-    final screenCenter = screenHeight / 2;
-
-    for (int i = 0; i < _allTopics.length; i++) {
-      final key = _itemKeys[i];
-      if (key.currentContext == null) continue;
-
-      final box = key.currentContext!.findRenderObject() as RenderBox?;
-      if (box == null) continue;
-
-      final cardCenter = box.size.height / 2;
-      final cardTopLeft = box.localToGlobal(Offset.zero);
-      final cardCenterY = cardTopLeft.dy + cardCenter;
-      final signedOffset = cardCenterY - screenCenter;
-      final distance = signedOffset.abs();
-
-      final scale = (1.0 - (distance / screenCenter) * 1.0).clamp(0.35, 1.0);
-      final opacity = (1.0 - (distance / screenCenter) * 0.6).clamp(0.30, 1.0);
-      final translateY = -signedOffset * 0.1;
-
-      _scaleValues[i] = scale;
-      _opacityValues[i] = opacity;
-      _translateYValues[i] = translateY;
-    }
-    setState(() {});
-  }
-
-  // ── Tap-to-center ──────────────────────────────────────────────────────
-
-  void _onCardTap(int index) {
-    if (_isAnimating || !_scrollController.hasClients) return;
-
-    final key = _itemKeys[index];
-    if (key.currentContext == null) return;
-
-    final box = key.currentContext!.findRenderObject() as RenderBox?;
-    if (box == null) return;
-
-    final screenHeight = MediaQuery.of(context).size.height;
-    final screenCenter = screenHeight / 2;
-    final cardCenterY = box.localToGlobal(Offset.zero).dy + box.size.height / 2;
-    final distance = (cardCenterY - screenCenter).abs();
-
-    if (distance <= Responsive.centerThreshold(context)) {
-      _allTopics[index].onTap?.call();
-    } else {
-      _isAnimating = true;
-      final currentOffset = _scrollController.offset;
-      final delta = cardCenterY - screenCenter;
-      final target = (currentOffset + delta).clamp(
-        _scrollController.position.minScrollExtent,
-        _scrollController.position.maxScrollExtent,
-      );
-      _scrollController
-          .animateTo(
-            target,
-            duration: const Duration(milliseconds: 350),
-            curve: Curves.easeOutCubic,
-          )
-          .then((_) => _isAnimating = false);
     }
   }
 
@@ -304,7 +230,7 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
               else if (_isCreating)
                 _buildCreatingState()
               else
-                _buildCoverflowList(),
+                _buildHorizontalTopics(),
               _buildAppBar(),
             ],
           ),
@@ -408,48 +334,67 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
     );
   }
 
-  // ── Coverflow List ─────────────────────────────────────────────────────
+  // ── Horizontal Page View ──────────────────────────────────────────────
 
-  Widget _buildCoverflowList() {
+  Widget _buildHorizontalTopics() {
     final itemCount = _allTopics.length;
+    if (itemCount == 0) return const SizedBox.shrink();
 
-    return ListView.builder(
-      controller: _scrollController,
-      padding: EdgeInsets.symmetric(
-        vertical: Responsive.coverflowPadding(context),
-      ),
-      itemCount: itemCount,
-      itemBuilder: (context, index) {
-        final entry = _allTopics[index];
-        final scale = _scaleValues[index];
-        final opacity = _opacityValues[index];
-        final translateY = _translateYValues[index];
+    final cardW = Responsive.cardWidth(context);
+    final cardH = cardW * 0.60;
 
-        return Padding(
-          padding: EdgeInsets.zero,
-          child: Center(
-            child: GestureDetector(
-              onTap: () => _onCardTap(index),
-              child: Transform.translate(
-                offset: Offset(0, translateY),
-                child: Transform.scale(
-                  scale: scale,
-                  alignment: Alignment.center,
-                  child: Opacity(
-                    opacity: opacity,
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            height: cardH + 20,
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: itemCount,
+              onPageChanged: (i) => setState(() => _currentPage = i),
+              physics: const BouncingScrollPhysics(),
+              itemBuilder: (context, index) {
+                final entry = _allTopics[index];
+                return GestureDetector(
+                  onTap: () => entry.onTap?.call(),
+                  child: Center(
                     child: TopicCard(
-                      key: _itemKeys[index],
                       label: entry.title,
                       icon: entry.icon,
                       onTap: null,
+                      width: cardW,
+                      height: cardH,
                     ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
           ),
+          _buildDotIndicators(itemCount),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDotIndicators(int count) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(count, (i) {
+        final isActive = i == _currentPage;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          width: isActive ? 16 : 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: isActive
+                ? const Color(0xFFFE4EF0)
+                : Colors.white.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(4),
+          ),
         );
-      },
+      }),
     );
   }
 

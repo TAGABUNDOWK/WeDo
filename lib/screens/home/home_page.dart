@@ -943,7 +943,7 @@ const _featureCards = [
   _FeatureCardData(
     image: 'assets/images/Flashcards.png',
     badge: 'TRY NOW',
-    title: 'Flashcards Mode',
+    title: 'PickFight',
     description: 'Learn faster, one card at a time.',
     badgeColor: Color(0xFF800DD8),
   ),
@@ -957,7 +957,7 @@ const _featureCards = [
   _FeatureCardData(
     image: 'assets/images/SpinWheel.png',
     badge: 'SPIN IT',
-    title: 'Cyber Spin Wheel',
+    title: 'Wheel',
     description: 'Spin the wheel, let it choose your next move.',
     badgeColor: Color(0xFFFFD93D),
   ),
@@ -1784,20 +1784,20 @@ class _NowPlayingCard {
 const _nowPlayingGames = [
   _NowPlayingCard(
     imagePath: 'assets/images/Flashcards.png',
-    title: 'Flashcards Mode',
-    statusLabel: '856 Online',
+    title: 'PickFight',
+    statusLabel: 'Online Match',
     statusColor: Colors.greenAccent,
   ),
   _NowPlayingCard(
     imagePath: 'assets/images/SpinWheel.png',
     title: 'Spin the Wheel',
-    statusLabel: '1.2k Online',
+    statusLabel: 'Local',
     statusColor: Colors.greenAccent,
   ),
   _NowPlayingCard(
     imagePath: 'assets/images/TriRace.png',
     title: 'TriRace',
-    statusLabel: 'Local Match',
+    statusLabel: 'Online Match',
     statusColor: Colors.pinkAccent,
   ),
 ];
@@ -1872,7 +1872,7 @@ class _NowPlayingCardWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        if (data.title == 'Flashcards Mode') {
+        if (data.title == 'PickFight') {
           Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const SessionEntryScreen()),
           );
