@@ -618,7 +618,7 @@ class _AccountScreenState extends State<AccountScreen>
                 children: [
                   _buildStatItem(count: friendsCount, label: 'Friends'),
                   _buildStatItem(count: 0, label: 'Following'),
-                  _buildStatItem(count: 0, label: 'Decisions'),
+                  _buildStatItem(count: 0, label: 'Followers'),
                 ],
               ),
             ),
