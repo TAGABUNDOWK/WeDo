@@ -13,6 +13,7 @@ import '../../widgets/animated_background.dart';
 import '../../widgets/arc_avatar_picker.dart';
 import '../../widgets/terms_agreement_dialog.dart';
 import 'edit_profile_page.dart';
+import 'account_info_screen.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -1053,8 +1054,11 @@ class _AccountScreenState extends State<AccountScreen>
             context: context,
             icon: Icons.credit_card,
             title: 'Account Info',
-            subtitle: 'Manage email, security & IDs',
-            onTap: () {},
+            subtitle: 'Email, password & deletion',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AccountInfoScreen()),
+            ),
             showDivider: true,
           ),
           _buildMenuItem(

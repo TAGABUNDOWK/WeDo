@@ -16,12 +16,12 @@ class OtpService {
     }
   }
 
-  Future<void> generateOTP(String userId, String email, {bool resend = false}) async {
+  Future<void> generateOTP(String userId, String email, {bool resend = false, String? purpose}) async {
     final response = await http
         .post(
           Uri.parse('$_baseUrl/generate-otp'),
           headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'userId': userId, 'email': email, 'resend': resend}),
+          body: jsonEncode({'userId': userId, 'email': email, 'resend': resend, 'purpose': purpose}),
         )
         .timeout(const Duration(seconds: 20));
 
@@ -44,4 +44,19 @@ class OtpService {
       throw Exception(_parseError(response));
     }
   }
+
+  Future<void> verifyEmailChangeOTP(String userId, String code, String newEmail) async {
+    final response = await http
+        .post(
+          Uri.parse('$_baseUrl/verify-email-change'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'userId': userId, 'code': code, 'newEmail': newEmail}),
+        )
+        .timeout(const Duration(seconds: 20));
+
+    if (response.statusCode != 200) {
+      throw Exception(_parseError(response));
+    }
+  }
+
 }

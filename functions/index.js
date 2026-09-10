@@ -23,6 +23,57 @@ exports.cleanupUserData = functions.auth.user().onDelete((user) =>
   cleanupUserDataByUid(user.uid)
 );
 
+// ──────────────────── Scheduled Account Deletion (runs every 1 hour) ────────────────────
+
+async function processScheduledDeletions() {
+  const now = new Date();
+  const { getStorage } = require('firebase-admin/storage');
+  const { getAuth } = require('firebase-admin/auth');
+  const auth = getAuth();
+  const storage = getStorage();
+
+  // Find users with scheduled_deletion_at <= now
+  const snapshot = await db.collection('users')
+    .where('scheduled_deletion_at', '<=', now)
+    .limit(50)
+    .get();
+
+  if (snapshot.empty) return;
+
+  let deletedCount = 0;
+
+  for (const doc of snapshot.docs) {
+    const uid = doc.id;
+    try {
+      // Delete Firebase Storage file
+      try {
+        await storage.bucket().file(`profile_photos/${uid}.jpg`).delete();
+      } catch (_) {}
+
+      // Delete Firebase Auth user (triggers cleanupUserData Cloud Function)
+      await auth.deleteUser(uid);
+      deletedCount++;
+      console.log(`Deleted account for user ${uid}`);
+    } catch (error) {
+      console.error(`Failed to delete account ${uid}:`, error.message);
+      // If user doesn't exist in Auth, clean up Firestore directly
+      if (error.code === 'auth/user-not-found') {
+        await cleanupUserDataByUid(uid);
+        deletedCount++;
+      }
+    }
+  }
+
+  console.log(`Processed ${deletedCount} scheduled account deletions`);
+}
+
+exports.scheduledAccountDeletion = functions.pubsub
+  .schedule('every 1 hours')
+  .timeZone('Asia/Manila')
+  .onRun(async (context) => {
+    await processScheduledDeletions();
+  });
+
 // ──────────────────── Session Cleanup (runs every 2 days) ────────────────────
 
 async function cleanupExpiredSessions() {

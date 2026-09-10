@@ -19,6 +19,8 @@ class UserEntity {
   final double? longitude;
   final String? geohash;
   final DateTime? lastLocationAt;
+  final DateTime? deletionRequestedAt;
+  final DateTime? scheduledDeletionAt;
 
   UserEntity({
     required this.userId,
@@ -39,6 +41,8 @@ class UserEntity {
     this.longitude,
     this.geohash,
     this.lastLocationAt,
+    this.deletionRequestedAt,
+    this.scheduledDeletionAt,
   });
 
   factory UserEntity.fromJson(Map<String, dynamic> json) {
@@ -61,6 +65,8 @@ class UserEntity {
       longitude: (json['longitude'] as num?)?.toDouble(),
       geohash: json['geohash'] as String?,
       lastLocationAt: _parseOptionalTimestamp(json['last_location_at']),
+      deletionRequestedAt: _parseOptionalTimestamp(json['deletion_requested_at']),
+      scheduledDeletionAt: _parseOptionalTimestamp(json['scheduled_deletion_at']),
     );
   }
 
@@ -84,6 +90,8 @@ class UserEntity {
       'longitude': longitude,
       'geohash': geohash,
       'last_location_at': lastLocationAt?.toIso8601String(),
+      'deletion_requested_at': deletionRequestedAt?.toIso8601String(),
+      'scheduled_deletion_at': scheduledDeletionAt?.toIso8601String(),
     };
   }
 
@@ -119,6 +127,8 @@ class UserEntity {
     double? longitude,
     String? geohash,
     DateTime? lastLocationAt,
+    DateTime? deletionRequestedAt,
+    DateTime? scheduledDeletionAt,
   }) {
     return UserEntity(
       userId: userId ?? this.userId,
@@ -139,6 +149,8 @@ class UserEntity {
       longitude: longitude ?? this.longitude,
       geohash: geohash ?? this.geohash,
       lastLocationAt: lastLocationAt ?? this.lastLocationAt,
+      deletionRequestedAt: deletionRequestedAt ?? this.deletionRequestedAt,
+      scheduledDeletionAt: scheduledDeletionAt ?? this.scheduledDeletionAt,
     );
   }
 
