@@ -33,6 +33,7 @@ class AppConstants {
   static const String cardsSubcollection = 'cards';
   static const String sessionsCollection = 'sessions';
   static const String triRacesCollection = 'triRaces';
+  static const String userStatsCollection = 'userStats';
   static const String participantsSubcollection = 'participants';
   static const String notificationsCollection = 'notifications';
   static const String callsCollection = 'calls';

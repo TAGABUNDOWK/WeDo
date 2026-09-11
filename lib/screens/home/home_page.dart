@@ -15,6 +15,7 @@ import '../chat/chat_tab.dart';
 import '../chat/group/group_chat_screen.dart';
 import '../chat/direct/direct_chat_screen.dart';
 import '../../widgets/animated_background.dart';
+import '../../widgets/leaderboard/leaderboard_section.dart';
 import '../../services/auth/user_service.dart';
 import '../../services/friends/friend_service.dart';
 import '../../services/notification/notification_service.dart';
@@ -1319,6 +1320,8 @@ class _HomeTabState extends State<_HomeTab> {
               const _FeatureCarousel(),
               const SizedBox(height: 24),
               const _NowPlayingSection(),
+              const SizedBox(height: 28),
+              const LeaderboardSection(),
               const SizedBox(height: 28),
               const _StackedCards(),
               const SizedBox(height: 120),

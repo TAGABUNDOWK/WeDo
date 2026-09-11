@@ -31,6 +31,7 @@ class TriRace {
   final String? deletedBy;
   final List<String> invitedUserIds;
   final List<String> participantUids;
+  final String? winnerId;
 
   const TriRace({
     required this.id,
@@ -45,6 +46,7 @@ class TriRace {
     this.deletedBy,
     this.invitedUserIds = const [],
     this.participantUids = const [],
+    this.winnerId,
   });
 
   factory TriRace.fromMap(String id, Map<String, dynamic> map) {
@@ -63,6 +65,7 @@ class TriRace {
       deletedBy: map['deletedBy'] as String?,
       invitedUserIds: (map['invitedUserIds'] as List?)?.cast<String>() ?? const [],
       participantUids: (map['participantUids'] as List?)?.cast<String>() ?? const [],
+      winnerId: map['winnerId'] as String?,
     );
   }
 
@@ -79,6 +82,7 @@ class TriRace {
       if (deletedBy != null) 'deletedBy': deletedBy,
       'invitedUserIds': invitedUserIds,
       'participantUids': participantUids,
+      if (winnerId != null) 'winnerId': winnerId,
     };
   }
 
@@ -95,9 +99,11 @@ class TriRace {
     String? deletedBy,
     List<String>? invitedUserIds,
     List<String>? participantUids,
+    String? winnerId,
     bool clearRaceStartedAt = false,
     bool clearRaceDurationMs = false,
     bool clearDeletedBy = false,
+    bool clearWinnerId = false,
   }) {
     return TriRace(
       id: id ?? this.id,
@@ -112,6 +118,7 @@ class TriRace {
       deletedBy: clearDeletedBy ? null : (deletedBy ?? this.deletedBy),
       invitedUserIds: invitedUserIds ?? this.invitedUserIds,
       participantUids: participantUids ?? this.participantUids,
+      winnerId: clearWinnerId ? null : (winnerId ?? this.winnerId),
     );
   }
 
@@ -126,7 +133,7 @@ class TriRace {
   @override
   String toString() {
     return 'TriRace(id: $id, joinCode: $joinCode, hostId: $hostId, '
-        'status: ${status.value}, maxPlayers: $maxPlayers)';
+        'status: ${status.value}, maxPlayers: $maxPlayers, winnerId: $winnerId)';
   }
 
   @override

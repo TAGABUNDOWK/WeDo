@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../../models/tri_race_entity.dart';
 import '../../utils/constants.dart';
+import '../leaderboard/leaderboard_service.dart';
 
 class TriRaceService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -309,22 +310,29 @@ class TriRaceService {
       final hostSnap = await _triRaces
           .where('hostId', isEqualTo: uid)
           .where('status', isEqualTo: 'finished')
+          .count()
           .get();
 
       final participantSnap = await _triRaces
           .where('participantUids', arrayContains: uid)
           .where('status', isEqualTo: 'finished')
+          .count()
           .get();
 
-      final seen = <String>{};
-      for (final d in hostSnap.docs) {
-        seen.add(d.id);
-      }
-      for (final d in participantSnap.docs) {
-        seen.add(d.id);
-      }
+      final hostCount = hostSnap.count ?? 0;
+      final participantCount = participantSnap.count ?? 0;
 
-      return seen.length;
+      if (hostCount == 0) return participantCount;
+      if (participantCount == 0) return hostCount;
+
+      final overlapSnap = await _triRaces
+          .where('hostId', isEqualTo: uid)
+          .where('participantUids', arrayContains: uid)
+          .where('status', isEqualTo: 'finished')
+          .count()
+          .get();
+
+      return hostCount + participantCount - (overlapSnap.count ?? 0);
     } catch (e) {
       debugPrint('getUserTotalTriRaces error: $e');
       return 0;
@@ -334,20 +342,35 @@ class TriRaceService {
   /// Counts TriRace wins (placement = 1) for a user.
   Future<int> getUserTriRaceWins(String uid) async {
     try {
-      final races = await getUserCompletedTriRaces(uid, limit: 1000);
-      int wins = 0;
+      final hostWinSnap = await _triRaces
+          .where('hostId', isEqualTo: uid)
+          .where('winnerId', isEqualTo: uid)
+          .where('status', isEqualTo: 'finished')
+          .count()
+          .get();
 
-      for (final race in races) {
-        final participantSnap = await _participants(race.id)
-            .where('userId', isEqualTo: uid)
-            .where('placement', isEqualTo: 1)
-            .count()
-            .get();
+      final participantWinSnap = await _triRaces
+          .where('participantUids', arrayContains: uid)
+          .where('winnerId', isEqualTo: uid)
+          .where('status', isEqualTo: 'finished')
+          .count()
+          .get();
 
-        if ((participantSnap.count ?? 0) > 0) wins++;
-      }
+      final hostCount = hostWinSnap.count ?? 0;
+      final participantCount = participantWinSnap.count ?? 0;
 
-      return wins;
+      if (hostCount == 0) return participantCount;
+      if (participantCount == 0) return hostCount;
+
+      final overlapSnap = await _triRaces
+          .where('hostId', isEqualTo: uid)
+          .where('participantUids', arrayContains: uid)
+          .where('winnerId', isEqualTo: uid)
+          .where('status', isEqualTo: 'finished')
+          .count()
+          .get();
+
+      return hostCount + participantCount - (overlapSnap.count ?? 0);
     } catch (e) {
       debugPrint('getUserTriRaceWins error: $e');
       return 0;
@@ -497,10 +520,45 @@ class TriRaceService {
       final doc = await _triRaces.doc(raceId).get();
       if (!doc.exists) return;
       final data = doc.data() as Map<String, dynamic>;
-      if (data['status'] != TriRaceStatus.started.value) return;
+      final alreadyRecorded = data['statsRecorded'] == true;
+      if (!alreadyRecorded && data['status'] != TriRaceStatus.started.value) {
+        return;
+      }
+
+      var winnerId = '';
+      if (!alreadyRecorded) {
+        final participants = await _participants(raceId).get();
+        for (final p in participants.docs) {
+          final pData = p.data() as Map<String, dynamic>;
+          if ((pData['placement'] as num?)?.toInt() == 1) {
+            winnerId = (pData['userId'] as String?) ?? p.id;
+            break;
+          }
+        }
+      }
+
       await _triRaces.doc(raceId).update({
         'status': TriRaceStatus.finished.value,
+        if (!alreadyRecorded) 'statsRecorded': true,
+        if (!alreadyRecorded && winnerId.isNotEmpty) 'winnerId': winnerId,
       });
+
+      if (!alreadyRecorded) {
+        final participants = await _participants(raceId).get();
+        final participantIds = <String>[];
+        for (final p in participants.docs) {
+          final pData = p.data() as Map<String, dynamic>;
+          final uid = (pData['userId'] as String?) ?? p.id;
+          if (uid.startsWith('bot_')) continue;
+          participantIds.add(uid);
+        }
+        if (participantIds.isNotEmpty) {
+          await LeaderboardService().recordTriRaceResult(
+            participantIds: participantIds,
+            winnerId: winnerId,
+          );
+        }
+      }
     } on FirebaseException catch (e) {
       throw TriRaceException('Failed to finish race: ${e.message}');
     }
