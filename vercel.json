@@ -10,6 +10,10 @@
       "dest": "/api/verify-otp"
     },
     {
+      "src": "/verify-email-change",
+      "dest": "/api/verify-email-change"
+    },
+    {
       "src": "/tmdb",
       "dest": "/api/tmdb"
     }

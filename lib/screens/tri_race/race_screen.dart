@@ -661,7 +661,7 @@ class _TriangleLayerPainter extends CustomPainter {
         canvas.drawPath(path, fillPaint);
         // Sharp center
         fillPaint
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, 0)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 0)
           ..color = color;
       } else {
         fillPaint.color = color;

@@ -381,7 +381,7 @@ class _NearbySectionState extends State<_NearbySection> {
           padding: const EdgeInsets.only(bottom: 10),
           child: Row(
             children: [
-              Icon(Icons.people, color: AppColors.electricViolet, size: 18),
+              const Icon(Icons.people, color: AppColors.electricViolet, size: 18),
               const SizedBox(width: 6),
               const Expanded(
                 child: Text(
@@ -656,7 +656,7 @@ class _GlassCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry? padding;
 
-  const _GlassCard({required this.child, this.padding});
+  const _GlassCard({required this.child}) : padding = null;
 
   @override
   Widget build(BuildContext context) {
@@ -885,7 +885,7 @@ class _FriendsMapSectionState extends State<_FriendsMapSection> {
                                       ),
                                       child: const Text(
                                         'Me',
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontFamily: _font,
                                           fontSize: 10,
                                           fontWeight: FontWeight.w600,

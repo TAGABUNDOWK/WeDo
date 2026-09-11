@@ -266,13 +266,13 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       _directService.removeReaction(
         chatId: widget.chatId,
         messageId: msg.id,
-        uid: _currentUser!.uid,
+        uid: _currentUser.uid,
       );
     } else {
       _directService.addReaction(
         chatId: widget.chatId,
         messageId: msg.id,
-        uid: _currentUser!.uid,
+        uid: _currentUser.uid,
         emoji: emoji,
       );
     }
