@@ -14,10 +14,11 @@ import '../../../services/group/group_service.dart';
 import '../../../services/event/event_service.dart';
 import '../../../services/poll/poll_service.dart';
 import '../../../services/call/call_service.dart';
-import '../../../services/call/call_manager.dart';
+import '../../../services/user_cache.dart';
 import '../../../services/theme/chat_theme_resolver.dart';
 import '../../../utils/time_format.dart';
 import '../../../widgets/message_bubble.dart';
+import '../../../widgets/call_button.dart';
 import '../../../widgets/date_separator.dart';
 import '../../../widgets/invite_message_card.dart';
 import '../../../widgets/tri_race_invite_message_card.dart';
@@ -98,8 +99,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   Future<void> _preloadMemberProfiles(List<String> memberUids) async {
+    final cache = UserCache();
     final futures = memberUids.map((uid) async {
-      final user = await _groupService.getUser(uid);
+      final user = await cache.getUser(uid);
       if (user != null && mounted) {
         if (user.photoUrl != null && user.photoUrl!.isNotEmpty) {
           _memberPhotos[uid] = user.photoUrl!;
@@ -118,7 +120,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   Future<void> _loadMemberPhoto(String uid) async {
     if (_memberPhotos.containsKey(uid) && _memberAvatarAssets.containsKey(uid)) return;
-    final user = await _groupService.getUser(uid);
+    final cache = UserCache();
+    final user = await cache.getUser(uid);
     if (user != null && mounted) {
       if (user.photoUrl != null && user.photoUrl!.isNotEmpty) {
         _memberPhotos[uid] = user.photoUrl!;
@@ -671,80 +674,11 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                            ListenableBuilder(
-                              listenable: CallManager(),
-                              builder: (context, _) {
-                                final mgr = CallManager();
-                                bool matches(String? id) =>
-                                    id == widget.groupId;
-                                final active = mgr.activeCall;
-                                final outgoing = mgr.outgoingCall;
-                                final inCall = (active != null &&
-                                        matches(active.groupId)) ||
-                                    (outgoing != null &&
-                                        matches(outgoing.groupId));
-                                final activeType = active != null &&
-                                        matches(active.groupId)
-                                    ? active.callType
-                                    : (outgoing != null &&
-                                            matches(outgoing.groupId)
-                                        ? outgoing.callType
-                                        : null);
-                                final audioActive =
-                                    inCall && activeType == CallType.audio;
-                                final videoActive =
-                                    inCall && activeType == CallType.video;
-                                Widget callBtn(
-                                    String asset, IconData fallback,
-                                    bool beating, VoidCallback onTap,
-                                    {double size = 24,
-                                    double fallbackSize = 22}) {
-                                  final btn = GestureDetector(
-                                    onTap: onTap,
-                                    child: Image.asset(
-                                      asset,
-                                      width: size,
-                                      height: size,
-                                      fit: BoxFit.contain,
-                                      errorBuilder:
-                                          (context, error, stackTrace) => Icon(
-                                        fallback,
-                                        color: Colors.white,
-                                        size: fallbackSize,
-                                      ),
-                                    ),
-                                  );
-                                  if (!beating) return btn;
-                                  return _BeatingCircle(child: btn);
-                                }
-
-                                return Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    callBtn(
-                                      'assets/icons/call.png',
-                                      Icons.phone,
-                                      audioActive,
-                                      () => _startCall(CallType.audio),
-                                      size: 18,
-                                      fallbackSize: 16,
-                                    ),
-                                    const SizedBox(width: 14),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 4),
-                                      child: callBtn(
-                                        'assets/icons/video-call.png',
-                                        Icons.videocam,
-                                        videoActive,
-                                        () => _startCall(CallType.video),
-                                        size: 28,
-                                        fallbackSize: 26,
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              },
+                            CallButtons(
+                              chatId: widget.groupId,
+                              isGroup: true,
+                              onStartAudioCall: () => _startCall(CallType.audio),
+                              onStartVideoCall: () => _startCall(CallType.video),
                             ),
                           ],
                         ),
@@ -1434,57 +1368,6 @@ class _HeartbeatDotState extends State<_HeartbeatDot>
               size: 13,
             ),
           ),
-        );
-      },
-    );
-  }
-}
-
-// ── Beating-circle wrapper for an active call icon ───────────────────────────
-
-class _BeatingCircle extends StatefulWidget {
-  final Widget child;
-  const _BeatingCircle({required this.child});
-
-  @override
-  State<_BeatingCircle> createState() => _BeatingCircleState();
-}
-
-class _BeatingCircleState extends State<_BeatingCircle>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _ctrl,
-      builder: (context, _) {
-        return Container(
-          padding: const EdgeInsets.all(3),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: const Color(0xFFFE4EF0)
-                  .withValues(alpha: 0.4 + (_ctrl.value * 0.5)),
-              width: 2,
-            ),
-          ),
-          child: widget.child,
         );
       },
     );

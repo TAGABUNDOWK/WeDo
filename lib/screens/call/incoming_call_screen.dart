@@ -59,7 +59,11 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
   void _listenForCallEnd() {
     final callService = CallService();
     _callSub = callService.getCallStream(widget.call.id).listen((call) {
-      if (call == null || call.status == CallStatus.ended) {
+      if (call == null ||
+          call.status == CallStatus.ended ||
+          call.status == CallStatus.declined ||
+          call.status == CallStatus.missed ||
+          call.status == CallStatus.cancelled) {
         _ringtonePlayer.stop();
         if (mounted) Navigator.of(context).pop();
       }
@@ -125,7 +129,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
     _ringtonePlayer.stop();
     _sendMissedCallMessage();
     final callService = CallService();
-    callService.endCall(widget.call.id);
+    callService.declineCall(widget.call.id);
     Navigator.of(context).pop();
   }
 

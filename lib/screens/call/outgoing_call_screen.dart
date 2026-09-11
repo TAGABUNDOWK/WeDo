@@ -1,10 +1,8 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../models/call.dart';
 import '../../services/call/call_manager.dart';
-import '../../services/call/call_service.dart';
 
 class OutgoingCallScreen extends StatefulWidget {
   final Call call;
@@ -22,10 +20,8 @@ class OutgoingCallScreen extends StatefulWidget {
 
 class _OutgoingCallScreenState extends State<OutgoingCallScreen>
     with SingleTickerProviderStateMixin {
-  final CallService _callService = CallService();
   final CallManager _callManager = CallManager();
   final AudioPlayer _ringtonePlayer = AudioPlayer();
-  StreamSubscription? _callSub;
 
   RTCVideoRenderer? _localRenderer;
   bool _hasLocalStream = false;
@@ -44,7 +40,7 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
     _playRingtone();
-    _listenForCallStatus();
+    _callManager.addListener(_onCallManagerUpdate);
     _initLocalCamera();
     _callManager.trackOutgoingCall(
       callId: widget.call.id,
@@ -80,6 +76,7 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
           _localRenderer!.srcObject = stream;
           _hasLocalStream = true;
         });
+        _callManager.setOutgoingLocalStream(stream);
       }
     } catch (e) {
       debugPrint('Error initializing local camera for outgoing call: $e');
@@ -96,21 +93,12 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
     }
   }
 
-  void _listenForCallStatus() {
-    _callSub = _callService.getCallStream(widget.call.id).listen((call) {
-      if (call == null || call.status == CallStatus.ended) {
-        _endCall();
-        return;
-      }
-    });
-  }
-
-  void _endCall() {
-    _callSub?.cancel();
-    _ringtonePlayer.stop();
-    _disposeLocalCamera();
-    _callManager.cancelOutgoingCall();
-    if (mounted) Navigator.of(context).pop();
+  void _onCallManagerUpdate() {
+    if (!_callManager.hasOutgoingCall && mounted) {
+      _ringtonePlayer.stop();
+      _disposeLocalCamera();
+      Navigator.of(context).pop();
+    }
   }
 
   void _minimizeCall() {
@@ -123,7 +111,10 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
 
   void _disposeLocalCamera() {
     if (_localRenderer != null) {
-      _localRenderer!.srcObject?.getTracks().forEach((t) => t.stop());
+      final stream = _localRenderer!.srcObject;
+      if (stream != null && !_callManager.hasActiveCall) {
+        stream.getTracks().forEach((t) => t.stop());
+      }
       _localRenderer!.srcObject = null;
       _localRenderer!.dispose();
       _localRenderer = null;
@@ -133,7 +124,7 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
   @override
   void dispose() {
     _pulseController.dispose();
-    _callSub?.cancel();
+    _callManager.removeListener(_onCallManagerUpdate);
     _disposeLocalCamera();
     _callManager.cancelOutgoingCall();
     _ringtonePlayer.dispose();
@@ -283,7 +274,12 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       GestureDetector(
-                        onTap: _endCall,
+                        onTap: () {
+                          _ringtonePlayer.stop();
+                          _disposeLocalCamera();
+                          _callManager.cancelOutgoingCall();
+                          if (mounted) Navigator.of(context).pop();
+                        },
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [

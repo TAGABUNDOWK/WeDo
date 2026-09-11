@@ -86,8 +86,17 @@ class WebRTCService {
     return RTCSessionDescription(result.join('\n'), desc.type);
   }
 
-  Future<void> initialize({bool audioOnly = false}) async {
+  Future<void> initialize({
+    bool audioOnly = false,
+    MediaStream? existingStream,
+  }) async {
     _isAudioOnly = audioOnly;
+
+    if (existingStream != null) {
+      _localStream = existingStream;
+      _localStreamController.add(_localStream!);
+      return;
+    }
 
     final turnUser = dotenv.env['TURN_USERNAME'] ?? '';
     final turnPass = dotenv.env['TURN_CREDENTIAL'] ?? '';
