@@ -74,39 +74,6 @@ exports.scheduledAccountDeletion = functions.pubsub
     await processScheduledDeletions();
   });
 
-// ──────────────────── Session Cleanup (runs every 2 days) ────────────────────
-
-async function cleanupExpiredSessions() {
-  const now = new Date();
-  const sessionsRef = db.collection('sessions');
-  const expiredSnap = await sessionsRef
-    .where('deleteAfter', '<=', now)
-    .limit(100)
-    .get();
-
-  if (expiredSnap.empty) return;
-
-  const batch = db.batch();
-
-  for (const sessionDoc of expiredSnap.docs) {
-    // Delete all participants subcollection docs
-    const participantsSnap = await sessionDoc.ref.collection('participants').get();
-    participantsSnap.docs.forEach((pDoc) => batch.delete(pDoc.ref));
-    // Delete the session document itself (safety net — TTL should also handle this)
-    batch.delete(sessionDoc.ref);
-  }
-
-  await batch.commit();
-  console.log(`Cleaned up ${expiredSnap.size} expired sessions`);
-}
-
-exports.scheduledSessionCleanup = functions.pubsub
-  .schedule('0 0 */2 * *')
-  .timeZone('Asia/Manila')
-  .onRun(async (context) => {
-    await cleanupExpiredSessions();
-  });
-
 // ──────────────────── Abandoned Lobby Cleanup (runs every 1 minute) ────────────────────
 
 async function cleanupAbandonedLobbies() {
