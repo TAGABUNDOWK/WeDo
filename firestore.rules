@@ -182,7 +182,10 @@ service cloud.firestore {
       allow delete: if isSignedIn();
 
       match /signals/{signalId} {
-        allow read, write: if isSignedIn();
+        allow read: if isSignedIn() && isCallMember(callId);
+        allow create: if isSignedIn() && isCallMember(callId);
+        allow update: if isSignedIn() && isCallMember(callId);
+        allow delete: if isSignedIn();
       }
 
       match /participants/{participantUid} {

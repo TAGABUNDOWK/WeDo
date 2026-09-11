@@ -48,10 +48,12 @@ class CallManager extends ChangeNotifier {
   ActiveCallData? _outgoingCall;
   StreamSubscription? _callSub;
   StreamSubscription? _outgoingCallSub;
+  MediaStream? _outgoingLocalStream;
   StreamSubscription? _signalsSub;
   StreamSubscription? _groupCallSub;
   Timer? _groupCallDebounce;
   Timer? _callTimer;
+  Timer? _outgoingRingTimeout;
   int _callDuration = 0;
   bool _isMuted = false;
   bool _isVideoOff = false;
@@ -89,6 +91,10 @@ class CallManager extends ChangeNotifier {
 
   bool get hasAnyCall => _activeCall != null || _outgoingCall != null;
 
+  void setOutgoingLocalStream(MediaStream? stream) {
+    _outgoingLocalStream = stream;
+  }
+
   void trackOutgoingCall({
     required String callId,
     required String callName,
@@ -112,9 +118,21 @@ class CallManager extends ChangeNotifier {
     );
     notifyListeners();
 
+    _outgoingRingTimeout?.cancel();
+    _outgoingRingTimeout = Timer(const Duration(seconds: 45), () {
+      if (_outgoingCall != null && _outgoingCall!.callId == callId) {
+        _callService.endCall(callId);
+        cancelOutgoingCall();
+      }
+    });
+
     _outgoingCallSub?.cancel();
     _outgoingCallSub = _callService.getCallStream(callId).listen((call) async {
-      if (call == null || call.status == CallStatus.ended) {
+      if (call == null ||
+          call.status == CallStatus.ended ||
+          call.status == CallStatus.declined ||
+          call.status == CallStatus.missed ||
+          call.status == CallStatus.cancelled) {
         final outgoing = _outgoingCall;
         cancelOutgoingCall();
         if (outgoing != null) {
@@ -161,6 +179,12 @@ class CallManager extends ChangeNotifier {
   void cancelOutgoingCall() {
     _outgoingCallSub?.cancel();
     _outgoingCallSub = null;
+    _outgoingRingTimeout?.cancel();
+    _outgoingRingTimeout = null;
+    if (_activeCall == null) {
+      _outgoingLocalStream?.getTracks().forEach((t) => t.stop());
+    }
+    _outgoingLocalStream = null;
     _outgoingCall = null;
     removeCallOverlay();
     notifyListeners();
@@ -287,7 +311,11 @@ class CallManager extends ChangeNotifier {
     _localStreamController = StreamController<MediaStream>.broadcast();
     _remoteStreamController = StreamController<MediaStream>.broadcast();
 
-    await _webrtcService!.initialize(audioOnly: audioOnly);
+    await _webrtcService!.initialize(
+      audioOnly: audioOnly,
+      existingStream: _outgoingLocalStream,
+    );
+    _outgoingLocalStream = null;
 
     if (_isSpeakerOn) {
       await _webrtcService!.setSpeakerOn(true);
@@ -341,6 +369,8 @@ class CallManager extends ChangeNotifier {
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
         _reconnectTimers[peerId]?.cancel();
         _reconnectTimers.remove(peerId);
+        _reconnectTimers['single']?.cancel();
+        _reconnectTimers.remove('single');
         _reconnectingPeers.remove(peerId);
         return;
       }
@@ -385,7 +415,11 @@ class CallManager extends ChangeNotifier {
     await _callService.joinCall(callData.callId, user.uid);
 
     _callSub = _callService.getCallStream(callData.callId).listen((call) {
-      if (call == null || call.status == CallStatus.ended) {
+      if (call == null ||
+          call.status == CallStatus.ended ||
+          call.status == CallStatus.declined ||
+          call.status == CallStatus.missed ||
+          call.status == CallStatus.cancelled) {
         endActiveCall();
       }
     });
@@ -518,7 +552,7 @@ class CallManager extends ChangeNotifier {
     }
   }
 
-  Future<void> _sendCallMessage() async {
+  Future<void> _sendCallMessage({String callStatus = 'active'}) async {
     final user = _currentUser;
     if (user == null || _activeCall == null) return;
 
@@ -534,7 +568,7 @@ class CallManager extends ChangeNotifier {
         senderId: uid,
         senderName: userName,
         callType: callTypeStr,
-        callStatus: 'active',
+        callStatus: callStatus,
         durationSeconds: duration,
       );
     } else if (_activeCall!.chatId != null) {
@@ -543,7 +577,7 @@ class CallManager extends ChangeNotifier {
         senderId: uid,
         senderName: userName,
         callType: callTypeStr,
-        callStatus: 'active',
+        callStatus: callStatus,
         durationSeconds: duration,
       );
     }
@@ -567,7 +601,8 @@ class CallManager extends ChangeNotifier {
     _reconnectTimers.clear();
     _reconnectingPeers.clear();
 
-    await _sendCallMessage();
+    final callMessageStatus = _callDuration > 0 ? 'active' : 'ended';
+    await _sendCallMessage(callStatus: callMessageStatus);
 
     final uid = _currentUser?.uid;
     if (uid != null && uid.isNotEmpty) {

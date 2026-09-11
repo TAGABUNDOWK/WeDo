@@ -288,7 +288,9 @@ class _BlobNavBarState extends State<BlobNavBar>
                         activeColor: widget.activeColor,
                         iconColor: BlobNavBar._iconColor,
                         onTap: () => widget.onTap(1),
-                        badge: _ChatNavBadge(uid: widget.uid),
+                        badge: widget.currentIndex == 1
+                            ? null
+                            : _ChatNavBadge(uid: widget.uid),
                       ),
                     ],
                   ),

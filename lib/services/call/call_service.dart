@@ -72,6 +72,13 @@ class CallService {
     });
   }
 
+  Future<void> declineCall(String callId) async {
+    await _calls.doc(callId).update({
+      'status': CallStatus.declined.value,
+      'endedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   Future<void> leaveCall(String callId, String uid) async {
     await _participants(callId).doc(uid).update({
       'status': 'left',
