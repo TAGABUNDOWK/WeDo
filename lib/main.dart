@@ -41,47 +41,51 @@ Future<void> main() async {
 
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-  final messaging = FirebaseMessaging.instance;
-
-  final settings = await messaging.requestPermission(
-    alert: true,
-    badge: true,
-    sound: true,
-  );
-
-  if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-    final token = await messaging.getToken();
-    debugPrint('FCM Token: $token');
-
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser != null && token != null) {
-      await UserService().updateFcmToken(currentUser.uid, token);
-    }
-  }
-
-  messaging.onTokenRefresh.listen((token) async {
-    debugPrint('FCM Token refreshed: $token');
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser != null) {
-      await UserService().updateFcmToken(currentUser.uid, token);
-    }
-  });
-
-  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-    debugPrint('Foreground message: ${message.notification?.title}');
-    if (message.data.containsKey('callId')) {
-      _handleIncomingCall(message.data);
-    }
-  });
-
-  FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-    debugPrint('Notification opened app: ${message.notification?.title}');
-    if (message.data.containsKey('callId')) {
-      _handleIncomingCall(message.data);
-    }
-  });
-
   runApp(MyApp(navigatorKey: navigatorKey));
+
+  try {
+    final messaging = FirebaseMessaging.instance;
+
+    final settings = await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      final token = await messaging.getToken();
+      debugPrint('FCM Token: $token');
+
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null && token != null) {
+        await UserService().updateFcmToken(currentUser.uid, token);
+      }
+    }
+
+    messaging.onTokenRefresh.listen((token) async {
+      debugPrint('FCM Token refreshed: $token');
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null) {
+        await UserService().updateFcmToken(currentUser.uid, token);
+      }
+    });
+
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      debugPrint('Foreground message: ${message.notification?.title}');
+      if (message.data.containsKey('callId')) {
+        _handleIncomingCall(message.data);
+      }
+    });
+
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      debugPrint('Notification opened app: ${message.notification?.title}');
+      if (message.data.containsKey('callId')) {
+        _handleIncomingCall(message.data);
+      }
+    });
+  } catch (e) {
+    debugPrint('FCM initialization failed: $e');
+  }
 }
 
 class _IncomingCallListener extends StatefulWidget {
