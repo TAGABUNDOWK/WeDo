@@ -47,7 +47,7 @@ const _silver = _Tier(
   glow: Color(0xFFC9CDD6),
   avatarSize: 54,
   ringGlow: 12,
-  blockHeight: 72,
+  blockHeight: 90,
   medal: '2',
   scoreColor: Color(0xFFE7EAF0),
 );
@@ -59,7 +59,7 @@ const _bronze = _Tier(
   glow: Color(0xFFD98A4B),
   avatarSize: 54,
   ringGlow: 12,
-  blockHeight: 72,
+  blockHeight: 90,
   medal: '3',
   scoreColor: Color(0xFFF0B37E),
 );
