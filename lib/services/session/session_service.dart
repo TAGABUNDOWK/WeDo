@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../../models/topic_entity.dart';
 import '../../models/session_entity.dart';
 import '../../utils/constants.dart';
+import '../leaderboard/leaderboard_service.dart';
 
 class SessionService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -435,6 +436,8 @@ class SessionService {
       final sessionDoc = await _sessions.doc(sessionId).get();
       if (!sessionDoc.exists) return;
       final sessionData = sessionDoc.data() as Map<String, dynamic>;
+      final alreadyRecorded = sessionData['statsRecorded'] == true;
+      if (alreadyRecorded) return;
       final sessionCards = (sessionData['cards'] as List?)
               ?.map((e) => Map<String, dynamic>.from(e as Map))
               .toList() ??
@@ -538,6 +541,7 @@ class SessionService {
       await _sessions.doc(sessionId).update({
         'status': SessionStatus.completed.value,
         'speedShieldWinnerId': speedShieldWinnerId,
+        'statsRecorded': true,
         'aggregatedResults': {
           'cardTally': cardTally,
           'winnerCardId': winnerCardId,
@@ -548,6 +552,16 @@ class SessionService {
           'speedShieldWinnerCardId': speedShieldWinnerCardId,
         },
       });
+
+      // Records the completed session against each finisher's leaderboard
+      // stats: total matches +1, a win +1 for the speed-shield winner.
+      final finishedIds = finished.map((p) => p.id).toList();
+      if (finishedIds.isNotEmpty) {
+        await LeaderboardService().recordPickFightResult(
+          participantIds: finishedIds,
+          winnerId: speedShieldWinnerId,
+        );
+      }
     } on FirebaseException catch (e) {
       throw SessionException('Failed to aggregate results: ${e.message}');
     }
