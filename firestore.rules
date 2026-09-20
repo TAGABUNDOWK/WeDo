@@ -44,6 +44,11 @@ service cloud.firestore {
       allow delete: if isSignedIn() && request.auth.uid == userId;
     }
 
+    match /leaderboards/{userId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
     match /friends/{friendshipId} {
       allow create: if isSignedIn()
         && request.resource.data.userIds is list

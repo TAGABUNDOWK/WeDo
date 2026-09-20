@@ -18,6 +18,10 @@ class LeaderboardCategory {
       LeaderboardCategory._('tri_race_wins', 'TriRace Wins');
 
   static const all = [pickFightWins, totalMatchesPlayed, triRaceWins];
+
+  /// Returns the precomputed rank field name in the `leaderboards` collection
+  /// for this category.
+  String get rankField => 'rank_$field';
 }
 
 enum LeaderboardScope { overall, friends }
@@ -28,13 +32,20 @@ class LeaderboardService {
   CollectionReference<Map<String, dynamic>> get _stats =>
       _db.collection(AppConstants.userStatsCollection);
 
-  /// Overall standings ordered by [field] descending (limits to [limit]).
+  CollectionReference<Map<String, dynamic>> get _leaderboards =>
+      _db.collection(AppConstants.leaderboardsCollection);
+
+  // ── Leaderboard reads (from derived `leaderboards` collection) ──────────
+
+  /// Overall standings streamed from the `leaderboards` snapshot collection,
+  /// ordered by the precomputed rank field ascending (rank 1 first).
   Stream<List<UserStatsEntity>> overallStandingsStream(
     String field, {
     int limit = 30,
   }) {
-    return _stats
-        .orderBy(field, descending: true)
+    final rankField = 'rank_$field';
+    return _leaderboards
+        .orderBy(rankField, descending: false)
         .limit(limit)
         .snapshots()
         .map((snap) => snap.docs
@@ -42,8 +53,9 @@ class LeaderboardService {
             .toList());
   }
 
-  /// Friends-only standings for a set of uids. `whereIn` supports up to 10
-  /// values per query, so larger lists are chunked and merged client-side.
+  /// Friends-only standings from the `leaderboards` snapshot collection.
+  /// `whereIn` supports up to 10 values per query, so larger lists are
+  /// chunked and merged client-side.
   Future<List<UserStatsEntity>> friendsStandings(
     String field,
     List<String> uids,
@@ -51,17 +63,41 @@ class LeaderboardService {
     if (uids.isEmpty) return const [];
     final all = <UserStatsEntity>[];
     for (var i = 0; i < uids.length; i += 10) {
-      final chunk = uids.sublist(i, i + 10 > uids.length ? uids.length : i + 10);
-      final snap = await _stats
-          .where('user_id', whereIn: chunk)
-          .limit(100)
-          .get();
+      final chunk =
+          uids.sublist(i, i + 10 > uids.length ? uids.length : i + 10);
+      final snap =
+          await _leaderboards.where('user_id', whereIn: chunk).limit(100).get();
       all.addAll(
         snap.docs.map((d) => UserStatsEntity.fromMap(d.id, d.data())),
       );
     }
     return all;
   }
+
+  /// Resolves a user's rank from the precomputed `leaderboards` doc.
+  /// Returns 1 if the doc doesn't exist yet (bootstrap fallback).
+  Future<int> getUserRank(String uid, String field) async {
+    try {
+      final rankField = 'rank_$field';
+      final doc = await _leaderboards.doc(uid).get();
+      if (!doc.exists) return 1;
+      return (doc.data()?[rankField] as num?)?.toInt() ?? 1;
+    } catch (e) {
+      return 1;
+    }
+  }
+
+  /// Live stream of a single user's stats document (from `userStats`).
+  /// Used by the pinned "You" row to show live score numbers.
+  Stream<UserStatsEntity?> getUserStatsStream(String uid) {
+    return _stats.doc(uid).snapshots().map(
+          (snap) => snap.exists
+              ? UserStatsEntity.fromMap(snap.id, snap.data() ?? const {})
+              : null,
+        );
+  }
+
+  // ── Sort helper ────────────────────────────────────────────────────────
 
   /// Sorts a list by [field] descending with an alphabetical tiebreaker.
   List<UserStatsEntity> sortBy(String field, List<UserStatsEntity> entries) {
@@ -76,35 +112,12 @@ class LeaderboardService {
     return copy;
   }
 
-  /// Live stream of a single user's stats document.
-  Stream<UserStatsEntity?> getUserStatsStream(String uid) {
-    return _stats.doc(uid).snapshots().map(
-          (snap) => snap.exists
-              ? UserStatsEntity.fromMap(snap.id, snap.data() ?? const {})
-              : null,
-        );
-  }
-
-  /// Resolves the signed-in user's true rank via a counter query
-  /// (`count of users with a strictly greater value + 1`).
-  Future<int> getUserRank(String uid, String field) async {
-    try {
-      final doc = await _stats.doc(uid).get();
-      final score = doc.exists
-          ? (doc.data()?[field] as num?)?.toInt() ?? 0
-          : 0;
-      final snap = await _stats
-          .where(field, isGreaterThan: score)
-          .count()
-          .get();
-      return (snap.count ?? 0) + 1;
-    } catch (e) {
-      return 1;
-    }
-  }
+  // ── Writes to `userStats` (source of truth — unchanged) ────────────────
 
   /// Lazily backfills a user's stats doc when it is missing, and refreshes
   /// their denormalized identity. Existing counters are never overwritten.
+  /// Also writes a bootstrap fallback to the `leaderboards` collection so the
+  /// user appears on the board immediately without waiting for a recompute.
   Future<void> ensureUserStats({
     required String uid,
     required String displayName,
@@ -124,12 +137,45 @@ class LeaderboardService {
         'pick_fight_wins': pickFightWins,
         'tri_race_wins': triRaceWins,
       });
-      return;
+    } else {
+      await ref.set({
+        'display_name': displayName,
+        'avatar_asset': avatarAsset,
+      }, SetOptions(merge: true));
     }
-    await ref.set({
-      'display_name': displayName,
-      'avatar_asset': avatarAsset,
-    }, SetOptions(merge: true));
+
+    // Bootstrap: write the leaderboard doc so the user shows up immediately.
+    await _backfillLeaderboardDoc(
+      uid: uid,
+      displayName: displayName,
+      avatarAsset: avatarAsset,
+      totalMatchesPlayed: totalMatchesPlayed,
+      pickFightWins: pickFightWins,
+      triRaceWins: triRaceWins,
+    );
+  }
+
+  /// Writes a bootstrap leaderboard doc for a single user. This gives the
+  /// user a leaderboard entry immediately (rank will be recomputed by the
+  /// scheduled function within 5 minutes).
+  Future<void> _backfillLeaderboardDoc({
+    required String uid,
+    required String displayName,
+    String? avatarAsset,
+    required int totalMatchesPlayed,
+    required int pickFightWins,
+    required int triRaceWins,
+  }) async {
+    try {
+      await _leaderboards.doc(uid).set({
+        'user_id': uid,
+        'display_name': displayName,
+        'avatar_asset': avatarAsset,
+        'total_matches_played': totalMatchesPlayed,
+        'pick_fight_wins': pickFightWins,
+        'tri_race_wins': triRaceWins,
+      }, SetOptions(merge: true));
+    } catch (_) {}
   }
 
   /// Records a finished PickFight session against every participant's stats:
@@ -203,7 +249,8 @@ class LeaderboardService {
     final output = <String, Map<String, dynamic>>{};
     try {
       final docs = await Future.wait(
-        uids.map((id) => _db.collection(AppConstants.usersCollection).doc(id).get()),
+        uids.map(
+            (id) => _db.collection(AppConstants.usersCollection).doc(id).get()),
       );
       for (final doc in docs) {
         if (!doc.exists) continue;

@@ -1,6 +1,6 @@
 const functions = require('firebase-functions/v1');
 const { initializeApp } = require('firebase-admin/app');
-const { getFirestore } = require('firebase-admin/firestore');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 
 initializeApp();
 const db = getFirestore();
@@ -563,4 +563,103 @@ exports.onTriRaceCancelled = functions.firestore
     });
 
     console.log(`TriRace cancel notification sent to ${tokens.length} devices, ${results.successCount} succeeded`);
+  });
+
+// ──────────────────── Leaderboard Snapshot Recompute (every day at 12 AM) ────────────────────
+
+const LEADERBOARD_FIELDS = [
+  { stat: 'total_matches_played', rank: 'rank_total_matches_played' },
+  { stat: 'pick_fight_wins',       rank: 'rank_pick_fight_wins' },
+  { stat: 'tri_race_wins',         rank: 'rank_tri_race_wins' },
+];
+
+async function recomputeLeaderboard() {
+  const lbCol = db.collection('leaderboards');
+  const statsCol = db.collection('userStats');
+
+  // 1. Fetch every userStats doc (small app — safe to pull all).
+  const statsSnap = await statsCol.get();
+  if (statsSnap.empty) return;
+
+  const allStats = statsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+  // 2. For each category, sort descending by stat value and assign rank.
+  //    We accumulate writes per user so we can batch them all at once.
+  const userWrites = {}; // { uid: { displayName, avatar_asset, ...ranks, ...scores } }
+
+  for (const { stat, rank } of LEADERBOARD_FIELDS) {
+    // Sort by stat desc, then display_name asc for tiebreaker.
+    const sorted = [...allStats].sort((a, b) => {
+      const sa = (a[stat] ?? 0);
+      const sb = (b[stat] ?? 0);
+      if (sb !== sa) return sb - sa;
+      const na = (a.display_name ?? '').toLowerCase();
+      const nb = (b.display_name ?? '').toLowerCase();
+      return na.localeCompare(nb);
+    });
+
+    sorted.forEach((user, index) => {
+      if (!userWrites[user.id]) {
+        userWrites[user.id] = {
+          user_id: user.id,
+          display_name: user.display_name ?? '',
+          avatar_asset: user.avatar_asset ?? null,
+          total_matches_played: user.total_matches_played ?? 0,
+          pick_fight_wins: user.pick_fight_wins ?? 0,
+          tri_race_wins: user.tri_race_wins ?? 0,
+        };
+      }
+      userWrites[user.id][rank] = index + 1;
+    });
+  }
+
+  // 3. Batch-write all leaderboard docs (batches are capped at 500).
+  const entries = Object.entries(userWrites);
+  let batch = db.batch();
+  let ops = 0;
+
+  for (const [uid, data] of entries) {
+    batch.set(lbCol.doc(uid), {
+      ...data,
+      lastComputedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    ops++;
+
+    if (ops === 500) {
+      await batch.commit();
+      batch = db.batch();
+      ops = 0;
+    }
+  }
+
+  if (ops > 0) await batch.commit();
+
+  // 4. Clean up stale leaderboard docs (users removed from userStats).
+  const lbSnap = await lbCol.get();
+  const currentUids = new Set(allStats.map((s) => s.id));
+  let cleanupBatch = db.batch();
+  let cleanupOps = 0;
+
+  for (const doc of lbSnap.docs) {
+    if (!currentUids.has(doc.id)) {
+      cleanupBatch.delete(doc.ref);
+      cleanupOps++;
+      if (cleanupOps === 500) {
+        await cleanupBatch.commit();
+        cleanupBatch = db.batch();
+        cleanupOps = 0;
+      }
+    }
+  }
+
+  if (cleanupOps > 0) await cleanupBatch.commit();
+
+  console.log(`Leaderboard recompute complete: ${entries.length} users ranked, ${cleanupOps} stale docs cleaned`);
+}
+
+exports.scheduledLeaderboardRecompute = functions.pubsub
+  .schedule('every day 00:00')
+  .timeZone('Asia/Manila')
+  .onRun(async (context) => {
+    await recomputeLeaderboard();
   });
