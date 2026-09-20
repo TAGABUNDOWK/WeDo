@@ -136,33 +136,56 @@ class _LeaderboardSectionState extends State<LeaderboardSection> {
   Widget _buildHeader() {
     return Column(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        Stack(
+          alignment: Alignment.center,
           children: [
-            const Text('✦',
-                style: TextStyle(color: _gold, fontSize: 16)),
-            const SizedBox(width: 10),
-            ShaderMask(
-              shaderCallback: (bounds) => const LinearGradient(
-                colors: [_gold, Color(0xFFFFF3D6), _gold],
-              ).createShader(bounds),
-              child: const Text(
-                'Leaderboards',
-                style: TextStyle(
-                  fontFamily: _font,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                  shadows: [
-                    Shadow(color: Color(0x99F5A623), blurRadius: 18),
-                    Shadow(color: Color(0x66000000), blurRadius: 2, offset: Offset(0, 1)),
-                  ],
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('✦',
+                    style: TextStyle(color: _gold, fontSize: 16)),
+                const SizedBox(width: 10),
+                ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    colors: [_gold, Color(0xFFFFF3D6), _gold],
+                  ).createShader(bounds),
+                  child: const Text(
+                    'Leaderboards',
+                    style: TextStyle(
+                      fontFamily: _font,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      shadows: [
+                        Shadow(color: Color(0x99F5A623), blurRadius: 18),
+                        Shadow(color: Color(0x66000000), blurRadius: 2, offset: Offset(0, 1)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const Text('✦',
+                    style: TextStyle(color: _gold, fontSize: 16)),
+              ],
+            ),
+            Positioned(
+              right: 0,
+              child: GestureDetector(
+                onTap: _showLeaderboardInfo,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Icon(
+                    Icons.question_mark_rounded,
+                    size: 14,
+                    color: Color(0xFFB9AFCB),
+                  ),
                 ),
               ),
             ),
-            const SizedBox(width: 10),
-            const Text('✦',
-                style: TextStyle(color: _gold, fontSize: 16)),
           ],
         ),
         const SizedBox(height: 4),
@@ -172,6 +195,170 @@ class _LeaderboardSectionState extends State<LeaderboardSection> {
             fontFamily: _font,
             fontSize: 12,
             color: Color(0xFFB9AFCB),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showLeaderboardInfo() {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Leaderboard Info',
+      transitionDuration: const Duration(milliseconds: 250),
+      transitionBuilder: (ctx, a1, a2, child) {
+        return FadeTransition(
+          opacity: a1,
+          child: ScaleTransition(
+            scale: CurvedAnimation(parent: a1, curve: Curves.easeOutBack),
+            child: child,
+          ),
+        );
+      },
+      pageBuilder: (ctx, a1, a2) {
+        return Center(
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: MediaQuery.of(ctx).size.width * 0.82,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E1233),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFE4EF0).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.leaderboard,
+                          color: Color(0xFFFE4EF0),
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'How Leaderboards Work',
+                          style: TextStyle(
+                            fontFamily: _font,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => Navigator.of(ctx).pop(),
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(Icons.close, color: Colors.white54, size: 18),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  _infoRow(
+                    Icons.autorenew,
+                    'Daily Refresh',
+                    'Rankings are recomputed every day at midnight (Asia/Manila).',
+                  ),
+                  const SizedBox(height: 14),
+                  _infoRow(
+                    Icons.bolt,
+                    'Instant Personal Rank',
+                    'Your own rank updates right after every match — no need to wait for the daily refresh.',
+                  ),
+                  const SizedBox(height: 14),
+                  _infoRow(
+                    Icons.emoji_events,
+                    'What Counts',
+                    'Wins in PickFight and TriRace, plus total matches played.',
+                  ),
+                  const SizedBox(height: 20),
+                  GestureDetector(
+                    onTap: () => Navigator.of(ctx).pop(),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF800DD8), Color(0xFFFE4EF0)],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Center(
+                        child: Text(
+                          'Got it',
+                          style: TextStyle(
+                            fontFamily: _font,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _infoRow(IconData icon, String title, String description) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: const Color(0xFFFE4EF0), size: 18),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontFamily: _font,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                description,
+                style: const TextStyle(
+                  fontFamily: _font,
+                  fontSize: 12,
+                  color: Color(0xFFB9AFCB),
+                  height: 1.4,
+                ),
+              ),
+            ],
           ),
         ),
       ],
