@@ -87,6 +87,7 @@ class CallService {
     final callDoc = await _calls.doc(callId).get();
     final callData = callDoc.data();
     final groupId = callData?['groupId'] as String?;
+    final createdBy = callData?['createdBy'] as String?;
 
     final isGroupCall = groupId != null && groupId.isNotEmpty;
 
@@ -100,7 +101,9 @@ class CallService {
         .get();
 
     if (activeParticipants.docs.isEmpty) {
-      await endCall(callId);
+      if (createdBy == uid) {
+        await endCall(callId);
+      }
     }
   }
 
@@ -109,6 +112,16 @@ class CallService {
       if (!doc.exists) return null;
       return Call.fromFirestore(doc);
     });
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> getParticipantsStream(
+      String callId) {
+    return _participants(callId).snapshots();
+  }
+
+  Future<String?> getParticipantStatus(String callId, String uid) async {
+    final doc = await _participants(callId).doc(uid).get();
+    return doc.data()?['status'] as String?;
   }
 
   Stream<List<Call>> getIncomingCallsStream(String uid) {
@@ -201,6 +214,13 @@ class CallService {
       await batch.commit();
     } catch (e) {
       debugPrint('Error flushing ICE buffer: $e');
+      if (candidates.isNotEmpty) {
+        _iceBuffer[bufferKey] = candidates;
+        _iceFlushTimers[bufferKey] = Timer(
+          const Duration(milliseconds: 500),
+          () => _flushIceBuffer(bufferKey, callId),
+        );
+      }
     }
   }
 
