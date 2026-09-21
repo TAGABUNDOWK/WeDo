@@ -60,11 +60,6 @@ class _CallScreenState extends State<CallScreen> {
     super.initState();
     _callManager.addListener(_onCallUpdate);
     _loadParticipantNames();
-    if (widget.isGroup && _callManager.hasLeftCall && _callManager.leftCallId == widget.callId) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _callManager.rejoinCall();
-      });
-    }
   }
 
   @override
