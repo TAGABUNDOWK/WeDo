@@ -245,15 +245,10 @@ class LeaderboardPodium extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 4),
-                InkWell(
-                  onTap: onStarToggle == null
-                      ? null
-                      : () => onStarToggle!(entry),
-                  child: Icon(
-                    favorited ? Icons.star : Icons.star_outline,
-                    size: 15,
-                    color: favorited ? const Color(0xFFFFC93C) : Colors.white54,
-                  ),
+                const Icon(
+                  Icons.star,
+                  size: 15,
+                  color: Color(0xFFFFC93C),
                 ),
               ],
             ),
