@@ -101,18 +101,12 @@ class LeaderboardListRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 6),
-          InkWell(
-            onTap: onStarToggle,
-            borderRadius: BorderRadius.circular(20),
-            child: Padding(
-              padding: const EdgeInsets.all(4),
-              child: Icon(
-                favorited ? Icons.star : Icons.star_outline,
-                size: 20,
-                color: favorited
-                    ? const Color(0xFFFFC93C)
-                    : Colors.white.withValues(alpha: 0.55),
-              ),
+          const Padding(
+            padding: EdgeInsets.all(4),
+            child: Icon(
+              Icons.star,
+              size: 20,
+              color: Color(0xFFFFC93C),
             ),
           ),
         ],

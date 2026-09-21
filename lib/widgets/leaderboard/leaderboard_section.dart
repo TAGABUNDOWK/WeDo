@@ -664,10 +664,10 @@ class _LeaderboardSectionState extends State<LeaderboardSection> {
               entry: own,
               rank: rank,
               field: _category.field,
-              rankLabel: '#$rank',
+              rankLabel: '..',
               nameOverride: 'You',
               isCurrentUser: true,
-              favorited: false,
+              favorited: true,
               onStarToggle: () {},
               score: '${own.scoreFor(_category.field)}',
             );
