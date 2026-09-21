@@ -33,8 +33,12 @@ class WebRTCService {
   MediaStream? get localStream => _localStream;
 
   bool _isAudioOnly = false;
+  bool _turnCredentialsMissing = false;
   Function(String peerId, String candidateJson)? onIceCandidateGenerated;
   Function(String peerId, RTCPeerConnectionState state)? onConnectionStateChanged;
+  Function(String message)? onWarning;
+
+  bool get turnCredentialsMissing => _turnCredentialsMissing;
 
   /// Normalized key: always alphabetical order so A_B == B_A lookup works.
   static String _pcKey(String uid1, String uid2) {
@@ -101,8 +105,12 @@ class WebRTCService {
     final turnUser = dotenv.env['TURN_USERNAME'] ?? '';
     final turnPass = dotenv.env['TURN_CREDENTIAL'] ?? '';
     if (turnUser.isEmpty || turnPass.isEmpty) {
+      _turnCredentialsMissing = true;
       debugPrint(
         'WARNING: TURN credentials are empty. Calls may fail behind strict firewalls.',
+      );
+      onWarning?.call(
+        'Network relay unavailable. Calls may fail on mobile data or strict networks.',
       );
     }
 

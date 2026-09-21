@@ -32,6 +32,18 @@ class CallScreen extends StatefulWidget {
   State<CallScreen> createState() => _CallScreenState();
 }
 
+class _Participant {
+  final String uid;
+  final RTCVideoRenderer? renderer;
+  final bool isLocal;
+
+  const _Participant({
+    required this.uid,
+    this.renderer,
+    required this.isLocal,
+  });
+}
+
 class _CallScreenState extends State<CallScreen> {
   final CallManager _callManager = CallManager();
   final UserService _userService = UserService();
@@ -41,12 +53,18 @@ class _CallScreenState extends State<CallScreen> {
   Offset _pipPosition = Offset.zero;
   bool _pipInitialized = false;
   String? _focusedPeerId;
+  bool _isEndingCall = false;
 
   @override
   void initState() {
     super.initState();
     _callManager.addListener(_onCallUpdate);
     _loadParticipantNames();
+    if (widget.isGroup && _callManager.hasLeftCall && _callManager.leftCallId == widget.callId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _callManager.rejoinCall();
+      });
+    }
   }
 
   @override
@@ -58,7 +76,7 @@ class _CallScreenState extends State<CallScreen> {
   void _onCallUpdate() {
     if (!mounted) return;
 
-    if (_callManager.activeCall == null) {
+    if (_callManager.activeCall == null && !_isEndingCall) {
       Navigator.of(context).pop();
       return;
     }
@@ -74,7 +92,18 @@ class _CallScreenState extends State<CallScreen> {
   }
 
   Future<void> _endCall() async {
+    if (_isEndingCall) return;
+    _isEndingCall = true;
     await _callManager.endActiveCall();
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  Future<void> _leaveGroupCall() async {
+    if (_isEndingCall) return;
+    _isEndingCall = true;
+    await _callManager.leaveGroupCall();
     if (mounted) {
       Navigator.of(context).pop();
     }
@@ -349,14 +378,32 @@ class _CallScreenState extends State<CallScreen> {
   Widget _buildGroupView(BoxConstraints constraints) {
     final renderers = _callManager.remoteRenderers;
     final hasLocalStream = _callManager.localRenderer?.srcObject != null;
-    final entries = renderers.entries.toList();
+    final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
 
     if (_focusedPeerId != null && renderers.containsKey(_focusedPeerId)) {
+      final entries = renderers.entries.toList();
       return _buildFocusedPeerView(constraints, entries);
     }
 
-    if (entries.isEmpty) {
-      final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final participants = <_Participant>[];
+    if (hasLocalStream) {
+      participants.add(_Participant(
+        uid: myUid,
+        renderer: _callManager.localRenderer,
+        isLocal: true,
+      ));
+    }
+    for (final entry in renderers.entries) {
+      participants.add(_Participant(
+        uid: entry.key,
+        renderer: entry.value,
+        isLocal: false,
+      ));
+    }
+
+    final count = participants.length;
+
+    if (count == 0) {
       return Stack(
         children: [
           Center(
@@ -374,36 +421,280 @@ class _CallScreenState extends State<CallScreen> {
               ],
             ),
           ),
-          Positioned(
-            top: 16,
-            left: 0,
-            right: 0,
-            child: Column(
-              children: [
-                Text(
-                  widget.callName,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  formatSeconds(_callManager.callDuration),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70, fontSize: 14),
-                ),
-              ],
-            ),
-          ),
-          if (hasLocalStream) _buildDraggablePip(constraints),
+          _buildCallHeader(),
         ],
       );
     }
 
-    return _buildGridPeerView(constraints, entries, hasLocalStream);
+    if (count == 1) {
+      return Stack(
+        children: [
+          _buildParticipantTile(participants[0], constraints),
+          _buildCallHeader(),
+        ],
+      );
+    }
+
+    if (count == 2) {
+      return Stack(
+        children: [
+          _buildTwoParticipantLayout(participants, constraints),
+          _buildCallHeader(),
+        ],
+      );
+    }
+
+    if (count == 3) {
+      return Stack(
+        children: [
+          _buildThreeParticipantLayout(participants, constraints),
+          _buildCallHeader(),
+        ],
+      );
+    }
+
+    if (count == 4) {
+      return Stack(
+        children: [
+          _buildFourParticipantLayout(participants, constraints),
+          _buildCallHeader(),
+        ],
+      );
+    }
+
+    return Stack(
+      children: [
+        _buildGridParticipantView(participants, constraints),
+        _buildCallHeader(),
+      ],
+    );
+  }
+
+  Widget _buildCallHeader() {
+    return Positioned(
+      top: 16,
+      left: 0,
+      right: 0,
+      child: Column(
+        children: [
+          Text(
+            widget.callName,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            formatSeconds(_callManager.callDuration),
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildParticipantTile(_Participant participant, BoxConstraints constraints) {
+    final hasVideo = participant.renderer != null && _hasActiveVideo(participant.renderer!);
+
+    return Positioned.fill(
+      child: GestureDetector(
+        onTap: participant.isLocal ? null : () => _onPeerTapped(participant.uid),
+        child: hasVideo
+            ? FittedBox(
+                fit: BoxFit.cover,
+                clipBehavior: Clip.hardEdge,
+                child: SizedBox(
+                  width: 320,
+                  height: 240,
+                  child: RTCVideoView(
+                    participant.renderer!,
+                    mirror: participant.isLocal,
+                    objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                  ),
+                ),
+              )
+            : Container(
+                color: const Color(0xFF2D1B69),
+                child: Center(
+                  child: _buildParticipantAvatar(uid: participant.uid, radius: 60),
+                ),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildTwoParticipantLayout(List<_Participant> participants, BoxConstraints constraints) {
+    return Column(
+      children: [
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: _buildParticipantTileInContainer(participants[0]),
+          ),
+        ),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: _buildParticipantTileInContainer(participants[1]),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildThreeParticipantLayout(List<_Participant> participants, BoxConstraints constraints) {
+    return Column(
+      children: [
+        Expanded(
+          flex: 2,
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: _buildParticipantTileInContainer(participants[0]),
+          ),
+        ),
+        Expanded(
+          flex: 1,
+          child: Row(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: _buildParticipantTileInContainer(participants[1]),
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: _buildParticipantTileInContainer(participants[2]),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFourParticipantLayout(List<_Participant> participants, BoxConstraints constraints) {
+    return Column(
+      children: [
+        Expanded(
+          child: Row(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: _buildParticipantTileInContainer(participants[0]),
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: _buildParticipantTileInContainer(participants[1]),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: Row(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: _buildParticipantTileInContainer(participants[2]),
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: _buildParticipantTileInContainer(participants[3]),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildParticipantTileInContainer(_Participant participant) {
+    final hasVideo = participant.renderer != null && _hasActiveVideo(participant.renderer!);
+
+    return GestureDetector(
+      onTap: participant.isLocal ? null : () => _onPeerTapped(participant.uid),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (hasVideo)
+              RTCVideoView(
+                participant.renderer!,
+                mirror: participant.isLocal,
+                objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+              )
+            else
+              Container(
+                color: const Color(0xFF2D1B69),
+                child: Center(
+                  child: _buildParticipantAvatar(uid: participant.uid, radius: 32),
+                ),
+              ),
+            Positioned(
+              left: 8,
+              bottom: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      hasVideo ? Icons.videocam : Icons.videocam_off,
+                      color: hasVideo ? Colors.green : Colors.white54,
+                      size: 12,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      _getParticipantName(participant.uid),
+                      style: const TextStyle(color: Colors.white, fontSize: 11),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGridParticipantView(List<_Participant> participants, BoxConstraints constraints) {
+    final count = participants.length;
+    final crossAxisCount = count <= 4 ? 2 : 3;
+
+    return GridView.builder(
+      padding: const EdgeInsets.all(8),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+      ),
+      itemCount: count,
+      itemBuilder: (context, index) {
+        return _buildParticipantTileInContainer(participants[index]);
+      },
+    );
   }
 
   Widget _buildFocusedPeerView(
@@ -412,8 +703,27 @@ class _CallScreenState extends State<CallScreen> {
       (e) => e.key == _focusedPeerId,
       orElse: () => entries.first,
     );
-    final hasLocalStream = _callManager.localRenderer?.srcObject != null;
     final hasVideo = _hasActiveVideo(focusedEntry.value);
+
+    final miniParticipants = <_Participant>[];
+    final localRenderer = _callManager.localRenderer;
+    if (localRenderer != null && localRenderer.srcObject != null) {
+      final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+      miniParticipants.add(_Participant(
+        uid: myUid,
+        renderer: localRenderer,
+        isLocal: true,
+      ));
+    }
+    for (final entry in entries) {
+      if (entry.key != _focusedPeerId) {
+        miniParticipants.add(_Participant(
+          uid: entry.key,
+          renderer: entry.value,
+          isLocal: false,
+        ));
+      }
+    }
 
     return Stack(
       children: [
@@ -470,27 +780,24 @@ class _CallScreenState extends State<CallScreen> {
             ],
           ),
         ),
-        _buildMiniStrip(entries, focusedEntry.key),
-        if (hasLocalStream) _buildDraggablePip(constraints),
+        _buildMiniStripFromParticipants(miniParticipants),
       ],
     );
   }
 
-  Widget _buildMiniStrip(
-      List<MapEntry<String, RTCVideoRenderer>> entries, String focusedId) {
-    final otherEntries = entries.where((e) => e.key != focusedId).toList();
-    if (otherEntries.isEmpty) return const SizedBox.shrink();
+  Widget _buildMiniStripFromParticipants(List<_Participant> participants) {
+    if (participants.isEmpty) return const SizedBox.shrink();
 
     return Positioned(
       top: 80,
       right: 8,
       child: Column(
-        children: otherEntries.map((entry) {
-          final hasVideo = _hasActiveVideo(entry.value);
+        children: participants.map((participant) {
+          final hasVideo = participant.renderer != null && _hasActiveVideo(participant.renderer!);
           return Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: GestureDetector(
-              onTap: () => _onPeerTapped(entry.key),
+              onTap: participant.isLocal ? null : () => _onPeerTapped(participant.uid),
               child: Container(
                 width: 80,
                 height: 100,
@@ -508,7 +815,8 @@ class _CallScreenState extends State<CallScreen> {
                     children: [
                       if (hasVideo)
                         RTCVideoView(
-                          entry.value,
+                          participant.renderer!,
+                          mirror: participant.isLocal,
                           objectFit:
                               RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
                         )
@@ -517,7 +825,7 @@ class _CallScreenState extends State<CallScreen> {
                           color: const Color(0xFF2D1B69),
                           child: Center(
                             child: _buildParticipantAvatar(
-                              uid: entry.key,
+                              uid: participant.uid,
                               radius: 20,
                             ),
                           ),
@@ -533,7 +841,9 @@ class _CallScreenState extends State<CallScreen> {
                             borderRadius: BorderRadius.circular(3),
                           ),
                           child: Text(
-                            _getParticipantName(entry.key),
+                            participant.isLocal
+                                ? 'You'
+                                : _getParticipantName(participant.uid),
                             style: const TextStyle(
                                 color: Colors.white, fontSize: 9),
                             maxLines: 1,
@@ -549,123 +859,6 @@ class _CallScreenState extends State<CallScreen> {
           );
         }).toList(),
       ),
-    );
-  }
-
-  Widget _buildGridPeerView(
-    BoxConstraints constraints,
-    List<MapEntry<String, RTCVideoRenderer>> entries,
-    bool hasLocalStream,
-  ) {
-    final count = entries.length;
-    final int crossAxisCount;
-    if (count <= 2) {
-      crossAxisCount = 2;
-    } else if (count <= 4) {
-      crossAxisCount = 2;
-    } else {
-      crossAxisCount = 3;
-    }
-
-    return Stack(
-      children: [
-        GridView.builder(
-          padding: const EdgeInsets.all(8),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            crossAxisSpacing: 8,
-            mainAxisSpacing: 8,
-          ),
-          itemCount: count,
-          itemBuilder: (context, index) {
-            final entry = entries[index];
-            final hasVideo = _hasActiveVideo(entry.value);
-            return GestureDetector(
-              onTap: () => _onPeerTapped(entry.key),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    if (hasVideo)
-                      RTCVideoView(
-                        entry.value,
-                        objectFit:
-                            RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                      )
-                    else
-                      Container(
-                        color: const Color(0xFF2D1B69),
-                        child: Center(
-                          child: _buildParticipantAvatar(
-                            uid: entry.key,
-                            radius: 32,
-                          ),
-                        ),
-                      ),
-                    Positioned(
-                      left: 8,
-                      bottom: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              hasVideo ? Icons.videocam : Icons.videocam_off,
-                              color: hasVideo ? Colors.green : Colors.white54,
-                              size: 12,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              _getParticipantName(entry.key),
-                              style: const TextStyle(
-                                  color: Colors.white, fontSize: 12),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
-        Positioned(
-          top: 16,
-          left: 0,
-          right: 0,
-          child: Column(
-            children: [
-              Text(
-                widget.callName,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                formatSeconds(_callManager.callDuration),
-                textAlign: TextAlign.center,
-                style:
-                    const TextStyle(color: Colors.white70, fontSize: 14),
-              ),
-            ],
-          ),
-        ),
-        if (hasLocalStream) _buildDraggablePip(constraints),
-      ],
     );
   }
 
@@ -803,14 +996,24 @@ class _CallScreenState extends State<CallScreen> {
                 onTap: _minimizeCall,
                 isActive: true,
               ),
-              _buildControlButton(
-                icon: Icons.call_end,
-                label: 'End',
-                onTap: _endCall,
-                isActive: true,
-                backgroundColor: Colors.red,
-                iconColor: Colors.white,
-              ),
+              if (widget.isGroup)
+                _buildControlButton(
+                  icon: Icons.exit_to_app,
+                  label: 'Leave',
+                  onTap: _leaveGroupCall,
+                  isActive: true,
+                  backgroundColor: Colors.orange.shade800,
+                  iconColor: Colors.white,
+                )
+              else
+                _buildControlButton(
+                  icon: Icons.call_end,
+                  label: 'End',
+                  onTap: _endCall,
+                  isActive: true,
+                  backgroundColor: Colors.red,
+                  iconColor: Colors.white,
+                ),
             ],
           ),
         ],
@@ -862,14 +1065,24 @@ class _CallScreenState extends State<CallScreen> {
             onTap: _minimizeCall,
             isActive: true,
           ),
-          _buildControlButton(
-            icon: Icons.call_end,
-            label: 'End',
-            onTap: _endCall,
-            isActive: true,
-            backgroundColor: Colors.red,
-            iconColor: Colors.white,
-          ),
+          if (widget.isGroup)
+            _buildControlButton(
+              icon: Icons.exit_to_app,
+              label: 'Leave',
+              onTap: _leaveGroupCall,
+              isActive: true,
+              backgroundColor: Colors.orange.shade800,
+              iconColor: Colors.white,
+            )
+          else
+            _buildControlButton(
+              icon: Icons.call_end,
+              label: 'End',
+              onTap: _endCall,
+              isActive: true,
+              backgroundColor: Colors.red,
+              iconColor: Colors.white,
+            ),
         ],
       ),
     );

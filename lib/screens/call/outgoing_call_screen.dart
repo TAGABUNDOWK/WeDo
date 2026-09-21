@@ -126,7 +126,6 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
     _pulseController.dispose();
     _callManager.removeListener(_onCallManagerUpdate);
     _disposeLocalCamera();
-    _callManager.cancelOutgoingCall();
     _ringtonePlayer.dispose();
     super.dispose();
   }
