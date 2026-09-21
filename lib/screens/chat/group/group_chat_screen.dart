@@ -14,6 +14,7 @@ import '../../../services/group/group_service.dart';
 import '../../../services/event/event_service.dart';
 import '../../../services/poll/poll_service.dart';
 import '../../../services/call/call_service.dart';
+import '../../../services/call/call_manager.dart';
 import '../../../services/user_cache.dart';
 import '../../../services/theme/chat_theme_resolver.dart';
 import '../../../utils/time_format.dart';
@@ -44,6 +45,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   final _scrollCtrl = ScrollController();
   final _groupService = GroupService();
   final _callService = CallService();
+  final _callManager = CallManager();
   final _eventService = EventService();
   final _pollService = PollService();
   final _currentUser = FirebaseAuth.instance.currentUser;
@@ -76,6 +78,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       _groupService.markMessagesAsRead(widget.groupId, _currentUser.uid);
     }
     _scrollCtrl.addListener(_onScroll);
+    _callManager.addListener(_onCallManagerUpdate);
   }
 
   Future<void> _loadGroupInfo() async {
@@ -165,9 +168,14 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   @override
   void dispose() {
+    _callManager.removeListener(_onCallManagerUpdate);
     _messageCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
+  }
+
+  void _onCallManagerUpdate() {
+    if (mounted) setState(() {});
   }
 
   void _onScroll() {
@@ -432,6 +440,120 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     );
   }
 
+  void _rejoinCall() {
+    _callManager.rejoinCall();
+  }
+
+  Widget _buildActiveCallBanner() {
+    final active = _callManager.activeCall;
+    final outgoing = _callManager.outgoingCall;
+    final call = active ?? outgoing;
+    if (call == null) return const SizedBox.shrink();
+
+    final isActive = active != null;
+    final isVideo = call.callType == CallType.video;
+    final duration = _callManager.callDuration;
+
+    return GestureDetector(
+      onTap: _rejoinCall,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: isActive
+                ? [const Color(0xFF2D1B69), const Color(0xFF1A0A2E)]
+                : [const Color(0xFF1A0A2E), const Color(0xFF2D1B69)],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: const Color(0xFFFE4EF0).withValues(alpha: 0.4),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFFE4EF0).withValues(alpha: 0.2),
+              blurRadius: 12,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFFFE4EF0).withValues(alpha: 0.2),
+              ),
+              child: Icon(
+                isVideo ? Icons.videocam : Icons.call,
+                color: const Color(0xFFFE4EF0),
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    isActive ? 'Group Call in Progress' : 'Outgoing Call...',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: isActive ? Colors.green : Colors.orange,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        isActive
+                            ? '${call.members.length} participants \u2022 ${formatSeconds(duration)}'
+                            : 'Ringing...',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFE4EF0),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text(
+                'Join',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showComposerMenu() {
     showModalBottomSheet<void>(
       context: context,
@@ -679,6 +801,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                               isGroup: true,
                               onStartAudioCall: () => _startCall(CallType.audio),
                               onStartVideoCall: () => _startCall(CallType.video),
+                              onRejoin: _rejoinCall,
                             ),
                           ],
                         ),
@@ -690,6 +813,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                   ),
                 ),
               ),
+              if (_callManager.hasActiveCall &&
+                  (_callManager.activeCall?.groupId == widget.groupId ||
+                   _callManager.outgoingCall?.groupId == widget.groupId))
+                _buildActiveCallBanner(),
               if (_isUploading)
                 const LinearProgressIndicator(
                     backgroundColor: Colors.transparent),

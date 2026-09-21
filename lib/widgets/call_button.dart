@@ -56,6 +56,7 @@ class CallButtons extends StatelessWidget {
   final bool isGroup;
   final VoidCallback onStartAudioCall;
   final VoidCallback onStartVideoCall;
+  final VoidCallback? onRejoin;
 
   const CallButtons({
     super.key,
@@ -63,6 +64,7 @@ class CallButtons extends StatelessWidget {
     required this.isGroup,
     required this.onStartAudioCall,
     required this.onStartVideoCall,
+    this.onRejoin,
   });
 
   @override
@@ -117,7 +119,7 @@ class CallButtons extends StatelessWidget {
               'assets/icons/call.png',
               Icons.phone,
               audioActive,
-              onStartAudioCall,
+              inCall && onRejoin != null ? onRejoin! : onStartAudioCall,
               size: 18,
               fallbackSize: 16,
             ),
@@ -128,7 +130,7 @@ class CallButtons extends StatelessWidget {
                 'assets/icons/video-call.png',
                 Icons.videocam,
                 videoActive,
-                onStartVideoCall,
+                inCall && onRejoin != null ? onRejoin! : onStartVideoCall,
                 size: 18,
                 fallbackSize: 16,
               ),
