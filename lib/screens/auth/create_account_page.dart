@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
@@ -1181,6 +1182,15 @@ class _Step3ProfileState extends State<_Step3Profile> {
       );
 
       await _userService.createUserDocument(user);
+
+      try {
+        final token = await FirebaseMessaging.instance.getToken();
+        if (token != null) {
+          await _userService.updateFcmToken(widget.userId, token);
+        }
+      } catch (e) {
+        debugPrint('FCM token save failed: $e');
+      }
 
       if (position != null) {
         try {

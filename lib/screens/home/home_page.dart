@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -24,6 +25,7 @@ import '../../services/direct/direct_service.dart';
 import '../../models/notification_entity.dart';
 import '../../models/group_chat.dart';
 import '../../models/direct_chat.dart';
+import '../../models/user_entity.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -980,22 +982,31 @@ class _HomeTabState extends State<_HomeTab> {
   final _friendService = FriendService();
   String _displayName = '';
   bool _showNotifications = false;
+  StreamSubscription<UserEntity?>? _userSub;
 
   String get _uid => _auth.currentUser?.uid ?? '';
 
   @override
   void initState() {
     super.initState();
-    _loadUser();
+    _listenToUser();
   }
 
-  Future<void> _loadUser() async {
+  @override
+  void dispose() {
+    _userSub?.cancel();
+    super.dispose();
+  }
+
+  void _listenToUser() {
+    _userSub?.cancel();
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
-    final user = await _userService.getUserDocument(uid);
-    if (user != null && mounted) {
-      setState(() => _displayName = user.displayName);
-    }
+    _userSub = _userService.userDocumentStream(uid).listen((user) {
+      if (user != null && mounted) {
+        setState(() => _displayName = user.displayName);
+      }
+    });
   }
 
   Future<void> _acceptRequest(String friendshipId, String notificationId) async {

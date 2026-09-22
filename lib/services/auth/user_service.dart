@@ -24,6 +24,13 @@ class UserService {
     return UserEntity.fromJson(doc.data()!);
   }
 
+  Stream<UserEntity?> userDocumentStream(String userId) {
+    return _db.collection('users').doc(userId).snapshots().map((doc) {
+      if (!doc.exists) return null;
+      return UserEntity.fromJson(doc.data()!);
+    });
+  }
+
   Future<void> updateEmailVerified(String userId) async {
     await _db.collection('users').doc(userId).update({
       'is_email_verified': true,
