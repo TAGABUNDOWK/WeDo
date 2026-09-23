@@ -295,39 +295,44 @@ class _NearbySectionState extends State<_NearbySection> {
   Future<void> _load() async {
     setState(() => _isLoading = true);
 
-    Position? position;
     try {
-      position = await _locationService.getCurrentPosition();
-    } catch (_) {
-      position = null;
-    }
+      Position? position;
+      try {
+        position = await _locationService.getCurrentPosition();
+      } catch (_) {
+        position = null;
+      }
 
-    if (position == null) {
+      if (position == null) {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      await _userService.updateLocationIfNeeded(
+        _uid,
+        position.latitude,
+        position.longitude,
+      );
+
+      final users = await _userService.findNearbyUsers(
+        position.latitude,
+        position.longitude,
+        excludeUid: _uid,
+      );
+      final partners = await _friendService.getPartnerStatusMap(_uid);
+
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _position = position;
+        _nearbyUsers = users;
+        _partners = partners;
+      });
+    } catch (_) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      return;
     }
-
-    await _userService.updateLocationIfNeeded(
-      _uid,
-      position.latitude,
-      position.longitude,
-    );
-
-    final users = await _userService.findNearbyUsers(
-      position.latitude,
-      position.longitude,
-      excludeUid: _uid,
-    );
-    final partners = await _friendService.getPartnerStatusMap(_uid);
-
-    if (!mounted) return;
-    setState(() {
-      _isLoading = false;
-      _position = position;
-      _nearbyUsers = users;
-      _partners = partners;
-    });
   }
 
   Future<void> _scanSurroundings() async {
@@ -715,66 +720,71 @@ class _FriendsMapSectionState extends State<_FriendsMapSection> {
   Future<void> _load() async {
     setState(() => _isLoading = true);
 
-    final user = await _userService.getUserDocument(_uid);
-
-    Position? position;
     try {
-      position = await _locationService.getCurrentPosition();
-    } catch (_) {
-      position = null;
-    }
+      final user = await _userService.getUserDocument(_uid);
 
-    if (position == null) {
+      Position? position;
+      try {
+        position = await _locationService.getCurrentPosition();
+      } catch (_) {
+        position = null;
+      }
+
+      if (position == null) {
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+          _currentUser = user;
+        });
+        return;
+      }
+
+      await _userService.updateLocationIfNeeded(
+        _uid,
+        position.latitude,
+        position.longitude,
+      );
+
+      final users = await _userService.findNearbyUsers(
+        position.latitude,
+        position.longitude,
+        excludeUid: _uid,
+      );
+      final partners = await _friendService.getPartnerStatusMap(_uid);
+
+      final markers = <Marker>[];
+      for (final user in users) {
+        if (user.latitude != null && user.longitude != null) {
+          final name = user.username.isNotEmpty
+              ? user.username
+              : (user.displayName.isNotEmpty ? user.displayName : 'User');
+          markers.add(
+            Marker(
+              point: LatLng(user.latitude!, user.longitude!),
+              width: 40,
+              height: 40,
+              child: GestureDetector(
+                onTap: () => _showUserSheet(user, partners[user.userId]),
+                child: _UserAvatar(user: user, size: 32),
+              ),
+            ),
+          );
+        }
+      }
+
       if (!mounted) return;
       setState(() {
         _isLoading = false;
         _currentUser = user;
+        _position = position;
+        _nearbyUsers = users;
+        _partners = partners;
+        _markers = markers;
       });
-      return;
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
     }
-
-    await _userService.updateLocationIfNeeded(
-      _uid,
-      position.latitude,
-      position.longitude,
-    );
-
-    final users = await _userService.findNearbyUsers(
-      position.latitude,
-      position.longitude,
-      excludeUid: _uid,
-    );
-    final partners = await _friendService.getPartnerStatusMap(_uid);
-
-    final markers = <Marker>[];
-    for (final user in users) {
-      if (user.latitude != null && user.longitude != null) {
-        final name = user.username.isNotEmpty
-            ? user.username
-            : (user.displayName.isNotEmpty ? user.displayName : 'User');
-        markers.add(
-          Marker(
-            point: LatLng(user.latitude!, user.longitude!),
-            width: 40,
-            height: 40,
-            child: GestureDetector(
-              onTap: () => _showUserSheet(user, partners[user.userId]),
-              child: _UserAvatar(user: user, size: 32),
-            ),
-          ),
-        );
-      }
-    }
-
-    if (!mounted) return;
-    setState(() {
-      _isLoading = false;
-      _currentUser = user;
-      _position = position;
-      _nearbyUsers = users;
-      _partners = partners;
-      _markers = markers;
-    });
   }
 
   Future<void> _sendRequest(UserEntity user) async {
