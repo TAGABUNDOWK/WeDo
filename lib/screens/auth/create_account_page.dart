@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
@@ -10,6 +11,7 @@ import '../../services/auth/user_service.dart';
 import '../../services/location/location_service.dart';
 import '../../models/user_entity.dart';
 import '../../widgets/animated_background.dart';
+import '../../widgets/terms_agreement_dialog.dart';
 
 // ─── Design Tokens ───────────────────────────────────────────────────────────
 
@@ -969,13 +971,24 @@ class _Step3ProfileState extends State<_Step3Profile> {
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
   bool _agreedToTerms = false;
+  late final TapGestureRecognizer _termsRecognizer;
 
   final _authService = AuthService();
   final _userService = UserService();
   final _locationService = LocationService();
 
   @override
+  void initState() {
+    super.initState();
+    _termsRecognizer = TapGestureRecognizer()
+      ..onTap = () {
+        if (mounted) showTermsAgreementDialog(context);
+      };
+  }
+
+  @override
   void dispose() {
+    _termsRecognizer.dispose();
     _fullNameCtrl.dispose();
     _usernameCtrl.dispose();
     _birthDateCtrl.dispose();
@@ -1142,7 +1155,7 @@ class _Step3ProfileState extends State<_Step3Profile> {
     if (!_formKey.currentState!.validate()) return;
     if (!_agreedToTerms) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please agree to the Terms of Service')),
+        const SnackBar(content: Text('Please agree to the Terms & Agreement')),
       );
       return;
     }
@@ -1432,59 +1445,59 @@ class _Step3ProfileState extends State<_Step3Profile> {
             const SizedBox(height: 24),
 
             // Terms checkbox
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: Checkbox(
-                    value: _agreedToTerms,
-                    onChanged: (v) =>
-                        setState(() => _agreedToTerms = v ?? false),
-                    activeColor: _Tokens.pink,
-                    checkColor: Colors.white,
-                    side: BorderSide(color: Colors.white.withValues(alpha: 0.5)),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text.rich(
-                    TextSpan(
-                      style: _Tokens.poppins.copyWith(
-                        fontSize: 12,
-                        color: _Tokens.mutedWhite.withValues(alpha: 0.7),
-                        height: 1.4,
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 400),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: Checkbox(
+                        value: _agreedToTerms,
+                        onChanged: (v) =>
+                            setState(() => _agreedToTerms = v ?? false),
+                        activeColor: _Tokens.pink,
+                        checkColor: Colors.white,
+                        side: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.5),
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4),
+                        ),
                       ),
-                      children: const [
-                        TextSpan(text: 'I agree to the '),
-                        TextSpan(
-                          text: 'Terms of Service',
-                          style: TextStyle(
-                            color: _Tokens.pink,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        TextSpan(text: ' and '),
-                        TextSpan(
-                          text: 'Privacy Policy',
-                          style: TextStyle(
-                            color: _Tokens.pink,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        TextSpan(
-                          text:
-                              ', and acknowledge that my personal information will be handled securely and responsibly.',
-                        ),
-                      ],
                     ),
-                  ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text.rich(
+                        TextSpan(
+                          style: _Tokens.poppins.copyWith(
+                            fontSize: 12,
+                            color: _Tokens.mutedWhite.withValues(alpha: 0.7),
+                            height: 1.4,
+                          ),
+                          children: [
+                            const TextSpan(
+                              text:
+                                  'By checking this box, you confirm that you have read, understood, and agree to these ',
+                            ),
+                            TextSpan(
+                              text: 'Terms & Agreement',
+                              style: const TextStyle(
+                                color: _Tokens.pink,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              recognizer: _termsRecognizer,
+                            ),
+                            const TextSpan(text: '.'),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
 
             const SizedBox(height: 32),
