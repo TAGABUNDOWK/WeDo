@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'dart:math' as math;
 import 'package:firebase_auth/firebase_auth.dart';
@@ -39,6 +40,7 @@ class _AccountScreenState extends State<AccountScreen>
   final _imagePicker = ImagePicker();
   UserEntity? _user;
   bool _loading = true;
+  StreamSubscription<UserEntity?>? _userSub;
   int _totalMatches = 0;
   int _pickFightWins = 0;
   int _triRaceWins = 0;
@@ -64,12 +66,13 @@ class _AccountScreenState extends State<AccountScreen>
       duration: const Duration(milliseconds: 550),
       value: 0,
     );
-    _loadUser();
+    _listenToUser();
     _loadStats();
   }
 
   @override
   void dispose() {
+    _userSub?.cancel();
     _arcRevealCtrl.dispose();
     _frameRevealCtrl.dispose();
     super.dispose();
@@ -157,19 +160,51 @@ class _AccountScreenState extends State<AccountScreen>
     }
   }
 
+  void _listenToUser() {
+    _userSub?.cancel();
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) {
+      if (mounted) {
+        setState(() {
+          _user = null;
+          _loading = false;
+        });
+      }
+      return;
+    }
+    _userSub = _userService.userDocumentStream(uid).listen(
+      (user) {
+        if (mounted) {
+          setState(() {
+            _user = user;
+            _loading = false;
+          });
+        }
+      },
+      onError: (Object e) {
+        debugPrint('user stream error: $e');
+        if (mounted) setState(() => _loading = false);
+      },
+    );
+  }
+
   Future<void> _loadUser() async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
       return;
     }
-    final user = await _userService.getUserDocument(uid);
-
-    if (mounted) {
-      setState(() {
-        _user = user;
-        _loading = false;
-      });
+    try {
+      final user = await _userService.getUserDocument(uid);
+      if (mounted) {
+        setState(() {
+          _user = user;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('_loadUser error: $e');
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -298,13 +333,33 @@ class _AccountScreenState extends State<AccountScreen>
                     child: CircularProgressIndicator(color: Color(0xFFFE4EF0)),
                   )
                 : _user == null
-                ? const Center(
-                    child: Text(
-                      'No user data found',
-                      style: TextStyle(
-                        color: Colors.white54,
-                        fontFamily: 'Poppins',
-                      ),
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'No user data found',
+                          style: TextStyle(
+                            color: Colors.white54,
+                            fontFamily: 'Poppins',
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextButton(
+                          onPressed: () {
+                            setState(() => _loading = true);
+                            _listenToUser();
+                            _loadUser();
+                          },
+                          child: const Text(
+                            'Retry',
+                            style: TextStyle(
+                              color: Color(0xFFFE4EF0),
+                              fontFamily: 'Poppins',
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   )
                 : SafeArea(
