@@ -14,6 +14,7 @@ import '../../../services/direct/direct_service.dart';
 import '../../../services/event/event_service.dart';
 import '../../../services/poll/poll_service.dart';
 import '../../../services/call/call_service.dart';
+import '../../../services/call/call_manager.dart';
 import '../../../services/theme/chat_theme_resolver.dart';
 import '../../../utils/time_format.dart';
 import '../../../widgets/message_bubble.dart';
@@ -640,6 +641,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                               isGroup: false,
                               onStartAudioCall: () => _startCall(CallType.audio),
                               onStartVideoCall: () => _startCall(CallType.video),
+                              onReturnToCall: CallManager().returnToCall,
                             ),
                           ],
                         ),

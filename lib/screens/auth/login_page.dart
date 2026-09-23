@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/auth/user_service.dart';
@@ -54,12 +57,12 @@ class _LoginPageState extends State<LoginPage> {
       final credential = await _authService.signIn(email, pass);
       final userId = credential.user!.uid;
 
-      final token = await FirebaseMessaging.instance.getToken();
-      if (token != null) {
-        await _userService.updateFcmToken(userId, token);
-      }
+      // FCM is best-effort — never block or fail login on it.
+      unawaited(_saveFcmToken(userId));
 
-      final isVerified = await _userService.isEmailVerified(userId);
+      final isVerified = await _userService
+          .isEmailVerified(userId)
+          .timeout(const Duration(seconds: 15));
 
       if (!mounted) return;
 
@@ -73,6 +76,18 @@ class _LoginPageState extends State<LoginPage> {
       } else {
         Navigator.of(context).popUntil((route) => route.isFirst);
       }
+    } on TimeoutException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Login timed out. Check your connection and try again.'),
+        ),
+      );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_authErrorMessage(e))),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -80,6 +95,39 @@ class _LoginPageState extends State<LoginPage> {
       ).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _saveFcmToken(String userId) async {
+    try {
+      final token = await FirebaseMessaging.instance
+          .getToken()
+          .timeout(const Duration(seconds: 10));
+      if (token != null) {
+        await _userService.updateFcmToken(userId, token);
+      }
+    } catch (e) {
+      debugPrint('FCM token save skipped: $e');
+    }
+  }
+
+  String _authErrorMessage(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'user-not-found':
+        return 'No account found with this email.';
+      case 'wrong-password':
+      case 'invalid-credential':
+        return 'Incorrect email or password.';
+      case 'invalid-email':
+        return 'Enter a valid email address.';
+      case 'user-disabled':
+        return 'This account has been disabled.';
+      case 'too-many-requests':
+        return 'Too many attempts. Try again later.';
+      case 'network-request-failed':
+        return 'Network error. Check your connection and try again.';
+      default:
+        return e.message ?? 'Login failed. Please try again.';
     }
   }
 

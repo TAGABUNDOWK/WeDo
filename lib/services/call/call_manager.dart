@@ -60,11 +60,12 @@ class CallManager extends ChangeNotifier {
   bool _isSpeakerOn = false;
   final Set<String> _processedSignals = {};
   final Set<String> _pendingOfferPeers = {};
+  final Set<String> _departedPeers = {};
   final Map<String, Timer> _reconnectTimers = {};
   final _currentUser = FirebaseAuth.instance.currentUser;
   bool _isTransitioningToActive = false;
-  bool _hasLeftCall = false;
-  String? _leftCallId;
+  bool _isRejoining = false;
+  ActiveCallData? _leftCall;
 
   RTCVideoRenderer? _localRenderer;
   final Map<String, RTCVideoRenderer> _remoteRenderers = {};
@@ -93,8 +94,9 @@ class CallManager extends ChangeNotifier {
   Stream<MediaStream>? get onRemoteStream => _remoteStreamController?.stream;
 
   bool get hasAnyCall => _activeCall != null || _outgoingCall != null;
-  bool get hasLeftCall => _hasLeftCall;
-  String? get leftCallId => _leftCallId;
+  bool get hasLeftCall => _leftCall != null;
+  String? get leftCallId => _leftCall?.callId;
+  ActiveCallData? get leftCall => _leftCall;
 
   void setOutgoingLocalStream(MediaStream? stream) {
     _outgoingLocalStream = stream;
@@ -258,7 +260,7 @@ class CallManager extends ChangeNotifier {
 
     _callOverlay = OverlayEntry(
       builder: (_) => _CallOverlayBanner(
-        onReturnToCall: _returnToCallFromOverlay,
+        onReturnToCall: returnToCall,
         onEndCall: _activeCall != null ? endActiveCall : _cancelOutgoingFromOverlay,
       ),
     );
@@ -270,7 +272,7 @@ class CallManager extends ChangeNotifier {
     _callOverlay = null;
   }
 
-  void _returnToCallFromOverlay() {
+  void returnToCall() {
     final active = _activeCall;
     final outgoing = _outgoingCall;
 
@@ -338,6 +340,8 @@ class CallManager extends ChangeNotifier {
     _isSpeakerOn = audioOnly;
     _processedSignals.clear();
     _pendingOfferPeers.clear();
+    _departedPeers.clear();
+    _leftCall = null;
 
     _webrtcService = webrtc.WebRTCService();
     _localStreamController = StreamController<MediaStream>.broadcast();
@@ -422,6 +426,7 @@ class CallManager extends ChangeNotifier {
 
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
           state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+        _purgeSignalsForPeer(peerId);
         if (callData.isGroup && !_reconnectingPeers.contains(peerId)) {
           final renderer = _remoteRenderers.remove(peerId);
           renderer?.srcObject = null;
@@ -434,9 +439,11 @@ class CallManager extends ChangeNotifier {
           _reconnectTimers[peerId] = Timer(const Duration(seconds: 3), () {
             _reconnectTimers.remove(peerId);
             _reconnectingPeers.remove(peerId);
-            if (_activeCall != null && callData.isGroup) {
+            if (_activeCall != null &&
+                callData.isGroup &&
+                !_departedPeers.contains(peerId)) {
               final key = webrtc.WebRTCService.pcKeyForTest(_currentUser?.uid ?? '', peerId);
-              _webrtcService?.peerConnections.remove(key);
+              _webrtcService?.peerConnections.remove(key)?.close();
               _pendingOfferPeers.remove(peerId);
               _createGroupOfferTo(peerId);
             }
@@ -528,12 +535,26 @@ class CallManager extends ChangeNotifier {
           final status = data['status'] as String?;
           if (uid == null || uid == user.uid) continue;
           if (status == 'active') {
+            _departedPeers.remove(uid);
             final key = webrtc.WebRTCService.pcKeyForTest(user.uid, uid);
             if (!_webrtcService!.peerConnections.containsKey(key) &&
                 !_pendingOfferPeers.contains(uid) &&
                 !_reconnectingPeers.contains(uid)) {
               _createGroupOfferTo(uid);
             }
+          } else {
+            _departedPeers.add(uid);
+            _purgeSignalsForPeer(uid);
+            _reconnectTimers[uid]?.cancel();
+            _reconnectTimers.remove(uid);
+            _reconnectingPeers.remove(uid);
+            _pendingOfferPeers.remove(uid);
+            final key = webrtc.WebRTCService.pcKeyForTest(user.uid, uid);
+            _webrtcService?.peerConnections.remove(key)?.close();
+            final renderer = _remoteRenderers.remove(uid);
+            renderer?.srcObject = null;
+            renderer?.dispose();
+            notifyListeners();
           }
         }
       });
@@ -560,11 +581,21 @@ class CallManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _purgeSignalsForPeer(String peerId) {
+    final uid = _currentUser?.uid;
+    if (uid == null) return;
+    _processedSignals.remove('offer_${peerId}_$uid');
+    _processedSignals.remove('offer_${uid}_$peerId');
+    _processedSignals.remove('answer_${peerId}_$uid');
+    _processedSignals.remove('answer_${uid}_$peerId');
+  }
+
   void _createGroupOfferTo(String peerId) {
     final user = _currentUser;
     if (user == null || _activeCall == null) return;
     final uid = user.uid;
     if (uid.compareTo(peerId) > 0) return;
+    if (_departedPeers.contains(peerId)) return;
     if (_pendingOfferPeers.contains(peerId)) return;
 
     final key = webrtc.WebRTCService.pcKeyForTest(uid, peerId);
@@ -591,6 +622,7 @@ class CallManager extends ChangeNotifier {
     for (final memberUid in _activeCall!.members) {
       if (memberUid == uid) continue;
       if (uid.compareTo(memberUid) > 0) continue;
+      if (_departedPeers.contains(memberUid)) continue;
       if (_pendingOfferPeers.contains(memberUid)) continue;
 
       final key = webrtc.WebRTCService.pcKeyForTest(uid, memberUid);
@@ -682,31 +714,39 @@ class CallManager extends ChangeNotifier {
     _callDuration = 0;
     _processedSignals.clear();
     _pendingOfferPeers.clear();
-    _hasLeftCall = false;
-    _leftCallId = null;
+    _departedPeers.clear();
+    _leftCall = null;
     WakelockPlus.disable();
+
+    final oldWebrtc = _webrtcService;
+    final oldLocalCtrl = _localStreamController;
+    final oldRemoteCtrl = _remoteStreamController;
+    final oldLocalRenderer = _localRenderer;
+    final oldRemoteRenderers =
+        Map<String, RTCVideoRenderer>.from(_remoteRenderers);
+    _webrtcService = null;
+    _localStreamController = null;
+    _remoteStreamController = null;
+    _localRenderer = null;
+    _remoteRenderers.clear();
+
     notifyListeners();
 
     Future.microtask(() async {
-      if (_webrtcService != null) {
-        await _webrtcService!.dispose();
-        _webrtcService = null;
+      if (oldWebrtc != null) {
+        await oldWebrtc.dispose();
       }
 
-      _localStreamController?.close();
-      _remoteStreamController?.close();
-      _localStreamController = null;
-      _remoteStreamController = null;
+      await oldLocalCtrl?.close();
+      await oldRemoteCtrl?.close();
 
-      _localRenderer?.srcObject = null;
-      _localRenderer?.dispose();
-      _localRenderer = null;
+      oldLocalRenderer?.srcObject = null;
+      oldLocalRenderer?.dispose();
 
-      for (final renderer in _remoteRenderers.values) {
+      for (final renderer in oldRemoteRenderers.values) {
         renderer.srcObject = null;
         renderer.dispose();
       }
-      _remoteRenderers.clear();
 
       Future.delayed(const Duration(seconds: 2), () async {
         try {
@@ -726,8 +766,7 @@ class CallManager extends ChangeNotifier {
     }
 
     final callId = _activeCall!.callId;
-    _hasLeftCall = true;
-    _leftCallId = callId;
+    _leftCall = _activeCall;
 
     removeCallOverlay();
 
@@ -741,6 +780,9 @@ class CallManager extends ChangeNotifier {
     }
     _reconnectTimers.clear();
     _reconnectingPeers.clear();
+    _pendingOfferPeers.clear();
+    _processedSignals.clear();
+    _departedPeers.clear();
 
     final callMessageStatus = _callDuration > 0 ? 'active' : 'ended';
     await _sendCallMessage(callStatus: callMessageStatus);
@@ -752,93 +794,125 @@ class CallManager extends ChangeNotifier {
       } catch (e) {
         debugPrint('Error leaving call: $e');
       }
+      try {
+        await _callService.deleteUserSignals(callId, uid);
+      } catch (e) {
+        debugPrint('Error deleting user call signals: $e');
+      }
     }
 
     _activeCall = null;
     _callDuration = 0;
-    _processedSignals.clear();
-    _pendingOfferPeers.clear();
     WakelockPlus.disable();
+
+    final oldWebrtc = _webrtcService;
+    final oldLocalCtrl = _localStreamController;
+    final oldRemoteCtrl = _remoteStreamController;
+    final oldLocalRenderer = _localRenderer;
+    final oldRemoteRenderers =
+        Map<String, RTCVideoRenderer>.from(_remoteRenderers);
+    _webrtcService = null;
+    _localStreamController = null;
+    _remoteStreamController = null;
+    _localRenderer = null;
+    _remoteRenderers.clear();
+
     notifyListeners();
 
     Future.microtask(() async {
-      if (_webrtcService != null) {
-        await _webrtcService!.dispose();
-        _webrtcService = null;
+      if (oldWebrtc != null) {
+        await oldWebrtc.dispose();
       }
 
-      _localStreamController?.close();
-      _remoteStreamController?.close();
-      _localStreamController = null;
-      _remoteStreamController = null;
+      await oldLocalCtrl?.close();
+      await oldRemoteCtrl?.close();
 
-      _localRenderer?.srcObject = null;
-      _localRenderer?.dispose();
-      _localRenderer = null;
+      oldLocalRenderer?.srcObject = null;
+      oldLocalRenderer?.dispose();
 
-      for (final renderer in _remoteRenderers.values) {
+      for (final renderer in oldRemoteRenderers.values) {
         renderer.srcObject = null;
         renderer.dispose();
       }
-      _remoteRenderers.clear();
     });
   }
 
   Future<void> rejoinCall() async {
-    if (!_hasLeftCall || _leftCallId == null) return;
-    if (_activeCall != null) return;
+    if (_isRejoining) return;
+    final left = _leftCall;
+    if (left == null || _activeCall != null) return;
 
-    final callId = _leftCallId!;
     final user = _currentUser;
     if (user == null) return;
 
-    final callDoc = await _callService.getCallStream(callId).first;
-    if (callDoc == null ||
-        callDoc.status == CallStatus.ended ||
-        callDoc.status == CallStatus.declined ||
-        callDoc.status == CallStatus.missed ||
-        callDoc.status == CallStatus.cancelled) {
-      _hasLeftCall = false;
-      _leftCallId = null;
-      notifyListeners();
-      return;
-    }
+    _isRejoining = true;
+    try {
+      final callId = left.callId;
+      final Call? callDoc;
+      try {
+        callDoc = await _callService
+            .getCallStream(callId)
+            .first
+            .timeout(const Duration(seconds: 10));
+      } on TimeoutException {
+        return;
+      }
 
-    _hasLeftCall = false;
-    _leftCallId = null;
+      if (callDoc == null ||
+          callDoc.status == CallStatus.ended ||
+          callDoc.status == CallStatus.declined ||
+          callDoc.status == CallStatus.missed ||
+          callDoc.status == CallStatus.cancelled) {
+        _leftCall = null;
+        notifyListeners();
+        return;
+      }
 
-    final callType = callDoc.type;
-    final members = callDoc.members;
+      final resolvedCall = callDoc;
+      final callName = left.callName;
+      _leftCall = null;
 
-    await startNewCall(
-      callData: ActiveCallData(
-        callId: callId,
-        callName: callDoc.groupId ?? 'Group Call',
-        callType: callType,
-        members: members,
-        createdBy: callDoc.createdBy,
-        isGroup: callDoc.groupId != null,
-        chatId: callDoc.chatId,
-        groupId: callDoc.groupId,
-        startedAt: callDoc.createdAt,
-      ),
-      audioOnly: callType == CallType.audio,
-    );
+      try {
+        await startNewCall(
+          callData: ActiveCallData(
+            callId: callId,
+            callName: callName,
+            callType: resolvedCall.type,
+            members: resolvedCall.members,
+            createdBy: resolvedCall.createdBy,
+            isGroup: resolvedCall.groupId != null,
+            chatId: resolvedCall.chatId,
+            groupId: resolvedCall.groupId,
+            startedAt: DateTime.now(),
+          ),
+          audioOnly: resolvedCall.type == CallType.audio,
+        );
+      } catch (e) {
+        debugPrint('Error rejoining call: $e');
+        if (_activeCall == null) {
+          _leftCall = left;
+        }
+        notifyListeners();
+        return;
+      }
 
-    navigatorKey.currentState?.pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => CallScreen(
-          callId: callId,
-          callName: callDoc.groupId ?? 'Group Call',
-          callType: callType,
-          members: members,
-          createdBy: callDoc.createdBy,
-          isGroup: callDoc.groupId != null,
-          chatId: callDoc.chatId,
-          groupId: callDoc.groupId,
+      navigatorKey.currentState?.pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => CallScreen(
+            callId: callId,
+            callName: callName,
+            callType: resolvedCall.type,
+            members: resolvedCall.members,
+            createdBy: resolvedCall.createdBy,
+            isGroup: resolvedCall.groupId != null,
+            chatId: resolvedCall.chatId,
+            groupId: resolvedCall.groupId,
+          ),
         ),
-      ),
-    );
+      );
+    } finally {
+      _isRejoining = false;
+    }
   }
 
   void toggleMute() {

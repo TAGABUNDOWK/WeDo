@@ -444,18 +444,35 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     _callManager.rejoinCall();
   }
 
+  void _returnToCall() {
+    _callManager.returnToCall();
+  }
+
   Widget _buildActiveCallBanner() {
     final active = _callManager.activeCall;
     final outgoing = _callManager.outgoingCall;
-    final call = active ?? outgoing;
+    final left = _callManager.leftCall;
+    final call = (active != null && active.groupId == widget.groupId
+            ? active
+            : null) ??
+        (outgoing != null && outgoing.groupId == widget.groupId
+            ? outgoing
+            : null) ??
+        (left != null && left.groupId == widget.groupId ? left : null);
     if (call == null) return const SizedBox.shrink();
 
-    final isActive = active != null;
+    final isActive = active != null && active.groupId == widget.groupId;
+    final isOutgoing =
+        outgoing != null && outgoing.groupId == widget.groupId;
+    final hasLeft = !isActive &&
+        !isOutgoing &&
+        left != null &&
+        left.groupId == widget.groupId;
     final isVideo = call.callType == CallType.video;
     final duration = _callManager.callDuration;
 
     return GestureDetector(
-      onTap: _rejoinCall,
+      onTap: hasLeft ? _rejoinCall : _returnToCall,
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -499,37 +516,47 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    isActive ? 'Group Call in Progress' : 'Outgoing Call...',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: isActive ? Colors.green : Colors.orange,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 5),
                       Text(
                         isActive
-                            ? '${call.members.length} participants \u2022 ${formatSeconds(duration)}'
-                            : 'Ringing...',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.7),
-                          fontSize: 11,
+                            ? 'Group Call in Progress'
+                            : hasLeft
+                                ? 'You left the call'
+                                : 'Outgoing Call...',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                    ],
-                  ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: isActive
+                                  ? Colors.green
+                                  : hasLeft
+                                      ? Colors.redAccent
+                                      : Colors.orange,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            isActive
+                                ? '${call.members.length} participants \u2022 ${formatSeconds(duration)}'
+                                : hasLeft
+                                    ? '${call.members.length} participants \u2022 Tap to rejoin'
+                                    : 'Ringing...',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.7),
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
                 ],
               ),
             ),
@@ -539,9 +566,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 color: const Color(0xFFFE4EF0),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Text(
-                'Join',
-                style: TextStyle(
+              child: Text(
+                hasLeft ? 'Rejoin' : 'Join',
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -802,6 +829,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                               onStartAudioCall: () => _startCall(CallType.audio),
                               onStartVideoCall: () => _startCall(CallType.video),
                               onRejoin: _rejoinCall,
+                              onReturnToCall: _returnToCall,
                             ),
                           ],
                         ),
@@ -813,9 +841,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                   ),
                 ),
               ),
-              if (_callManager.hasActiveCall &&
-                  (_callManager.activeCall?.groupId == widget.groupId ||
-                   _callManager.outgoingCall?.groupId == widget.groupId))
+              if (_callManager.activeCall?.groupId == widget.groupId ||
+                  _callManager.outgoingCall?.groupId == widget.groupId ||
+                  _callManager.leftCall?.groupId == widget.groupId)
                 _buildActiveCallBanner(),
               if (_isUploading)
                 const LinearProgressIndicator(

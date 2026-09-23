@@ -107,6 +107,16 @@ class CallService {
     }
   }
 
+  Future<void> deleteUserSignals(String callId, String uid) async {
+    final snap = await _signals(callId).where('toUid', isEqualTo: uid).get();
+    if (snap.docs.isEmpty) return;
+    final batch = _db.batch();
+    for (final doc in snap.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
+  }
+
   Stream<Call?> getCallStream(String callId) {
     return _calls.doc(callId).snapshots().map((doc) {
       if (!doc.exists) return null;
