@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 
 class AuthService {
@@ -13,10 +15,9 @@ class AuthService {
   }
 
   Future<UserCredential> signIn(String email, String password) async {
-    return await _auth.signInWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
+    return await _auth
+        .signInWithEmailAndPassword(email: email, password: password)
+        .timeout(const Duration(seconds: 20));
   }
 
   /// Reauthenticate the current user with email/password credentials.

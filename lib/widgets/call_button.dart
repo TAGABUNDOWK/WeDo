@@ -57,6 +57,7 @@ class CallButtons extends StatelessWidget {
   final VoidCallback onStartAudioCall;
   final VoidCallback onStartVideoCall;
   final VoidCallback? onRejoin;
+  final VoidCallback? onReturnToCall;
 
   const CallButtons({
     super.key,
@@ -65,6 +66,7 @@ class CallButtons extends StatelessWidget {
     required this.onStartAudioCall,
     required this.onStartVideoCall,
     this.onRejoin,
+    this.onReturnToCall,
   });
 
   @override
@@ -76,8 +78,12 @@ class CallButtons extends StatelessWidget {
         bool matches(String? id) => id == chatId;
         final active = mgr.activeCall;
         final outgoing = mgr.outgoingCall;
+        final left = mgr.leftCall;
         final inCall = (active != null && matches(isGroup ? active.groupId : active.chatId)) ||
             (outgoing != null && matches(isGroup ? outgoing.groupId : outgoing.chatId));
+        final canRejoin = !inCall &&
+            left != null &&
+            matches(isGroup ? left.groupId : left.chatId);
         final activeType = active != null && matches(isGroup ? active.groupId : active.chatId)
             ? active.callType
             : (outgoing != null && matches(isGroup ? outgoing.groupId : outgoing.chatId)
@@ -85,6 +91,12 @@ class CallButtons extends StatelessWidget {
                 : null);
         final audioActive = inCall && activeType == CallType.audio;
         final videoActive = inCall && activeType == CallType.video;
+
+        VoidCallback resolve(VoidCallback start) {
+          if (canRejoin && onRejoin != null) return onRejoin!;
+          if (inCall && onReturnToCall != null) return onReturnToCall!;
+          return start;
+        }
 
         Widget callBtn(
           String asset,
@@ -119,7 +131,7 @@ class CallButtons extends StatelessWidget {
               'assets/icons/call.png',
               Icons.phone,
               audioActive,
-              inCall && onRejoin != null ? onRejoin! : onStartAudioCall,
+              resolve(onStartAudioCall),
               size: 18,
               fallbackSize: 16,
             ),
@@ -130,7 +142,7 @@ class CallButtons extends StatelessWidget {
                 'assets/icons/video-call.png',
                 Icons.videocam,
                 videoActive,
-                inCall && onRejoin != null ? onRejoin! : onStartVideoCall,
+                resolve(onStartVideoCall),
                 size: 18,
                 fallbackSize: 16,
               ),
