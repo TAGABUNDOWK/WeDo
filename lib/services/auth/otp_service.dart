@@ -59,4 +59,53 @@ class OtpService {
     }
   }
 
+  /// Send a password reset code to the given email.
+  Future<void> sendForgotPassword(String email) async {
+    final response = await http
+        .post(
+          Uri.parse('$_baseUrl/forgot-password'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'email': email}),
+        )
+        .timeout(const Duration(seconds: 20));
+
+    if (response.statusCode != 200) {
+      throw Exception(_parseError(response));
+    }
+  }
+
+  /// Verify the password reset code sent to the email.
+  Future<void> verifyResetCode(String email, String code) async {
+    final response = await http
+        .post(
+          Uri.parse('$_baseUrl/verify-reset-code'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'email': email, 'code': code}),
+        )
+        .timeout(const Duration(seconds: 20));
+
+    if (response.statusCode != 200) {
+      throw Exception(_parseError(response));
+    }
+  }
+
+  /// Reset the password for the verified email using the provided code.
+  Future<void> resetPassword(String email, String code, String newPassword) async {
+    final response = await http
+        .post(
+          Uri.parse('$_baseUrl/reset-password'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'email': email,
+            'code': code,
+            'newPassword': newPassword,
+          }),
+        )
+        .timeout(const Duration(seconds: 20));
+
+    if (response.statusCode != 200) {
+      throw Exception(_parseError(response));
+    }
+  }
+
 }
