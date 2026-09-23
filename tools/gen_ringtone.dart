@@ -1,3 +1,4 @@
+import 'dart:developer' as dev;
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -62,7 +63,7 @@ void main() {
   final wav = _buildWav(samples, sampleRate);
   const outPath = 'assets/audio/ringtone.wav';
   File(outPath).writeAsBytesSync(wav);
-  print('Generated $outPath (${wav.length} bytes)');
+  dev.log('Generated $outPath (${wav.length} bytes)');
 }
 
 Uint8List _buildWav(Int16List samples, int sampleRate) {

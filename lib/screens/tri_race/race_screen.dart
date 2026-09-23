@@ -90,7 +90,6 @@ class _RaceScreenState extends State<RaceScreen>
 
   // Cached data — rebuilt only when participants change
   final Map<String, Color> _colors = {};
-  final Map<String, Color?> _colorEnds = {};
   final Map<String, List<_Segment>> _segments = {};
   String _colorTheme = 'solid';
 
@@ -326,13 +325,9 @@ class _RaceScreenState extends State<RaceScreen>
 
   void _rebuildCaches() {
     _colors.clear();
-    _colorEnds.clear();
     _segments.clear();
     for (final p in _participants) {
       _colors[p.userId] = Color(int.parse(p.avatarColor.replaceFirst('#', '0xFF')));
-      _colorEnds[p.userId] = p.avatarColorEnd != null
-          ? Color(int.parse(p.avatarColorEnd!.replaceFirst('#', '0xFF')))
-          : null;
       _segments[p.userId] = _buildSegments(p.speedSeed ?? 0.5);
 
       if (!_rotations.containsKey(p.userId)) {
@@ -354,9 +349,6 @@ class _RaceScreenState extends State<RaceScreen>
       setState(() => _displayNames.addAll(names));
     });
   }
-
-  String _participantName(TriRaceParticipant p) =>
-      _displayNames[p.userId] ?? p.username;
 
   double _computeProgress(TriRaceParticipant p) {
     if (_raceStartedAt == null || p.finishTimeMs == null) return 0;
@@ -507,7 +499,6 @@ class _RaceScreenState extends State<RaceScreen>
               painter: _TriangleLayerPainter(
                 participants: _participants,
                 colors: _colors,
-                colorEnds: _colorEnds,
                 segments: _segments,
                 rotations: _rotations,
                 displayNames: _displayNames,
@@ -590,7 +581,6 @@ class _RaceScreenState extends State<RaceScreen>
 class _TriangleLayerPainter extends CustomPainter {
   final List<TriRaceParticipant> participants;
   final Map<String, Color> colors;
-  final Map<String, Color?> colorEnds;
   final Map<String, List<_Segment>> segments;
   final Map<String, double> rotations;
   final Map<String, String> displayNames;
@@ -605,7 +595,6 @@ class _TriangleLayerPainter extends CustomPainter {
   _TriangleLayerPainter({
     required this.participants,
     required this.colors,
-    required this.colorEnds,
     required this.segments,
     required this.rotations,
     required this.displayNames,
@@ -855,7 +844,10 @@ class _LeaderboardPanel extends StatelessWidget {
             final p = entry.value;
             final isArrived = arrived.contains(p.userId);
             final color = colors[p.userId] ?? Colors.white;
-            final medal = (isArrived && p.placement != null && p.placement! <= 3)
+            final medal = (isArrived &&
+                    p.placement != null &&
+                    p.placement! >= 1 &&
+                    p.placement! <= 3)
                 ? const ['🥇', '🥈', '🥉'][p.placement! - 1]
                 : '';
 

@@ -533,14 +533,13 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
                                     try {
                                       await _service.addBot(widget.raceId);
                                     } on TriRaceException catch (e) {
-                                      if (mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text(e.message),
-                                            backgroundColor: const Color(0xFFEF5350),
-                                          ),
-                                        );
-                                      }
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(e.message),
+                                          backgroundColor: const Color(0xFFEF5350),
+                                        ),
+                                      );
                                     }
                                   }
                                 : null,
@@ -566,14 +565,13 @@ class _WaitingLobbyScreenState extends State<WaitingLobbyScreen> {
                                     try {
                                       await _service.startTriRace(widget.raceId, _currentUser!.uid);
                                     } on TriRaceException catch (e) {
-                                      if (mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text(e.message),
-                                            backgroundColor: const Color(0xFFEF5350),
-                                          ),
-                                        );
-                                      }
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(e.message),
+                                          backgroundColor: const Color(0xFFEF5350),
+                                        ),
+                                      );
                                     }
                                   }
                                 : null,

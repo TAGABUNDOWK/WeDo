@@ -7,10 +7,13 @@ import 'package:latlong2/latlong.dart';
 import '../../models/friend_entity.dart';
 import '../../models/user_entity.dart';
 import '../../services/auth/user_service.dart';
+import '../../services/direct/direct_service.dart';
 import '../../services/friends/friend_service.dart';
 import '../../services/location/location_service.dart';
 import '../../utils/constants.dart';
 import '../account/account_screen.dart';
+import 'add_friend_page.dart';
+import '../chat/direct/direct_chat_screen.dart';
 
 const _font = 'PlusJakartaSans';
 
@@ -25,13 +28,21 @@ class _FriendsPageState extends State<FriendsPage> {
   final _auth = FirebaseAuth.instance;
   final _friendService = FriendService();
   final _userService = UserService();
+  final _directService = DirectService();
   UserEntity? _currentUser;
+
+  late final Stream<List<FriendEntity>> _incomingRequestsStream;
+  late final Stream<List<FriendEntity>> _outgoingRequestsStream;
+  late final Stream<List<FriendEntity>> _friendsStream;
 
   String get _uid => _auth.currentUser!.uid;
 
   @override
   void initState() {
     super.initState();
+    _incomingRequestsStream = _friendService.getIncomingRequestsStream(_uid);
+    _outgoingRequestsStream = _friendService.getOutgoingRequestsStream(_uid);
+    _friendsStream = _friendService.getFriendsStream(_uid);
     _loadCurrentUser();
   }
 
@@ -49,7 +60,10 @@ class _FriendsPageState extends State<FriendsPage> {
         elevation: 0,
         centerTitle: true,
         leading: IconButton(
-          onPressed: () {},
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AddFriendPage()),
+          ).then((_) => _loadCurrentUser()),
           icon: const Icon(Icons.menu, color: Colors.white, size: 24),
         ),
         title: const Text(
@@ -81,76 +95,124 @@ class _FriendsPageState extends State<FriendsPage> {
           const SizedBox(height: 20),
           const _NearbySection(),
           const SizedBox(height: 20),
-          StreamBuilder<List<FriendEntity>>(
-            stream: _friendService.getIncomingRequestsStream(_uid),
-            builder: (context, snapshot) {
-              final list = snapshot.data ?? const <FriendEntity>[];
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _SectionHeader('Incoming Requests${list.isNotEmpty ? ' (${list.length})' : ''}'),
-                  if (list.isEmpty)
-                    const _EmptyState('No pending requests')
-                  else
-                    ...list.map((f) => _IncomingRequestTile(
-                          friendship: f,
-                          otherUid: f.otherUserId(_uid),
-                          userService: _userService,
-                          onAccept: () => _accept(f),
-                          onDecline: () => _decline(f),
-                        )),
-                ],
-              );
-            },
+          _friendSection(
+            title: 'Incoming Requests',
+            stream: _incomingRequestsStream,
+            emptyMessage: 'No pending requests',
+            itemBuilder: (f) => _IncomingRequestTile(
+              friendship: f,
+              otherUid: f.otherUserId(_uid),
+              userService: _userService,
+              onAccept: () => _accept(f),
+              onDecline: () => _decline(f),
+            ),
           ),
           const SizedBox(height: 20),
-          StreamBuilder<List<FriendEntity>>(
-            stream: _friendService.getOutgoingRequestsStream(_uid),
-            builder: (context, snapshot) {
-              final list = snapshot.data ?? const <FriendEntity>[];
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _SectionHeader('Sent Requests${list.isNotEmpty ? ' (${list.length})' : ''}'),
-                  if (list.isEmpty)
-                    const _EmptyState('No sent requests')
-                  else
-                    ...list.map((f) => _SentRequestTile(
-                          friendship: f,
-                          otherUid: f.otherUserId(_uid),
-                          userService: _userService,
-                          onCancel: () => _cancel(f),
-                        )),
-                ],
-              );
-            },
+          _friendSection(
+            title: 'Sent Requests',
+            stream: _outgoingRequestsStream,
+            emptyMessage: 'No sent requests',
+            itemBuilder: (f) => _SentRequestTile(
+              friendship: f,
+              otherUid: f.otherUserId(_uid),
+              userService: _userService,
+              onCancel: () => _cancel(f),
+            ),
           ),
           const SizedBox(height: 20),
-          StreamBuilder<List<FriendEntity>>(
-            stream: _friendService.getFriendsStream(_uid),
-            builder: (context, snapshot) {
-              final list = snapshot.data ?? const <FriendEntity>[];
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _SectionHeader('Friends${list.isNotEmpty ? ' (${list.length})' : ''}'),
-                  if (list.isEmpty)
-                    const _EmptyState('No friends yet')
-                  else
-                    ...list.map((f) => _ActiveFriendTile(
-                          friendship: f,
-                          otherUid: f.otherUserId(_uid),
-                          userService: _userService,
-                          onRemove: () => _remove(f),
-                        )),
-                ],
-              );
-            },
+          _friendSection(
+            title: 'Friends',
+            stream: _friendsStream,
+            emptyMessage: 'No friends yet',
+            itemBuilder: (f) => _ActiveFriendTile(
+              friendship: f,
+              otherUid: f.otherUserId(_uid),
+              userService: _userService,
+              onChat: () => _openChat(f.otherUserId(_uid)),
+              onRemove: () => _remove(f),
+            ),
           ),
           const SizedBox(height: 100),
         ],
       ),
     );
+  }
+
+  Widget _friendSection({
+    required String title,
+    required Stream<List<FriendEntity>> stream,
+    required String emptyMessage,
+    required Widget Function(FriendEntity) itemBuilder,
+  }) {
+    return StreamBuilder<List<FriendEntity>>(
+      stream: stream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SectionHeader(title),
+              const _EmptyState('Something went wrong. Pull to refresh and try again.'),
+            ],
+          );
+        }
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SectionHeader(title),
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    color: AppColors.electricViolet,
+                    strokeWidth: 2,
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
+        final list = snapshot.data ?? const <FriendEntity>[];
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _SectionHeader(
+              list.isNotEmpty ? '$title (${list.length})' : title,
+            ),
+            if (list.isEmpty)
+              _EmptyState(emptyMessage)
+            else
+              ...list.map(itemBuilder),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _openChat(String otherUid) async {
+    if (otherUid.isEmpty) return;
+    try {
+      final chatId = await _directService.getOrCreateChat(
+        currentUid: _uid,
+        otherUid: otherUid,
+      );
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DirectChatScreen(chatId: chatId, otherUid: otherUid),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
   }
 
   Future<void> _accept(FriendEntity f) async {
@@ -294,7 +356,6 @@ class _NearbySectionState extends State<_NearbySection> {
 
   Future<void> _load() async {
     setState(() => _isLoading = true);
-
     try {
       Position? position;
       try {
@@ -305,7 +366,10 @@ class _NearbySectionState extends State<_NearbySection> {
 
       if (position == null) {
         if (!mounted) return;
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+          _position = null;
+        });
         return;
       }
 
@@ -337,9 +401,13 @@ class _NearbySectionState extends State<_NearbySection> {
 
   Future<void> _scanSurroundings() async {
     setState(() => _scanning = true);
-    await _load();
-    if (!mounted) return;
-    setState(() => _scanning = false);
+    try {
+      await _load();
+    } finally {
+      if (mounted) {
+        setState(() => _scanning = false);
+      }
+    }
   }
 
   String _formatDistance(double meters) {
@@ -659,9 +727,8 @@ class _NearbyUserTile extends StatelessWidget {
 
 class _GlassCard extends StatelessWidget {
   final Widget child;
-  final EdgeInsetsGeometry? padding;
 
-  const _GlassCard({required this.child}) : padding = null;
+  const _GlassCard({required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -670,7 +737,7 @@ class _GlassCard extends StatelessWidget {
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
-          padding: padding ?? const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.06),
             borderRadius: BorderRadius.circular(16),
@@ -704,8 +771,6 @@ class _FriendsMapSectionState extends State<_FriendsMapSection> {
   bool _isLoading = true;
   bool _expanded = false;
   Position? _position;
-  UserEntity? _currentUser;
-  List<UserEntity> _nearbyUsers = const [];
   Map<String, String> _partners = {};
   List<Marker> _markers = [];
 
@@ -719,10 +784,7 @@ class _FriendsMapSectionState extends State<_FriendsMapSection> {
 
   Future<void> _load() async {
     setState(() => _isLoading = true);
-
     try {
-      final user = await _userService.getUserDocument(_uid);
-
       Position? position;
       try {
         position = await _locationService.getCurrentPosition();
@@ -732,10 +794,7 @@ class _FriendsMapSectionState extends State<_FriendsMapSection> {
 
       if (position == null) {
         if (!mounted) return;
-        setState(() {
-          _isLoading = false;
-          _currentUser = user;
-        });
+        setState(() => _isLoading = false);
         return;
       }
 
@@ -755,9 +814,6 @@ class _FriendsMapSectionState extends State<_FriendsMapSection> {
       final markers = <Marker>[];
       for (final user in users) {
         if (user.latitude != null && user.longitude != null) {
-          final name = user.username.isNotEmpty
-              ? user.username
-              : (user.displayName.isNotEmpty ? user.displayName : 'User');
           markers.add(
             Marker(
               point: LatLng(user.latitude!, user.longitude!),
@@ -775,9 +831,7 @@ class _FriendsMapSectionState extends State<_FriendsMapSection> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _currentUser = user;
         _position = position;
-        _nearbyUsers = users;
         _partners = partners;
         _markers = markers;
       });
@@ -1271,89 +1325,123 @@ class _SentRequestTile extends StatelessWidget {
 
 // ── Active Friend Tile ───────────────────────────────────────────────────────
 
-class _ActiveFriendTile extends StatelessWidget {
+class _ActiveFriendTile extends StatefulWidget {
   final FriendEntity friendship;
   final String otherUid;
   final UserService userService;
+  final VoidCallback onChat;
   final VoidCallback onRemove;
 
   const _ActiveFriendTile({
     required this.friendship,
     required this.otherUid,
     required this.userService,
+    required this.onChat,
     required this.onRemove,
   });
+
+  @override
+  State<_ActiveFriendTile> createState() => _ActiveFriendTileState();
+}
+
+class _ActiveFriendTileState extends State<_ActiveFriendTile> {
+  late Future<UserEntity?> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = widget.userService.getUserDocument(widget.otherUid);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ActiveFriendTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.otherUid != widget.otherUid) {
+      _future = widget.userService.getUserDocument(widget.otherUid);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: _GlassCard(
-        child: Row(
-          children: [
-            _FutureUserAvatar(uid: otherUid, userService: userService, size: 40),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _FutureUserName(uid: otherUid, userService: userService),
-                  const SizedBox(height: 2),
-                  FutureBuilder<UserEntity?>(
-                    future: userService.getUserDocument(otherUid),
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData || snapshot.data == null) {
-                        return const SizedBox.shrink();
-                      }
-                      final user = snapshot.data!;
-                      final hasLocation = user.latitude != null;
-                      return Text(
-                        hasLocation ? 'Active nearby' : 'Online',
+        child: FutureBuilder<UserEntity?>(
+          future: _future,
+          builder: (context, snapshot) {
+            final user = snapshot.data;
+            final name = user == null
+                ? 'Loading...'
+                : (user.displayName.isNotEmpty
+                    ? user.displayName
+                    : (user.username.isNotEmpty ? user.username : 'User'));
+
+            return Row(
+              children: [
+                _UserAvatar(user: user, size: 40),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
                         style: const TextStyle(
                           fontFamily: _font,
-                          fontSize: 11,
-                          color: AppColors.softLavender,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
                         ),
-                      );
-                    },
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (user != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          user.latitude != null ? 'Active nearby' : 'Online',
+                          style: const TextStyle(
+                            fontFamily: _font,
+                            fontSize: 11,
+                            color: AppColors.softLavender,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                ],
-              ),
-            ),
-            GestureDetector(
-              onTap: () {
-                // TODO: Navigate to direct chat with this friend
-              },
-              child: Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: AppColors.electricViolet.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
-                  Icons.chat_bubble_outline,
-                  color: AppColors.electricViolet,
-                  size: 16,
+                GestureDetector(
+                  onTap: widget.onChat,
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppColors.electricViolet.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.chat_bubble_outline,
+                      color: AppColors.electricViolet,
+                      size: 16,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(width: 6),
-            GestureDetector(
-              onTap: onRemove,
-              child: Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(8),
+                const SizedBox(width: 6),
+                GestureDetector(
+                  onTap: widget.onRemove,
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.person_remove_outlined,
+                      color: Colors.white.withValues(alpha: 0.35),
+                      size: 16,
+                    ),
+                  ),
                 ),
-                child: Icon(
-                  Icons.person_remove_outlined,
-                  color: Colors.white.withValues(alpha: 0.35),
-                  size: 16,
-                ),
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         ),
       ),
     );
@@ -1362,15 +1450,36 @@ class _ActiveFriendTile extends StatelessWidget {
 
 // ── Future User Name ─────────────────────────────────────────────────────────
 
-class _FutureUserName extends StatelessWidget {
+class _FutureUserName extends StatefulWidget {
   final String uid;
   final UserService userService;
   const _FutureUserName({required this.uid, required this.userService});
 
   @override
+  State<_FutureUserName> createState() => _FutureUserNameState();
+}
+
+class _FutureUserNameState extends State<_FutureUserName> {
+  late Future<UserEntity?> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = widget.userService.getUserDocument(widget.uid);
+  }
+
+  @override
+  void didUpdateWidget(covariant _FutureUserName oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.uid != widget.uid) {
+      _future = widget.userService.getUserDocument(widget.uid);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return FutureBuilder<UserEntity?>(
-      future: userService.getUserDocument(uid),
+      future: _future,
       builder: (context, snapshot) {
         if (snapshot.hasData && snapshot.data != null) {
           final user = snapshot.data!;
@@ -1402,7 +1511,7 @@ class _FutureUserName extends StatelessWidget {
 
 // ── Future User Avatar ───────────────────────────────────────────────────────
 
-class _FutureUserAvatar extends StatelessWidget {
+class _FutureUserAvatar extends StatefulWidget {
   final String uid;
   final UserService userService;
   final double size;
@@ -1414,12 +1523,33 @@ class _FutureUserAvatar extends StatelessWidget {
   });
 
   @override
+  State<_FutureUserAvatar> createState() => _FutureUserAvatarState();
+}
+
+class _FutureUserAvatarState extends State<_FutureUserAvatar> {
+  late Future<UserEntity?> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = widget.userService.getUserDocument(widget.uid);
+  }
+
+  @override
+  void didUpdateWidget(covariant _FutureUserAvatar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.uid != widget.uid) {
+      _future = widget.userService.getUserDocument(widget.uid);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return FutureBuilder<UserEntity?>(
-      future: userService.getUserDocument(uid),
+      future: _future,
       builder: (context, snapshot) {
         final user = snapshot.hasData ? snapshot.data : null;
-        return _UserAvatar(user: user, size: size);
+        return _UserAvatar(user: user, size: widget.size);
       },
     );
   }

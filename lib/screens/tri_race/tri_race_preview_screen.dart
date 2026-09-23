@@ -196,23 +196,21 @@ class _TriRacePreviewScreenState extends State<TriRacePreviewScreen> {
                               userId: user.uid,
                               userName: user.displayName ?? user.email ?? 'Player',
                             );
-                            if (mounted) {
-                              Navigator.pushReplacement(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => WaitingLobbyScreen(
-                                    raceId: widget.raceId,
-                                    isHost: false,
-                                  ),
+                            if (!context.mounted) return;
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => WaitingLobbyScreen(
+                                  raceId: widget.raceId,
+                                  isHost: false,
                                 ),
-                              );
-                            }
+                              ),
+                            );
                           } on TriRaceException catch (e) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(e.message), backgroundColor: const Color(0xFFEF5350)),
-                              );
-                            }
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(e.message), backgroundColor: const Color(0xFFEF5350)),
+                            );
                           }
                         },
                         style: ElevatedButton.styleFrom(

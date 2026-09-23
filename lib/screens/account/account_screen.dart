@@ -316,7 +316,7 @@ class _AccountScreenState extends State<AccountScreen>
               child: Transform(
                 alignment: Alignment.center,
                 transform: Matrix4.identity()
-                  ..scale(-1.0, 1.0)
+                  ..scaleByDouble(-1.0, 1.0, 1.0, 1.0)
                   ..rotateZ(-0.55),
                 child: Opacity(
                   opacity: 0.05,

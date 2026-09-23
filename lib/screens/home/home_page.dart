@@ -1212,9 +1212,8 @@ class _HomeTabState extends State<_HomeTab> {
                                 await _notificationService.markAsRead(
                                     _uid, notif.notificationId);
                               }
-                              if (mounted) {
-                                setState(() => _showNotifications = false);
-                              }
+                              if (!context.mounted) return;
+                              setState(() => _showNotifications = false);
                               if (notif.type == NotificationType.eventCreated ||
                                   notif.type == NotificationType.pollCreated) {
                                 final groupId = notif.groupId;
