@@ -4,6 +4,7 @@ import '../../services/auth/auth_service.dart';
 import '../../services/auth/user_service.dart';
 import '../../widgets/animated_background.dart';
 import 'create_account_page.dart';
+import 'forgot_password_page.dart';
 import 'otp_verification_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -368,7 +369,14 @@ class _LoginPageState extends State<LoginPage> {
                                 ],
                               ),
                               TextButton(
-                                onPressed: () {},
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const ForgotPasswordPage(),
+                                    ),
+                                  );
+                                },
                                 style: TextButton.styleFrom(
                                   padding: EdgeInsets.zero,
                                   minimumSize: Size.zero,

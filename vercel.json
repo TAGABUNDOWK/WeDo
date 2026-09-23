@@ -14,6 +14,18 @@
       "dest": "/api/verify-email-change"
     },
     {
+      "src": "/forgot-password",
+      "dest": "/api/forgot-password"
+    },
+    {
+      "src": "/verify-reset-code",
+      "dest": "/api/verify-reset-code"
+    },
+    {
+      "src": "/reset-password",
+      "dest": "/api/reset-password"
+    },
+    {
       "src": "/tmdb",
       "dest": "/api/tmdb"
     }

@@ -19,6 +19,11 @@ class AuthService {
     );
   }
 
+  /// Send a password reset link to the given email via Firebase.
+  Future<void> sendPasswordResetEmail(String email) async {
+    await _auth.sendPasswordResetEmail(email: email);
+  }
+
   /// Reauthenticate the current user with email/password credentials.
   /// Required before sensitive operations (email change, password change, account deletion).
   Future<void> reauthenticate(String email, String password) async {
