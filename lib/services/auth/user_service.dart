@@ -92,14 +92,20 @@ class UserService {
           .get();
 
       for (final doc in snap.docs) {
-        final user = UserEntity.fromJson(doc.data());
-        if (user.geohash == null ||
-            user.latitude == null ||
-            user.longitude == null) {
+        try {
+          final data = doc.data();
+          data['user_id'] ??= doc.id;
+          final user = UserEntity.fromJson(data);
+          if (user.geohash == null ||
+              user.latitude == null ||
+              user.longitude == null) {
+            continue;
+          }
+          if (user.userId == excludeUid) continue;
+          results.add(user);
+        } catch (_) {
           continue;
         }
-        if (user.userId == excludeUid) continue;
-        results.add(user);
       }
     }
 

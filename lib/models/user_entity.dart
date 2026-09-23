@@ -47,7 +47,7 @@ class UserEntity {
 
   factory UserEntity.fromJson(Map<String, dynamic> json) {
     return UserEntity(
-      userId: json['user_id'] as String,
+      userId: json['user_id'] as String? ?? '',
       displayName: json['display_name'] as String? ?? '',
       username: json['username'] as String? ?? '',
       usernameLower: json['username_lower'] as String? ?? '',
@@ -57,7 +57,9 @@ class UserEntity {
       frameAsset: json['frame_asset'] as String?,
       authProvider: json['auth_provider'] as String? ?? 'email',
       isPremium: json['is_premium'] as bool? ?? false,
-      createdAt: _parseTimestamp(json['created_at']),
+      createdAt: json['created_at'] == null
+          ? DateTime.now()
+          : _parseTimestamp(json['created_at']),
       isGuest: json['is_guest'] as bool? ?? false,
       lastActiveAt: _parseOptionalTimestamp(json['last_active_at']) ?? DateTime.now(),
       isEmailVerified: json['is_email_verified'] as bool? ?? false,
