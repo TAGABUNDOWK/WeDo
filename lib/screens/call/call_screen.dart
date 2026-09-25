@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -32,18 +35,6 @@ class CallScreen extends StatefulWidget {
   State<CallScreen> createState() => _CallScreenState();
 }
 
-class _Participant {
-  final String uid;
-  final RTCVideoRenderer? renderer;
-  final bool isLocal;
-
-  const _Participant({
-    required this.uid,
-    this.renderer,
-    required this.isLocal,
-  });
-}
-
 class _CallScreenState extends State<CallScreen> {
   final CallManager _callManager = CallManager();
   final UserService _userService = UserService();
@@ -52,8 +43,10 @@ class _CallScreenState extends State<CallScreen> {
 
   Offset _pipPosition = Offset.zero;
   bool _pipInitialized = false;
-  String? _focusedPeerId;
   bool _isEndingCall = false;
+
+  bool _pinchTriggered = false;
+  bool _showFlipFlash = false;
 
   @override
   void initState() {
@@ -102,6 +95,30 @@ class _CallScreenState extends State<CallScreen> {
     if (mounted) {
       Navigator.of(context).pop();
     }
+  }
+
+  void _flipCamera() {
+    _callManager.switchCamera();
+    if (!mounted) return;
+    setState(() => _showFlipFlash = true);
+    Future.delayed(const Duration(milliseconds: 700), () {
+      if (mounted) setState(() => _showFlipFlash = false);
+    });
+  }
+
+  void _onScaleStart(ScaleStartDetails details) {
+    _pinchTriggered = false;
+  }
+
+  void _onScaleUpdate(ScaleUpdateDetails details) {
+    if (!_pinchTriggered && details.scale < 0.8) {
+      _pinchTriggered = true;
+      _minimizeCall();
+    }
+  }
+
+  void _onScaleEnd(ScaleEndDetails details) {
+    _pinchTriggered = false;
   }
 
   Future<void> _loadParticipantNames() async {
@@ -172,6 +189,10 @@ class _CallScreenState extends State<CallScreen> {
     return videoTracks.any((track) => track.enabled);
   }
 
+  bool get _hasRemoteStream => _callManager.remoteRenderer?.srcObject != null;
+
+  bool get _hasLocalStream => _callManager.localRenderer?.srcObject != null;
+
   Widget _buildParticipantAvatar({
     required String uid,
     required double radius,
@@ -212,7 +233,7 @@ class _CallScreenState extends State<CallScreen> {
     const pipWidth = 120.0;
     const pipHeight = 160.0;
     const padding = 16.0;
-    const controlsHeight = 100.0;
+    const controlsHeight = 120.0;
 
     final corners = [
       const Offset(padding, padding),
@@ -240,12 +261,6 @@ class _CallScreenState extends State<CallScreen> {
     });
   }
 
-  void _onPeerTapped(String? peerId) {
-    setState(() {
-      _focusedPeerId = (_focusedPeerId == peerId) ? null : peerId;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final isVideo = widget.callType == CallType.video;
@@ -257,416 +272,87 @@ class _CallScreenState extends State<CallScreen> {
       },
       child: Scaffold(
         backgroundColor: const Color(0xFF1A0A2E),
-        body: SizedBox.expand(
-          child: SafeArea(
-            child: isVideo
-                ? Column(
-                    children: [
-                      Expanded(child: _buildVideoView()),
-                      _buildControls(),
-                    ],
-                  )
-                : _buildAudioView(),
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            _initPipPosition(constraints);
+
+            return Stack(
+              children: [
+                if (isVideo) ...[
+                  _buildVideoBackground(),
+                  if (!_hasRemoteStream) _buildWaitingOverlay(),
+                  _buildFloatingHeader(),
+                  if (_hasRemoteStream && _hasLocalStream)
+                    _buildDraggablePip(constraints),
+                  _buildFlipFlash(),
+                ] else ...[
+                  _buildAudioCenterContent(),
+                  _buildAudioChevron(),
+                ],
+                _buildFloatingControls(includeCamera: isVideo),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFullBleedVideo(RTCVideoRenderer renderer, {required bool mirror}) {
+    return Positioned.fill(
+      child: FittedBox(
+        fit: BoxFit.cover,
+        clipBehavior: Clip.hardEdge,
+        child: SizedBox(
+          width: 320,
+          height: 240,
+          child: RTCVideoView(
+            renderer,
+            mirror: mirror,
+            objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
           ),
         ),
       ),
     );
   }
 
-  Widget _buildVideoView() {
-    if (widget.isGroup) {
-      return LayoutBuilder(
-        builder: (context, constraints) {
-          _initPipPosition(constraints);
-          return _buildGroupView(constraints);
-        },
-      );
-    }
+  Widget _buildVideoBackground() {
+    final remote = _callManager.remoteRenderer;
+    final local = _callManager.localRenderer;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        _initPipPosition(constraints);
-        return _buildSingleRemoteView(constraints);
-      },
-    );
-  }
-
-  Widget _buildSingleRemoteView(BoxConstraints constraints) {
-    final remoteRenderer = _callManager.remoteRenderer;
-    final hasRemoteStream = remoteRenderer?.srcObject != null;
-    final hasLocalStream = _callManager.localRenderer?.srcObject != null;
-
-    return Stack(
-      children: [
-        if (hasRemoteStream)
-          Positioned.fill(
-            child: FittedBox(
-              fit: BoxFit.cover,
-              clipBehavior: Clip.hardEdge,
-              child: SizedBox(
-                width: 320,
-                height: 240,
-                child: RTCVideoView(
-                  remoteRenderer!,
-                  objectFit:
-                      RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                ),
-              ),
-            ),
-          )
-        else
-          Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                CircleAvatar(
-                  radius: 60,
-                  backgroundColor:
-                      const Color(0xFFFE4EF0).withValues(alpha: 0.2),
-                  child: Text(
-                    widget.callName.isNotEmpty
-                        ? widget.callName[0].toUpperCase()
-                        : '?',
-                    style:
-                        const TextStyle(fontSize: 40, color: Colors.white),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Connecting...',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white70, fontSize: 16),
-                ),
-              ],
-            ),
-          ),
-        if (hasLocalStream) _buildDraggablePip(constraints),
-        Positioned(
-          top: 16,
-          left: 0,
-          right: 0,
-          child: Column(
-            children: [
-              Text(
-                widget.callName,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                formatSeconds(_callManager.callDuration),
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white70, fontSize: 14),
-              ),
-            ],
-          ),
+    Widget feed;
+    if (remote != null && _hasActiveVideo(remote)) {
+      feed = _buildFullBleedVideo(remote, mirror: false);
+    } else if (local != null && _hasActiveVideo(local)) {
+      feed = _buildFullBleedVideo(local, mirror: true);
+    } else {
+      final remoteUid = remote != null && _callManager.remoteRenderers.isNotEmpty
+          ? _callManager.remoteRenderers.keys.first
+          : null;
+      feed = Positioned.fill(
+        child: Container(
+          color: const Color(0xFF2D1B69),
+          child: remoteUid != null
+              ? Center(
+                  child: _buildParticipantAvatar(uid: remoteUid, radius: 60),
+                )
+              : null,
         ),
-      ],
-    );
-  }
-
-  Widget _buildGroupView(BoxConstraints constraints) {
-    final renderers = _callManager.remoteRenderers;
-    final hasLocalStream = _callManager.localRenderer?.srcObject != null;
-    final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
-
-    if (_focusedPeerId != null && renderers.containsKey(_focusedPeerId)) {
-      final entries = renderers.entries.toList();
-      return _buildFocusedPeerView(constraints, entries);
-    }
-
-    final participants = <_Participant>[];
-    if (hasLocalStream) {
-      participants.add(_Participant(
-        uid: myUid,
-        renderer: _callManager.localRenderer,
-        isLocal: true,
-      ));
-    }
-    for (final entry in renderers.entries) {
-      participants.add(_Participant(
-        uid: entry.key,
-        renderer: entry.value,
-        isLocal: false,
-      ));
-    }
-
-    final count = participants.length;
-
-    if (count == 0) {
-      return Stack(
-        children: [
-          Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                _buildParticipantAvatar(uid: myUid, radius: 60),
-                const SizedBox(height: 16),
-                const Text(
-                  'Waiting for others to join...',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white70, fontSize: 16),
-                ),
-              ],
-            ),
-          ),
-          _buildCallHeader(),
-        ],
       );
     }
-
-    if (count == 1) {
-      return Stack(
-        children: [
-          _buildParticipantTile(participants[0], constraints),
-          _buildCallHeader(),
-        ],
-      );
-    }
-
-    if (count == 2) {
-      return Stack(
-        children: [
-          _buildTwoParticipantLayout(participants, constraints),
-          _buildCallHeader(),
-        ],
-      );
-    }
-
-    if (count == 3) {
-      return Stack(
-        children: [
-          _buildThreeParticipantLayout(participants, constraints),
-          _buildCallHeader(),
-        ],
-      );
-    }
-
-    if (count == 4) {
-      return Stack(
-        children: [
-          _buildFourParticipantLayout(participants, constraints),
-          _buildCallHeader(),
-        ],
-      );
-    }
-
-    return Stack(
-      children: [
-        _buildGridParticipantView(participants, constraints),
-        _buildCallHeader(),
-      ],
-    );
-  }
-
-  Widget _buildCallHeader() {
-    return Positioned(
-      top: 16,
-      left: 0,
-      right: 0,
-      child: Column(
-        children: [
-          Text(
-            widget.callName,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            formatSeconds(_callManager.callDuration),
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white70, fontSize: 14),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildParticipantTile(_Participant participant, BoxConstraints constraints) {
-    final hasVideo = participant.renderer != null && _hasActiveVideo(participant.renderer!);
 
     return Positioned.fill(
       child: GestureDetector(
-        onTap: participant.isLocal ? null : () => _onPeerTapped(participant.uid),
-        child: hasVideo
-            ? FittedBox(
-                fit: BoxFit.cover,
-                clipBehavior: Clip.hardEdge,
-                child: SizedBox(
-                  width: 320,
-                  height: 240,
-                  child: RTCVideoView(
-                    participant.renderer!,
-                    mirror: participant.isLocal,
-                    objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                  ),
-                ),
-              )
-            : Container(
-                color: const Color(0xFF2D1B69),
-                child: Center(
-                  child: _buildParticipantAvatar(uid: participant.uid, radius: 60),
-                ),
-              ),
-      ),
-    );
-  }
-
-  Widget _buildTwoParticipantLayout(List<_Participant> participants, BoxConstraints constraints) {
-    return Column(
-      children: [
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: _buildParticipantTileInContainer(participants[0]),
-          ),
-        ),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: _buildParticipantTileInContainer(participants[1]),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildThreeParticipantLayout(List<_Participant> participants, BoxConstraints constraints) {
-    return Column(
-      children: [
-        Expanded(
-          flex: 2,
-          child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: _buildParticipantTileInContainer(participants[0]),
-          ),
-        ),
-        Expanded(
-          flex: 1,
-          child: Row(
-            children: [
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: _buildParticipantTileInContainer(participants[1]),
-                ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: _buildParticipantTileInContainer(participants[2]),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFourParticipantLayout(List<_Participant> participants, BoxConstraints constraints) {
-    return Column(
-      children: [
-        Expanded(
-          child: Row(
-            children: [
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: _buildParticipantTileInContainer(participants[0]),
-                ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: _buildParticipantTileInContainer(participants[1]),
-                ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: Row(
-            children: [
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: _buildParticipantTileInContainer(participants[2]),
-                ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: _buildParticipantTileInContainer(participants[3]),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildParticipantTileInContainer(_Participant participant) {
-    final hasVideo = participant.renderer != null && _hasActiveVideo(participant.renderer!);
-
-    return GestureDetector(
-      onTap: participant.isLocal ? null : () => _onPeerTapped(participant.uid),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        onDoubleTap: _flipCamera,
+        onScaleStart: _onScaleStart,
+        onScaleUpdate: _onScaleUpdate,
+        onScaleEnd: _onScaleEnd,
+        behavior: HitTestBehavior.opaque,
         child: Stack(
-          fit: StackFit.expand,
           children: [
-            if (hasVideo)
-              RTCVideoView(
-                participant.renderer!,
-                mirror: participant.isLocal,
-                objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-              )
-            else
-              Container(
-                color: const Color(0xFF2D1B69),
-                child: Center(
-                  child: _buildParticipantAvatar(uid: participant.uid, radius: 32),
-                ),
-              ),
-            Positioned(
-              left: 8,
-              bottom: 8,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      hasVideo ? Icons.videocam : Icons.videocam_off,
-                      color: hasVideo ? Colors.green : Colors.white54,
-                      size: 12,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      _getParticipantName(participant.uid),
-                      style: const TextStyle(color: Colors.white, fontSize: 11),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
+            feed,
+            const Positioned.fill(
+              child: ColoredBox(color: Color(0x8C000000)),
             ),
           ],
         ),
@@ -674,185 +360,200 @@ class _CallScreenState extends State<CallScreen> {
     );
   }
 
-  Widget _buildGridParticipantView(List<_Participant> participants, BoxConstraints constraints) {
-    final count = participants.length;
-    final crossAxisCount = count <= 4 ? 2 : 3;
-
-    return GridView.builder(
-      padding: const EdgeInsets.all(8),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: crossAxisCount,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-      ),
-      itemCount: count,
-      itemBuilder: (context, index) {
-        return _buildParticipantTileInContainer(participants[index]);
-      },
-    );
-  }
-
-  Widget _buildFocusedPeerView(
-      BoxConstraints constraints, List<MapEntry<String, RTCVideoRenderer>> entries) {
-    final focusedEntry = entries.firstWhere(
-      (e) => e.key == _focusedPeerId,
-      orElse: () => entries.first,
-    );
-    final hasVideo = _hasActiveVideo(focusedEntry.value);
-
-    final miniParticipants = <_Participant>[];
-    final localRenderer = _callManager.localRenderer;
-    if (localRenderer != null && localRenderer.srcObject != null) {
-      final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
-      miniParticipants.add(_Participant(
-        uid: myUid,
-        renderer: localRenderer,
-        isLocal: true,
-      ));
-    }
-    for (final entry in entries) {
-      if (entry.key != _focusedPeerId) {
-        miniParticipants.add(_Participant(
-          uid: entry.key,
-          renderer: entry.value,
-          isLocal: false,
-        ));
-      }
-    }
-
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: GestureDetector(
-            onTap: () => _onPeerTapped(focusedEntry.key),
-            child: hasVideo
-                ? FittedBox(
-                    fit: BoxFit.cover,
-                    clipBehavior: Clip.hardEdge,
-                    child: SizedBox(
-                      width: 320,
-                      height: 240,
-                      child: RTCVideoView(
-                        focusedEntry.value,
-                        objectFit:
-                            RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                      ),
-                    ),
-                  )
-                : Container(
-                    color: const Color(0xFF2D1B69),
-                    child: Center(
-                      child: _buildParticipantAvatar(
-                        uid: focusedEntry.key,
-                        radius: 60,
-                      ),
-                    ),
-                  ),
-          ),
-        ),
-        Positioned(
-          top: 16,
-          left: 0,
-          right: 0,
+  Widget _buildWaitingOverlay() {
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Center(
           child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(
-                _getParticipantName(focusedEntry.key),
+              _buildWaitingAvatar(radius: 38),
+              const SizedBox(height: 16),
+              const Text(
+                'Waiting for participants to connect...',
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                formatSeconds(_callManager.callDuration),
-                textAlign: TextAlign.center,
-                style:
-                    const TextStyle(color: Colors.white70, fontSize: 14),
+                style: TextStyle(color: Colors.white70, fontSize: 13),
               ),
             ],
           ),
         ),
-        _buildMiniStripFromParticipants(miniParticipants),
-      ],
+      ),
     );
   }
 
-  Widget _buildMiniStripFromParticipants(List<_Participant> participants) {
-    if (participants.isEmpty) return const SizedBox.shrink();
+  Widget _buildWaitingAvatar({required double radius}) {
+    final myUid = FirebaseAuth.instance.currentUser?.uid;
+    String? peerUid;
+    if (!widget.isGroup) {
+      for (final uid in widget.members) {
+        if (uid != myUid) {
+          peerUid = uid;
+          break;
+        }
+      }
+    }
 
+    if (peerUid != null && _participantPhotos.containsKey(peerUid)) {
+      return _buildParticipantAvatar(uid: peerUid, radius: radius);
+    }
+
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: const Color(0xFFFE4EF0).withValues(alpha: 0.2),
+      child: Text(
+        widget.callName.isNotEmpty ? widget.callName[0].toUpperCase() : '?',
+        style: TextStyle(
+          fontSize: radius,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFloatingHeader() {
     return Positioned(
-      top: 80,
-      right: 8,
-      child: Column(
-        children: participants.map((participant) {
-          final hasVideo = participant.renderer != null && _hasActiveVideo(participant.renderer!);
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: GestureDetector(
-              onTap: participant.isLocal ? null : () => _onPeerTapped(participant.uid),
-              child: Container(
-                width: 80,
-                height: 100,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: const Color(0xFFFE4EF0).withValues(alpha: 0.6),
-                    width: 2,
-                  ),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      if (hasVideo)
-                        RTCVideoView(
-                          participant.renderer!,
-                          mirror: participant.isLocal,
-                          objectFit:
-                              RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                        )
-                      else
-                        Container(
-                          color: const Color(0xFF2D1B69),
-                          child: Center(
-                            child: _buildParticipantAvatar(
-                              uid: participant.uid,
-                              radius: 20,
-                            ),
-                          ),
-                        ),
-                      Positioned(
-                        left: 4,
-                        bottom: 4,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 4, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(3),
-                          ),
-                          child: Text(
-                            participant.isLocal
-                                ? 'You'
-                                : _getParticipantName(participant.uid),
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 9),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+      top: 0,
+      left: 0,
+      right: 0,
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: Row(
+            children: [
+              IconButton(
+                onPressed: _minimizeCall,
+                icon: const Icon(
+                  Icons.chevron_left,
+                  color: Color(0xFFFE4EF0),
+                  size: 32,
                 ),
               ),
+              Expanded(
+                child: Column(
+                  children: [
+                    Text(
+                      widget.callName,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      formatSeconds(_callManager.callDuration),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 48),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAudioChevron() {
+    return Positioned(
+      top: 0,
+      left: 4,
+      child: SafeArea(
+        bottom: false,
+        child: IconButton(
+          onPressed: _minimizeCall,
+          icon: const Icon(
+            Icons.chevron_left,
+            color: Color(0xFFFE4EF0),
+            size: 32,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAudioCenterContent() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          CircleAvatar(
+            radius: 70,
+            backgroundColor:
+                const Color(0xFFFE4EF0).withValues(alpha: 0.2),
+            child: Text(
+              widget.callName.isNotEmpty
+                  ? widget.callName[0].toUpperCase()
+                  : '?',
+              style: const TextStyle(fontSize: 48, color: Colors.white),
             ),
-          );
-        }).toList(),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            widget.callName,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            formatSeconds(_callManager.callDuration),
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70, fontSize: 16),
+          ),
+          if (widget.isGroup) ...[
+            const SizedBox(height: 8),
+            Text(
+              '${widget.members.length} participants',
+              textAlign: TextAlign.center,
+              style:
+                  const TextStyle(color: Colors.white54, fontSize: 14),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFlipFlash() {
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: AnimatedOpacity(
+          opacity: _showFlipFlash ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 250),
+          child: Center(
+            child: Container(
+              width: 76,
+              height: 76,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.black.withValues(alpha: 0.55),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.35),
+                  width: 1.5,
+                ),
+              ),
+              child: const Icon(
+                Icons.cameraswitch,
+                color: Colors.white,
+                size: 36,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -924,202 +625,124 @@ class _CallScreenState extends State<CallScreen> {
     );
   }
 
-  Widget _buildAudioView() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          CircleAvatar(
-            radius: 70,
-            backgroundColor:
-                const Color(0xFFFE4EF0).withValues(alpha: 0.2),
-            child: Text(
-              widget.callName.isNotEmpty
-                  ? widget.callName[0].toUpperCase()
-                  : '?',
-              style: const TextStyle(fontSize: 48, color: Colors.white),
-            ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            widget.callName,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            formatSeconds(_callManager.callDuration),
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white70, fontSize: 16),
-          ),
-          if (widget.isGroup) ...[
-            const SizedBox(height: 8),
-            Text(
-              '${widget.members.length} participants',
-              textAlign: TextAlign.center,
-              style:
-                  const TextStyle(color: Colors.white54, fontSize: 14),
-            ),
-          ],
-          const SizedBox(height: 48),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+  Widget _buildFloatingControls({required bool includeCamera}) {
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 20),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _buildControlButton(
-                icon: _callManager.isMuted ? Icons.mic_off : Icons.mic,
-                label: _callManager.isMuted ? 'Unmute' : 'Mute',
+              if (includeCamera)
+                _buildFloatingControlButton(
+                  asset: _callManager.isVideoOff
+                      ? 'assets/icons/camera-off.png'
+                      : 'assets/icons/camera-on.png',
+                  fallbackIcon: _callManager.isVideoOff
+                      ? Icons.videocam_off
+                      : Icons.videocam,
+                  onTap: _callManager.toggleVideo,
+                  dimmed: _callManager.isVideoOff,
+                ),
+              _buildFloatingControlButton(
+                asset: _callManager.isMuted
+                    ? 'assets/icons/mic-on.png'
+                    : 'assets/icons/mic-off.png',
+                fallbackIcon: _callManager.isMuted ? Icons.mic : Icons.mic_off,
                 onTap: _callManager.toggleMute,
-                isActive: !_callManager.isMuted,
+                dimmed: _callManager.isMuted,
               ),
-              _buildControlButton(
-                icon: _callManager.isSpeakerOn
+              _buildFloatingControlButton(
+                asset: _callManager.isSpeakerOn
+                    ? 'assets/icons/speaker-high.png'
+                    : 'assets/icons/speaker-low.png',
+                fallbackIcon: _callManager.isSpeakerOn
                     ? Icons.volume_up
                     : Icons.volume_down,
-                label:
-                    _callManager.isSpeakerOn ? 'Speaker' : 'Earpiece',
                 onTap: _callManager.toggleSpeaker,
-                isActive: true,
               ),
-              _buildControlButton(
-                icon: Icons.keyboard_arrow_down,
-                label: 'Minimize',
-                onTap: _minimizeCall,
-                isActive: true,
+              _buildFloatingControlButton(
+                asset: 'assets/icons/call.png',
+                fallbackIcon: Icons.call_end,
+                backgroundColor:
+                    widget.isGroup ? Colors.orange.shade800 : Colors.red,
+                iconColor: const Color(0xFFFE4EF0),
+                iconRotation: -135 * math.pi / 180,
+                onTap: widget.isGroup ? _leaveGroupCall : _endCall,
               ),
-              if (widget.isGroup)
-                _buildControlButton(
-                  icon: Icons.exit_to_app,
-                  label: 'Leave',
-                  onTap: _leaveGroupCall,
-                  isActive: true,
-                  backgroundColor: Colors.orange.shade800,
-                  iconColor: Colors.white,
-                )
-              else
-                _buildControlButton(
-                  icon: Icons.call_end,
-                  label: 'End',
-                  onTap: _endCall,
-                  isActive: true,
-                  backgroundColor: Colors.red,
-                  iconColor: Colors.white,
-                ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildControls() {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _buildControlButton(
-            icon: _callManager.isMuted ? Icons.mic_off : Icons.mic,
-            label: _callManager.isMuted ? 'Unmute' : 'Mute',
-            onTap: _callManager.toggleMute,
-            isActive: !_callManager.isMuted,
-          ),
-          if (widget.callType == CallType.video) ...[
-            _buildControlButton(
-              icon: Icons.cameraswitch,
-              label: 'Switch',
-              onTap: _callManager.switchCamera,
-              isActive: true,
-            ),
-            _buildControlButton(
-              icon: _callManager.isVideoOff
-                  ? Icons.videocam_off
-                  : Icons.videocam,
-              label:
-                  _callManager.isVideoOff ? 'Camera On' : 'Camera Off',
-              onTap: _callManager.toggleVideo,
-              isActive: !_callManager.isVideoOff,
-            ),
-          ],
-          _buildControlButton(
-            icon: _callManager.isSpeakerOn
-                ? Icons.volume_up
-                : Icons.volume_down,
-            label:
-                _callManager.isSpeakerOn ? 'Speaker' : 'Earpiece',
-            onTap: _callManager.toggleSpeaker,
-            isActive: true,
-          ),
-          _buildControlButton(
-            icon: Icons.keyboard_arrow_down,
-            label: 'Minimize',
-            onTap: _minimizeCall,
-            isActive: true,
-          ),
-          if (widget.isGroup)
-            _buildControlButton(
-              icon: Icons.exit_to_app,
-              label: 'Leave',
-              onTap: _leaveGroupCall,
-              isActive: true,
-              backgroundColor: Colors.orange.shade800,
-              iconColor: Colors.white,
-            )
-          else
-            _buildControlButton(
-              icon: Icons.call_end,
-              label: 'End',
-              onTap: _endCall,
-              isActive: true,
-              backgroundColor: Colors.red,
-              iconColor: Colors.white,
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildControlButton({
-    required IconData icon,
-    required String label,
+  Widget _buildFloatingControlButton({
+    String? asset,
+    required IconData fallbackIcon,
     required VoidCallback onTap,
-    required bool isActive,
+    bool dimmed = false,
     Color? backgroundColor,
     Color? iconColor,
+    double iconRotation = 0,
   }) {
+    final Color bg = backgroundColor ??
+        (dimmed
+            ? Colors.white.withValues(alpha: 0.15)
+            : Colors.white.withValues(alpha: 0.20));
+    final Color fg = iconColor ?? const Color(0xFFFE4EF0);
+
+    final Widget button = Container(
+      width: 56,
+      height: 56,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: bg,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      alignment: Alignment.center,
+      child: Transform.rotate(
+        angle: iconRotation,
+        child: asset != null
+            ? Image.asset(
+                asset,
+                width: 26,
+                height: 26,
+                fit: BoxFit.contain,
+                color: fg,
+                errorBuilder: (context, error, stackTrace) => Icon(
+                  fallbackIcon,
+                  color: fg,
+                  size: 26,
+                ),
+              )
+            : Icon(
+                fallbackIcon,
+                color: fg,
+                size: 28,
+              ),
+      ),
+    );
+
     return GestureDetector(
       onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: backgroundColor ??
-                  (isActive
-                      ? Colors.white.withValues(alpha: 0.15)
-                      : Colors.white.withValues(alpha: 0.3)),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              icon,
-              color: iconColor ??
-                  (isActive ? Colors.white : Colors.white70),
-              size: 28,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            style:
-                const TextStyle(color: Colors.white70, fontSize: 12),
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: backgroundColor == null
+            ? ClipOval(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: button,
+                ),
+              )
+            : button,
       ),
     );
   }
