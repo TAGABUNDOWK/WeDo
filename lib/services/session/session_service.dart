@@ -554,7 +554,11 @@ class SessionService {
           'winnerCardId': winnerCardId,
           'winnerCardTitle': winnerCardTitle,
           'winnerCardEmoji': winnerCardEmoji,
+          'winnerCardVoteCount':
+              winnerCardId.isEmpty ? 0 : (winnerVotes[winnerCardId] ?? 0),
           'totalParticipants': finished.length,
+          'finishedCount': finished.length,
+          'totalPlayers': participants.length,
           'standings': orderedStandings,
           'speedShieldWinnerCardId': speedShieldWinnerCardId,
         },
