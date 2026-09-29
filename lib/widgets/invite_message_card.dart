@@ -7,7 +7,7 @@ import '../utils/constants.dart';
 
 const _fontFamily = 'PlusJakartaSans';
 
-class InviteMessageCard extends StatelessWidget {
+class InviteMessageCard extends StatefulWidget {
   final String sessionId;
   final String content;
   final bool isMe;
@@ -22,6 +22,26 @@ class InviteMessageCard extends StatelessWidget {
     this.senderName,
     required this.time,
   });
+
+  @override
+  State<InviteMessageCard> createState() => _InviteMessageCardState();
+}
+
+class _InviteMessageCardState extends State<InviteMessageCard> {
+  late final SessionService _service;
+  late final Stream<SessionEntity?> _sessionStream;
+  late final Stream<List<ParticipantEntity>> _participantsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _service = SessionService();
+    // Streams are created once and reused: recreating them in build()
+    // resubscribes on every rebuild (scroll, setState) and the Join button
+    // disappears until the first snapshot arrives again.
+    _sessionStream = _service.getSessionStream(widget.sessionId);
+    _participantsStream = _service.getParticipantsStream(widget.sessionId);
+  }
 
   String _getTopicEmoji(String topic) {
     final lower = topic.toLowerCase();
@@ -39,7 +59,7 @@ class InviteMessageCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final service = SessionService();
+    final isMe = widget.isMe;
 
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -49,11 +69,11 @@ class InviteMessageCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            if (senderName != null)
+            if (widget.senderName != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 2),
                 child: Text(
-                  senderName!,
+                  widget.senderName!,
                   style: const TextStyle(
                     fontFamily: _fontFamily,
                     fontSize: 12,
@@ -63,13 +83,15 @@ class InviteMessageCard extends StatelessWidget {
                 ),
               ),
             StreamBuilder<SessionEntity?>(
-              stream: service.getSessionStream(sessionId),
+              stream: _sessionStream,
               builder: (context, snapshot) {
                 final session = snapshot.data;
                 final status = session?.status;
                 final topic = session?.topic ?? '';
                 final isActive = status == SessionStatus.lobby;
                 final isCancelled = status == SessionStatus.cancelled;
+                final isLoading = session == null &&
+                    snapshot.connectionState == ConnectionState.waiting;
 
                 return GestureDetector(
                   onTap: null,
@@ -130,9 +152,22 @@ class InviteMessageCard extends StatelessWidget {
                                   ),
                               ],
                             ),
+                            if (isLoading) ...[
+                              const SizedBox(height: 10),
+                              const Center(
+                                child: SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ],
                             if (session != null) ...[
                               const SizedBox(height: 10),
-                              _buildParticipantDots(service, isActive),
+                              _buildParticipantDots(isActive),
                             ],
                             if (isActive) ...[
                               const SizedBox(height: 10),
@@ -163,7 +198,7 @@ class InviteMessageCard extends StatelessWidget {
                                           Navigator.push(
                                             context,
                                             MaterialPageRoute(
-                                              builder: (_) => SessionPreviewScreen(sessionId: sessionId),
+                                              builder: (_) => SessionPreviewScreen(sessionId: widget.sessionId),
                                             ),
                                           );
                                         },
@@ -203,7 +238,7 @@ class InviteMessageCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Text(
-                time,
+                widget.time,
                 style: TextStyle(
                   fontFamily: _fontFamily,
                   fontSize: 10,
@@ -230,9 +265,9 @@ class InviteMessageCard extends StatelessWidget {
     }
   }
 
-  Widget _buildParticipantDots(SessionService service, bool isActive) {
+  Widget _buildParticipantDots(bool isActive) {
     return StreamBuilder<List<ParticipantEntity>>(
-      stream: service.getParticipantsStream(sessionId),
+      stream: _participantsStream,
       builder: (context, snapshot) {
         final participants = snapshot.data ?? [];
         final count = participants.length;

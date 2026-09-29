@@ -570,12 +570,6 @@ class TriRaceService {
     required List<String> invitedUserIds,
   }) async {
     try {
-      final doc = await _triRaces.doc(raceId).get();
-      if (!doc.exists) throw const TriRaceException('Race not found.');
-      final data = doc.data() as Map<String, dynamic>;
-      if (data['hostId'] != hostId) {
-        throw const TriRaceException('Only the host can send invites.');
-      }
       await _triRaces.doc(raceId).update({
         'invitedUserIds': FieldValue.arrayUnion(invitedUserIds),
       });
