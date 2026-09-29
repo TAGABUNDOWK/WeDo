@@ -72,16 +72,7 @@ class InviteMessageCard extends StatelessWidget {
                 final isCancelled = status == SessionStatus.cancelled;
 
                 return GestureDetector(
-                  onTap: isActive && !isMe
-                      ? () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => SessionPreviewScreen(sessionId: sessionId),
-                            ),
-                          );
-                        }
-                      : null,
+                  onTap: null,
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(16),
                     child: BackdropFilter(

@@ -430,189 +430,155 @@ class SessionService {
 
   /// Aggregates results from all finished participants.
   /// Computes card tally, winner card, and time-based standings.
-  /// Called by every finisher, so the snapshot grows as players finish.
+  /// Called by every participant when they finish — always re-aggregates so
+  /// the ResultsScreen reflects everyone who has completed so far.
+  /// The leaderboard write is gated by [statsRecorded] and only runs once
+  /// when all participants are done (or on first finish for solo play).
   Future<void> aggregateResults(String sessionId) async {
     try {
-      // Participant ids must be resolved before the transaction: Firestore
-      // client transactions cannot run queries.
-      final preSnap = await _sessions.doc(sessionId).get();
-      if (!preSnap.exists) return;
-      final preData = preSnap.data() as Map<String, dynamic>;
-      final preUids = List<String>.from(preData['participantUids'] ?? const []);
+      final sessionDoc = await _sessions.doc(sessionId).get();
+      if (!sessionDoc.exists) return;
+      final sessionData = sessionDoc.data() as Map<String, dynamic>;
+      final sessionCards = (sessionData['cards'] as List?)
+              ?.map((e) => Map<String, dynamic>.from(e as Map))
+              .toList() ??
+          [];
 
-      // Legacy sessions without a participantUids array fall back to a plain
-      // collection read (outside the transaction).
-      final legacyParticipants = preUids.isEmpty
-          ? (await _participants(sessionId).get())
-              .docs
-              .map((doc) => ParticipantEntity.fromMap(
-                    doc.id,
-                    doc.data() as Map<String, dynamic>,
-                  ))
-              .toList()
-          : null;
+      final participantsSnap = await _participants(sessionId).get();
+      final participants = participantsSnap.docs
+          .map((doc) => ParticipantEntity.fromMap(
+                doc.id,
+                doc.data() as Map<String, dynamic>,
+              ))
+          .toList();
 
-      final outcome = await _db
-          .runTransaction<({List<String> toRecord, String winnerId})?>(
-              (tx) async {
-        final sessionRef = _sessions.doc(sessionId);
-        final sessionSnap = await tx.get(sessionRef);
-        if (!sessionSnap.exists) return null;
-        final sessionData = sessionSnap.data() as Map<String, dynamic>;
+      final finished = participants.where((p) => p.status == ParticipantStatus.finished).toList();
+      if (finished.isEmpty) return;
 
-        // Never resurrect a cancelled session.
-        if (sessionData['status'] == SessionStatus.cancelled.value) {
-          return null;
+      // Determine whether everyone has finished so we can lock the leaderboard.
+      final totalParticipantCount = participants.length;
+      final allDone = finished.length >= totalParticipantCount;
+      final alreadyRecorded = sessionData['statsRecorded'] == true;
+
+      // ── Card Tally: count eliminations per card across all participants ──
+      final Map<String, int> eliminationCounts = {};
+      for (final card in sessionCards) {
+        final cardId = card['id'] as String;
+        eliminationCounts[cardId] = 0;
+      }
+      for (final p in finished) {
+        for (final cardId in p.eliminatedCardIds) {
+          eliminationCounts[cardId] = (eliminationCounts[cardId] ?? 0) + 1;
         }
+      }
 
-        final sessionCards = (sessionData['cards'] as List?)
-                ?.map((e) => Map<String, dynamic>.from(e as Map))
-                .toList() ??
-            [];
+      final Map<String, dynamic> cardTally = {};
+      for (final card in sessionCards) {
+        final cardId = card['id'] as String;
+        cardTally[cardId] = {
+          'title': card['title'] as String? ?? '',
+          'emoji': card['emoji'] as String? ?? '',
+          'eliminationCount': eliminationCounts[cardId] ?? 0,
+        };
+      }
 
-        List<ParticipantEntity> participants;
-        if (legacyParticipants != null) {
-          participants = legacyParticipants;
-        } else {
-          final uids =
-              List<String>.from(sessionData['participantUids'] ?? const []);
-          participants = <ParticipantEntity>[];
-          for (final uid in uids) {
-            final pSnap = await tx.get(_participants(sessionId).doc(uid));
-            if (pSnap.exists) {
-              participants.add(ParticipantEntity.fromMap(
-                pSnap.id,
-                pSnap.data() as Map<String, dynamic>,
-              ));
-            }
-          }
+      // ── Winner Card: most chosen as winner by participants ──
+      final Map<String, int> winnerVotes = {};
+      for (final p in finished) {
+        if (p.chosenWinnerCardId != null && p.chosenWinnerCardId!.isNotEmpty) {
+          winnerVotes[p.chosenWinnerCardId!] =
+              (winnerVotes[p.chosenWinnerCardId!] ?? 0) + 1;
         }
+      }
 
-        final finished = participants
-            .where((p) => p.status == ParticipantStatus.finished)
-            .toList();
-        if (finished.isEmpty) return null;
-
-        // ── Card Tally: count eliminations per card across all participants ──
-        final Map<String, int> eliminationCounts = {};
-        for (final card in sessionCards) {
-          final cardId = card['id'] as String;
-          eliminationCounts[cardId] = 0;
-        }
-        for (final p in finished) {
-          for (final cardId in p.eliminatedCardIds) {
-            eliminationCounts[cardId] = (eliminationCounts[cardId] ?? 0) + 1;
-          }
-        }
-
-        final Map<String, dynamic> cardTally = {};
-        for (final card in sessionCards) {
-          final cardId = card['id'] as String;
-          cardTally[cardId] = {
-            'title': card['title'] as String? ?? '',
-            'emoji': card['emoji'] as String? ?? '',
-            'eliminationCount': eliminationCounts[cardId] ?? 0,
-          };
-        }
-
-        // ── Winner Card: most chosen as winner by participants ──
-        final Map<String, int> winnerVotes = {};
-        for (final p in finished) {
-          if (p.chosenWinnerCardId != null && p.chosenWinnerCardId!.isNotEmpty) {
-            winnerVotes[p.chosenWinnerCardId!] =
-                (winnerVotes[p.chosenWinnerCardId!] ?? 0) + 1;
-          }
-        }
-
-        String winnerCardId = '';
-        String winnerCardTitle = '';
-        String winnerCardEmoji = '';
-        if (winnerVotes.isNotEmpty) {
-          final sortedVotes = winnerVotes.entries.toList()
-            ..sort((a, b) {
-              if (b.value != a.value) return b.value.compareTo(a.value);
-              final aElims = eliminationCounts[a.key] ?? 999;
-              final bElims = eliminationCounts[b.key] ?? 999;
-              return aElims.compareTo(bElims);
-            });
-          winnerCardId = sortedVotes.first.key;
-          final winnerCard = sessionCards.firstWhere(
-            (c) => c['id'] == winnerCardId,
-            orElse: () => {},
-          );
-          winnerCardTitle = winnerCard['title'] as String? ?? '';
-          winnerCardEmoji = winnerCard['emoji'] as String? ?? '';
-        }
-
-        // ── Standings: sorted by elapsed time (fastest first) ──
-        final resolvedNames =
-            await fetchDisplayNames(finished.map((p) => p.id).toList());
-        final Map<String, dynamic> standings = {};
-        for (final p in finished) {
-          standings[p.id] = {
-            'userName': resolvedNames[p.id] ?? p.userName,
-            'elapsedTimeMs': p.elapsedTimeMs,
-            'timeoutCount': p.timeoutCount,
-            'chosenWinnerCardId': p.chosenWinnerCardId,
-          };
-        }
-
-        final sortedEntries = standings.entries.toList()
+      String winnerCardId = '';
+      String winnerCardTitle = '';
+      String winnerCardEmoji = '';
+      if (winnerVotes.isNotEmpty) {
+        final sortedVotes = winnerVotes.entries.toList()
           ..sort((a, b) {
-            final timeA = a.value['elapsedTimeMs'] as int? ?? 999999;
-            final timeB = b.value['elapsedTimeMs'] as int? ?? 999999;
-            return timeA.compareTo(timeB);
+            if (b.value != a.value) return b.value.compareTo(a.value);
+            final aElims = eliminationCounts[a.key] ?? 999;
+            final bElims = eliminationCounts[b.key] ?? 999;
+            return aElims.compareTo(bElims);
           });
+        winnerCardId = sortedVotes.first.key;
+        final winnerCard = sessionCards.firstWhere(
+          (c) => c['id'] == winnerCardId,
+          orElse: () => {},
+        );
+        winnerCardTitle = winnerCard['title'] as String? ?? '';
+        winnerCardEmoji = winnerCard['emoji'] as String? ?? '';
+      }
 
-        final orderedStandings = <String, dynamic>{};
-        for (final entry in sortedEntries) {
-          orderedStandings[entry.key] = entry.value;
-        }
+      // ── Standings: sorted by elapsed time (fastest first) ──
+      final resolvedNames = await fetchDisplayNames(finished.map((p) => p.id).toList());
+      final Map<String, dynamic> standings = {};
+      for (final p in finished) {
+        standings[p.id] = {
+          'userName': resolvedNames[p.id] ?? p.userName,
+          'elapsedTimeMs': p.elapsedTimeMs,
+          'timeoutCount': p.timeoutCount,
+          'chosenWinnerCardId': p.chosenWinnerCardId,
+        };
+      }
 
-        // ── Speed Shield: first player to finish gets their card protected ──
-        String speedShieldWinnerCardId = '';
-        String speedShieldWinnerId = '';
-        if (sortedEntries.isNotEmpty) {
-          final fastest = sortedEntries.first;
-          speedShieldWinnerId = fastest.key;
-          speedShieldWinnerCardId =
-              fastest.value['chosenWinnerCardId'] as String? ?? '';
-        }
-
-        // ── Leaderboard: record each finisher exactly once ──
-        final recorded = List<String>.from(
-            sessionData['leaderboardRecordedUids'] ?? const []);
-        final toRecord = finished
-            .map((p) => p.id)
-            .where((id) => !recorded.contains(id))
-            .toList();
-
-        tx.update(sessionRef, {
-          'status': SessionStatus.completed.value,
-          'speedShieldWinnerId': speedShieldWinnerId,
-          'statsRecorded': true,
-          'leaderboardRecordedUids': {...recorded, ...toRecord}.toList(),
-          'aggregatedResults': {
-            'cardTally': cardTally,
-            'winnerCardId': winnerCardId,
-            'winnerCardTitle': winnerCardTitle,
-            'winnerCardEmoji': winnerCardEmoji,
-            'totalParticipants': finished.length,
-            'standings': orderedStandings,
-            'speedShieldWinnerCardId': speedShieldWinnerCardId,
-          },
+      final sortedEntries = standings.entries.toList()
+        ..sort((a, b) {
+          final timeA = a.value['elapsedTimeMs'] as int? ?? 999999;
+          final timeB = b.value['elapsedTimeMs'] as int? ?? 999999;
+          return timeA.compareTo(timeB);
         });
 
-        return (toRecord: toRecord, winnerId: speedShieldWinnerId);
-      });
+      final orderedStandings = <String, dynamic>{};
+      for (final entry in sortedEntries) {
+        orderedStandings[entry.key] = entry.value;
+      }
 
-      // Record stats for newly finished players after the commit so a failed
-      // leaderboard write never blocks gameplay (same policy as before).
-      if (outcome != null && outcome.toRecord.isNotEmpty) {
-        await LeaderboardService().recordPickFightResult(
-          participantIds: outcome.toRecord,
-          winnerId: outcome.winnerId,
-        );
+      // ── Speed Shield: first player to finish gets their card protected ──
+      String speedShieldWinnerCardId = '';
+      String speedShieldWinnerId = '';
+      if (sortedEntries.isNotEmpty) {
+        final fastest = sortedEntries.first;
+        speedShieldWinnerId = fastest.key;
+        speedShieldWinnerCardId = fastest.value['chosenWinnerCardId'] as String? ?? '';
+      }
+
+      // Always update the aggregated results so the ResultsScreen's StreamBuilder
+      // reflects the latest standings as each participant finishes.
+      final Map<String, dynamic> updatePayload = {
+        'status': SessionStatus.completed.value,
+        'speedShieldWinnerId': speedShieldWinnerId,
+        'aggregatedResults': {
+          'cardTally': cardTally,
+          'winnerCardId': winnerCardId,
+          'winnerCardTitle': winnerCardTitle,
+          'winnerCardEmoji': winnerCardEmoji,
+          'totalParticipants': finished.length,
+          'standings': orderedStandings,
+          'speedShieldWinnerCardId': speedShieldWinnerCardId,
+        },
+      };
+
+      // Lock the leaderboard write when everyone is done (or for solo runs).
+      if (!alreadyRecorded && allDone) {
+        updatePayload['statsRecorded'] = true;
+      }
+
+      await _sessions.doc(sessionId).update(updatePayload);
+
+      // Records the completed session against each finisher's leaderboard
+      // stats: total matches +1, a win +1 for the speed-shield winner.
+      // Only fires once — when all participants have finished and stats
+      // haven't been recorded yet.
+      if (!alreadyRecorded && allDone) {
+        final finishedIds = finished.map((p) => p.id).toList();
+        if (finishedIds.isNotEmpty) {
+          await LeaderboardService().recordPickFightResult(
+            participantIds: finishedIds,
+            winnerId: speedShieldWinnerId,
+          );
+        }
       }
     } on FirebaseException catch (e) {
       throw SessionException('Failed to aggregate results: ${e.message}');
