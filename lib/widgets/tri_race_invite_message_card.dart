@@ -7,7 +7,7 @@ import '../../utils/constants.dart';
 
 const _fontFamily = 'PlusJakartaSans';
 
-class TriRaceInviteMessageCard extends StatelessWidget {
+class TriRaceInviteMessageCard extends StatefulWidget {
   final String raceId;
   final String content;
   final bool isMe;
@@ -24,8 +24,27 @@ class TriRaceInviteMessageCard extends StatelessWidget {
   });
 
   @override
+  State<TriRaceInviteMessageCard> createState() => _TriRaceInviteMessageCardState();
+}
+
+class _TriRaceInviteMessageCardState extends State<TriRaceInviteMessageCard> {
+  late final TriRaceService _service;
+  late final Stream<TriRace?> _raceStream;
+  late final Stream<List<TriRaceParticipant>> _participantsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _service = TriRaceService();
+    // Created once and reused so rebuilds don't resubscribe and re-wait
+    // for the first snapshot (which hides the Join button).
+    _raceStream = _service.getTriRaceStream(widget.raceId);
+    _participantsStream = _service.getParticipantsStream(widget.raceId);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final service = TriRaceService();
+    final isMe = widget.isMe;
 
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -35,11 +54,11 @@ class TriRaceInviteMessageCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            if (senderName != null)
+            if (widget.senderName != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 2),
                 child: Text(
-                  senderName!,
+                  widget.senderName!,
                   style: const TextStyle(
                     fontFamily: _fontFamily,
                     fontSize: 12,
@@ -49,12 +68,14 @@ class TriRaceInviteMessageCard extends StatelessWidget {
                 ),
               ),
             StreamBuilder<TriRace?>(
-              stream: service.getTriRaceStream(raceId),
+              stream: _raceStream,
               builder: (context, snapshot) {
                 final race = snapshot.data;
                 final status = race?.status;
                 final isActive = status == TriRaceStatus.lobby;
                 final isCancelled = status == TriRaceStatus.cancelled;
+                final isLoading =
+                    race == null && snapshot.connectionState == ConnectionState.waiting;
 
                 return GestureDetector(
                   onTap: isActive
@@ -62,7 +83,7 @@ class TriRaceInviteMessageCard extends StatelessWidget {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => TriRacePreviewScreen(raceId: raceId),
+                              builder: (_) => TriRacePreviewScreen(raceId: widget.raceId),
                             ),
                           );
                         }
@@ -112,9 +133,22 @@ class TriRaceInviteMessageCard extends StatelessWidget {
                                   ),
                               ],
                             ),
+                            if (isLoading) ...[
+                              const SizedBox(height: 10),
+                              const Center(
+                                child: SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ],
                             if (race != null) ...[
                               const SizedBox(height: 10),
-                              _buildParticipantDots(service, isActive),
+                              _buildParticipantDots(isActive),
                             ],
                             if (isActive) ...[
                               const SizedBox(height: 10),
@@ -150,7 +184,7 @@ class TriRaceInviteMessageCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Text(
-                time,
+                widget.time,
                 style: TextStyle(
                   fontFamily: _fontFamily,
                   fontSize: 10,
@@ -177,9 +211,9 @@ class TriRaceInviteMessageCard extends StatelessWidget {
     }
   }
 
-  Widget _buildParticipantDots(TriRaceService service, bool isActive) {
+  Widget _buildParticipantDots(bool isActive) {
     return StreamBuilder<List<TriRaceParticipant>>(
-      stream: service.getParticipantsStream(raceId),
+      stream: _participantsStream,
       builder: (context, snapshot) {
         final participants = snapshot.data ?? [];
         final count = participants.length;

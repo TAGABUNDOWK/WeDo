@@ -1,5 +1,3 @@
-import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/group_chat.dart';
@@ -47,15 +45,23 @@ class _TriRaceInvitePickerScreenState extends State<TriRaceInvitePickerScreen> {
     try {
       final groups = await _groupService.getUserGroupsStream(user.uid).first;
 
-      final friendshipsSnap = await FriendService().getFriendsStream(user.uid).first;
+      final friendships = await FriendService().getFriendsStream(user.uid).first;
+      final pairs = <MapEntry<String, FriendEntity>>[];
+      for (final f in friendships) {
+        final uid = f.otherUserId(user.uid);
+        if (uid.isNotEmpty) pairs.add(MapEntry(uid, f));
+      }
+      final users = await Future.wait(pairs.map((p) => _directService.getUser(p.key)));
+
       final friends = <_FriendUser>[];
-      for (final f in friendshipsSnap) {
-        final otherUid = f.otherUserId(user.uid);
-        if (otherUid.isNotEmpty) {
-          final userData = await _directService.getUser(otherUid);
-          if (userData != null) {
-            friends.add(_FriendUser(uid: otherUid, name: userData.displayName, friendEntity: f));
-          }
+      for (var i = 0; i < pairs.length; i++) {
+        final userData = users[i];
+        if (userData != null) {
+          friends.add(_FriendUser(
+            uid: pairs[i].key,
+            name: userData.displayName,
+            friendEntity: pairs[i].value,
+          ));
         }
       }
 
@@ -81,37 +87,39 @@ class _TriRaceInvitePickerScreenState extends State<TriRaceInvitePickerScreen> {
     if (user == null) return;
 
     try {
-      final race = await _triRaceService.getTriRaceStream(widget.raceId).first;
-      if (race == null) return;
-
-      for (final groupId in _selectedGroupIds) {
-        await _groupService.sendTriRaceInviteMessage(
-          groupId: groupId,
-          senderId: user.uid,
-          senderName: user.displayName ?? user.email ?? 'Player',
-          raceId: widget.raceId,
-          hostName: user.displayName ?? user.email ?? 'Player',
-        );
-      }
-
-      for (final friendId in _selectedFriendIds) {
-        final chatId = await _getDirectChatId(user.uid, friendId);
-        if (chatId != null) {
-          await _directService.sendTriRaceInviteMessage(
-            chatId: chatId,
+      final sends = <Future<void>>[
+        for (final groupId in _selectedGroupIds)
+          _groupService.sendTriRaceInviteMessage(
+            groupId: groupId,
             senderId: user.uid,
             senderName: user.displayName ?? user.email ?? 'Player',
             raceId: widget.raceId,
             hostName: user.displayName ?? user.email ?? 'Player',
-          );
-        }
-      }
+          ),
+        for (final friendId in _selectedFriendIds)
+          () async {
+            final chatId = await _directService.getOrCreateChat(
+              currentUid: user.uid,
+              otherUid: friendId,
+            );
+            await _directService.sendTriRaceInviteMessage(
+              chatId: chatId,
+              senderId: user.uid,
+              senderName: user.displayName ?? user.email ?? 'Player',
+              raceId: widget.raceId,
+              hostName: user.displayName ?? user.email ?? 'Player',
+            );
+          }(),
+      ];
+      await Future.wait(sends);
 
-      await _triRaceService.markInvited(
-        raceId: widget.raceId,
-        hostId: user.uid,
-        invitedUserIds: _selectedFriendIds.toList(),
-      );
+      if (_selectedFriendIds.isNotEmpty) {
+        await _triRaceService.markInvited(
+          raceId: widget.raceId,
+          hostId: user.uid,
+          invitedUserIds: _selectedFriendIds.toList(),
+        );
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -131,20 +139,6 @@ class _TriRaceInvitePickerScreenState extends State<TriRaceInvitePickerScreen> {
     } finally {
       if (mounted) setState(() => _isSending = false);
     }
-  }
-
-  Future<String?> _getDirectChatId(String uid1, String uid2) async {
-    try {
-      final chats = await FirebaseFirestore.instance
-          .collection('direct_chats')
-          .where('members', arrayContains: uid1)
-          .get();
-      for (final doc in chats.docs) {
-        final members = (doc.data()['members'] as List?)?.cast<String>() ?? [];
-        if (members.contains(uid2)) return doc.id;
-      }
-    } catch (_) {}
-    return null;
   }
 
   @override

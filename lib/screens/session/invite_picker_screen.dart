@@ -53,37 +53,41 @@ class _InvitePickerScreenState extends State<InvitePickerScreen> {
     try {
       final hostName = _currentUser.displayName ?? _currentUser.email ?? 'Host';
 
-      for (final groupId in _selectedGroupIds) {
-        await _groupService.sendInviteMessage(
-          groupId: groupId,
-          senderId: _currentUser.uid,
-          senderName: hostName,
+      final sends = <Future<void>>[
+        for (final groupId in _selectedGroupIds)
+          _groupService.sendInviteMessage(
+            groupId: groupId,
+            senderId: _currentUser.uid,
+            senderName: hostName,
+            sessionId: widget.sessionId,
+            topic: widget.topic,
+            hostName: hostName,
+          ),
+        for (final friendUid in _selectedFriendUids)
+          () async {
+            final chatId = await _directService.getOrCreateChat(
+              currentUid: _currentUser.uid,
+              otherUid: friendUid,
+            );
+            await _directService.sendInviteMessage(
+              chatId: chatId,
+              senderId: _currentUser.uid,
+              senderName: hostName,
+              sessionId: widget.sessionId,
+              topic: widget.topic,
+              hostName: hostName,
+            );
+          }(),
+      ];
+      await Future.wait(sends);
+
+      if (_selectedFriendUids.isNotEmpty) {
+        await _sessionService.markInvited(
           sessionId: widget.sessionId,
-          topic: widget.topic,
-          hostName: hostName,
+          hostId: widget.hostId,
+          invitedUserIds: _selectedFriendUids.toList(),
         );
       }
-
-      for (final friendUid in _selectedFriendUids) {
-        final chatId = await _directService.getOrCreateChat(
-          currentUid: _currentUser.uid,
-          otherUid: friendUid,
-        );
-        await _directService.sendInviteMessage(
-          chatId: chatId,
-          senderId: _currentUser.uid,
-          senderName: hostName,
-          sessionId: widget.sessionId,
-          topic: widget.topic,
-          hostName: hostName,
-        );
-      }
-
-      await _sessionService.markInvited(
-        sessionId: widget.sessionId,
-        hostId: widget.hostId,
-        invitedUserIds: _selectedFriendUids.toList(),
-      );
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -325,7 +329,7 @@ class _InvitePickerScreenState extends State<InvitePickerScreen> {
         }
 
         return FutureBuilder<List<_FriendUser>>(
-          future: _loadFriends(friendships),
+          future: _friendsFutureFor(friendships),
           builder: (context, friendSnapshot) {
             if (friendSnapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
@@ -357,15 +361,30 @@ class _InvitePickerScreenState extends State<InvitePickerScreen> {
     );
   }
 
+  // Rebuilds of this screen must not recreate the future — a new future on
+  // every build restarts the fetch and flashes the loading spinner.
+  List? _cachedFriendships;
+  Future<List<_FriendUser>>? _cachedFriendsFuture;
+
+  Future<List<_FriendUser>> _friendsFutureFor(List friendships) {
+    if (!identical(_cachedFriendships, friendships) || _cachedFriendsFuture == null) {
+      _cachedFriendships = friendships;
+      _cachedFriendsFuture = _loadFriends(friendships);
+    }
+    return _cachedFriendsFuture!;
+  }
+
   Future<List<_FriendUser>> _loadFriends(List friendships) async {
-    final results = <_FriendUser>[];
+    final uids = <String>[];
     for (final f in friendships) {
       final uid = f.otherUserId(_currentUser!.uid);
-      if (uid.isEmpty) continue;
-      final user = await _directService.getUser(uid);
-      results.add(_FriendUser(uid: uid, user: user));
+      if (uid.isNotEmpty) uids.add(uid);
     }
-    return results;
+    final users = await Future.wait(uids.map(_directService.getUser));
+    return [
+      for (var i = 0; i < uids.length; i++)
+        _FriendUser(uid: uids[i], user: users[i]),
+    ];
   }
 
   Widget _buildFriendTile(_FriendUser friend) {
