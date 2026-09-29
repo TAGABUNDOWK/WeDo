@@ -1,11 +1,15 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
 import '../../../utils/constants.dart';
 import '../../../services/event/event_service.dart';
 import '../../../services/group/group_service.dart';
 import '../../../services/direct/direct_service.dart';
 import '../../../services/notification/notification_service.dart';
+import '../../../widgets/chat_default_background.dart';
 
 class CreateEventScreen extends StatefulWidget {
   final String? groupId;
@@ -31,12 +35,14 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   final _directService = DirectService();
   final _notificationService = NotificationService();
   final _currentUser = FirebaseAuth.instance.currentUser;
+  final _imagePicker = ImagePicker();
 
   DateTime _selectedDate = DateTime.now();
   Duration _startDuration = const Duration(minutes: 15);
   Duration? _endDuration;
   bool _showRsvpMessages = false;
   bool _isCreating = false;
+  File? _eventImage;
 
   static const _startOptions = <MapEntry<String, Duration>>[
     MapEntry('In 5 minutes', Duration(minutes: 5)),
@@ -234,6 +240,60 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     }
   }
 
+  Future<void> _pickEventImage() async {
+    final source = await showDialog<ImageSource>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF211635),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.glassBorder),
+        ),
+        title: const Text(
+          'Event photo',
+          style: TextStyle(color: AppColors.textPrimary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, ImageSource.camera),
+            child: const Text('Camera', style: TextStyle(color: AppColors.lavenderAccent)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, ImageSource.gallery),
+            child: const Text('Gallery', style: TextStyle(color: AppColors.lavenderAccent)),
+          ),
+        ],
+      ),
+    );
+
+    if (source == null) return;
+
+    final picked = await _imagePicker.pickImage(source: source, imageQuality: 80);
+    if (picked == null) return;
+
+    final cropped = await ImageCropper().cropImage(
+      sourcePath: picked.path,
+      aspectRatio: const CropAspectRatio(ratioX: 9, ratioY: 16),
+      uiSettings: [
+        AndroidUiSettings(
+          toolbarTitle: 'Crop Photo',
+          toolbarColor: const Color(0xFF190831),
+          toolbarWidgetColor: Colors.white,
+          activeControlsWidgetColor: const Color(0xFFFE4EF0),
+          lockAspectRatio: true,
+        ),
+        IOSUiSettings(
+          title: 'Crop Photo',
+          aspectRatioLockEnabled: true,
+        ),
+      ],
+    );
+
+    if (cropped != null && mounted) {
+      setState(() => _eventImage = File(cropped.path));
+    }
+  }
+
   Future<void> _createEvent() async {
     final title = _titleCtrl.text.trim();
     if (title.isEmpty || _currentUser == null) return;
@@ -241,6 +301,16 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     setState(() => _isCreating = true);
 
     try {
+      String? imageUrl;
+      final image = _eventImage;
+      if (image != null) {
+        imageUrl = await _eventService.uploadEventImage(
+          chatId: widget.chatId,
+          groupId: widget.groupId,
+          file: image,
+        );
+      }
+
       final eventId = await _eventService.createEvent(
         createdBy: _currentUser.uid,
         title: title,
@@ -253,6 +323,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         dressCode: _dressCodeCtrl.text.trim().isEmpty
             ? null
             : _dressCodeCtrl.text.trim(),
+        imageUrl: imageUrl,
         showRsvpMessages: _showRsvpMessages,
         chatId: widget.chatId,
         groupId: widget.groupId,
@@ -352,7 +423,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.midnightBg,
+      backgroundColor: Colors.transparent,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -393,147 +465,159 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _GlassCard(
-              child: Column(
-                children: [
-                  _buildTextField(
-                    controller: _titleCtrl,
-                    label: 'Title',
-                    hint: "What's the event about?",
-                  ),
-                  const SizedBox(height: 16),
-                  _buildTextField(
-                    controller: _descCtrl,
-                    label: 'Description',
-                    hint: 'Add more details...',
-                    maxLines: 3,
-                  ),
-                ],
-              ),
+      body: Stack(
+        children: [
+          const Positioned.fill(child: ChatDefaultBackground()),
+          SingleChildScrollView(
+            padding: EdgeInsets.only(
+              top: MediaQuery.of(context).padding.top + kToolbarHeight + 8,
+              left: 16,
+              right: 16,
+              bottom: 24,
             ),
-            const SizedBox(height: 16),
-            _GlassCard(
-              child: Column(
-                children: [
-                  _buildLogisticsRow(
-                    icon: Icons.calendar_today,
-                    label: 'Date',
-                    value: _formatDateShort(_selectedDate),
-                    onTap: _pickDate,
-                  ),
-                  const _GlassDivider(),
-                  _buildLogisticsRow(
-                    icon: Icons.timer,
-                    label: 'Start',
-                    child: _buildStartDropdown(),
-                  ),
-                  const _GlassDivider(),
-                  _buildLogisticsRow(
-                    icon: Icons.event_available,
-                    label: 'End (optional)',
-                    iconColor: _endDuration != null ? AppColors.lavenderAccent : AppColors.textSecondary,
-                    child: _buildEndDropdown(),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _QuickSelector(
-                  label: _getTodayTimeLabel(),
-                  onTap: () {
-                    setState(() {
-                      _selectedDate = DateTime.now();
-                    });
-                  },
+                _GlassCard(
+                  child: Column(
+                    children: [
+                      _buildTextField(
+                        controller: _titleCtrl,
+                        label: 'Title',
+                        hint: "What's the event about?",
+                      ),
+                      const SizedBox(height: 16),
+                      _buildTextField(
+                        controller: _descCtrl,
+                        label: 'Description',
+                        hint: 'Add more details...',
+                        maxLines: 3,
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(width: 10),
-                _QuickSelector(
-                  label: _getTomorrowLabel(),
-                  onTap: () {
-                    setState(() {
-                      _selectedDate = DateTime.now().add(const Duration(days: 1));
-                    });
-                  },
+                const SizedBox(height: 16),
+                _GlassCard(child: _buildImagePickerField()),
+                const SizedBox(height: 16),
+                _GlassCard(
+                  child: Column(
+                    children: [
+                      _buildLogisticsRow(
+                        icon: Icons.calendar_today,
+                        label: 'Date',
+                        value: _formatDateShort(_selectedDate),
+                        onTap: _pickDate,
+                      ),
+                      const _GlassDivider(),
+                      _buildLogisticsRow(
+                        icon: Icons.timer,
+                        label: 'Start',
+                        child: _buildStartDropdown(),
+                      ),
+                      const _GlassDivider(),
+                      _buildLogisticsRow(
+                        icon: Icons.event_available,
+                        label: 'End (optional)',
+                        iconColor: _endDuration != null ? AppColors.lavenderAccent : AppColors.textSecondary,
+                        child: _buildEndDropdown(),
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    _QuickSelector(
+                      label: _getTodayTimeLabel(),
+                      onTap: () {
+                        setState(() {
+                          _selectedDate = DateTime.now();
+                        });
+                      },
+                    ),
+                    const SizedBox(width: 10),
+                    _QuickSelector(
+                      label: _getTomorrowLabel(),
+                      onTap: () {
+                        setState(() {
+                          _selectedDate = DateTime.now().add(const Duration(days: 1));
+                        });
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _GlassCard(
+                  child: Column(
+                    children: [
+                      _buildTextField(
+                        controller: _locationCtrl,
+                        label: 'Location',
+                        hint: 'Where is the event?',
+                        prefixIcon: Icons.location_on,
+                      ),
+                      const SizedBox(height: 16),
+                      _buildTextField(
+                        controller: _dressCodeCtrl,
+                        label: 'Dress code',
+                        hint: 'e.g. Casual, Formal, Black tie',
+                        prefixIcon: Icons.checkroom,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _GlassCard(
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Show RSVP messages',
+                              style: TextStyle(
+                                color: AppColors.textPrimary,
+                                fontFamily: 'PlusJakartaSans',
+                                fontWeight: FontWeight.w500,
+                                fontSize: 15,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Post a message when someone changes their RSVP',
+                              style: TextStyle(
+                                color: AppColors.textSecondary.withValues(alpha: 0.7),
+                                fontFamily: 'PlusJakartaSans',
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: _showRsvpMessages,
+                        onChanged: (value) => setState(() => _showRsvpMessages = value),
+                        activeThumbColor: AppColors.midnightBg,
+                        activeTrackColor: AppColors.lavenderAccent,
+                        inactiveTrackColor: AppColors.glassBorder,
+                        thumbColor: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.selected)) {
+                            return AppColors.midnightBg;
+                          }
+                          return AppColors.textSecondary;
+                        }),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                _buildCreateButton(),
+                const SizedBox(height: 24),
               ],
             ),
-            const SizedBox(height: 16),
-            _GlassCard(
-              child: Column(
-                children: [
-                  _buildTextField(
-                    controller: _locationCtrl,
-                    label: 'Location',
-                    hint: 'Where is the event?',
-                    prefixIcon: Icons.location_on,
-                  ),
-                  const SizedBox(height: 16),
-                  _buildTextField(
-                    controller: _dressCodeCtrl,
-                    label: 'Dress code',
-                    hint: 'e.g. Casual, Formal, Black tie',
-                    prefixIcon: Icons.checkroom,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            _GlassCard(
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Show RSVP messages',
-                          style: TextStyle(
-                            color: AppColors.textPrimary,
-                            fontFamily: 'PlusJakartaSans',
-                            fontWeight: FontWeight.w500,
-                            fontSize: 15,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Post a message when someone changes their RSVP',
-                          style: TextStyle(
-                            color: AppColors.textSecondary.withValues(alpha: 0.7),
-                            fontFamily: 'PlusJakartaSans',
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Switch(
-                    value: _showRsvpMessages,
-                    onChanged: (value) => setState(() => _showRsvpMessages = value),
-                    activeThumbColor: AppColors.midnightBg,
-                    activeTrackColor: AppColors.lavenderAccent,
-                    inactiveTrackColor: AppColors.glassBorder,
-                    thumbColor: WidgetStateProperty.resolveWith((states) {
-                      if (states.contains(WidgetState.selected)) {
-                        return AppColors.midnightBg;
-                      }
-                      return AppColors.textSecondary;
-                    }),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            _buildCreateButton(),
-            const SizedBox(height: 24),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -575,6 +659,149 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         contentPadding: EdgeInsets.symmetric(
           horizontal: 16,
           vertical: maxLines > 1 ? 16 : 14,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImagePickerField() {
+    final image = _eventImage;
+
+    if (image != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Event photo',
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontFamily: 'PlusJakartaSans',
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'For best results, upload a 9:16 portrait image',
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontFamily: 'PlusJakartaSans',
+              fontSize: 11,
+            ),
+          ),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: _pickEventImage,
+            child: Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    width: double.infinity,
+                    height: 200,
+                    color: const Color(0xFF190831),
+                    child: Image.file(
+                      image,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: 10,
+                  bottom: 10,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.45),
+                          borderRadius: BorderRadius.circular(50),
+                          border: Border.all(color: AppColors.glassBorder),
+                        ),
+                        child: const Text(
+                          'Tap to change',
+                          style: TextStyle(
+                            color: AppColors.textPrimary,
+                            fontFamily: 'PlusJakartaSans',
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () => setState(() => _eventImage = null),
+                        child: Container(
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.45),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: AppColors.glassBorder),
+                          ),
+                          child: const Icon(Icons.close, size: 16, color: AppColors.textPrimary),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    return GestureDetector(
+      onTap: _pickEventImage,
+      child: CustomPaint(
+        painter: _DashedBorderPainter(
+          color: AppColors.lavenderAccent.withValues(alpha: 0.45),
+          radius: 16,
+        ),
+        child: const SizedBox(
+          width: double.infinity,
+          height: 120,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.add_photo_alternate_outlined,
+                color: AppColors.lavenderAccent,
+                size: 34,
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Add event photo',
+                style: TextStyle(
+                  color: AppColors.lavenderAccent,
+                  fontFamily: 'PlusJakartaSans',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Optional — makes your event card stand out',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontFamily: 'PlusJakartaSans',
+                  fontSize: 11,
+                ),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'For best results, upload a 9:16 portrait image',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontFamily: 'PlusJakartaSans',
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -864,4 +1091,51 @@ class _QuickSelector extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── Dashed rounded-rect border for the event photo picker ───────────────────
+
+class _DashedBorderPainter extends CustomPainter {
+  final Color color;
+  final double radius;
+  final double strokeWidth = 1.5;
+  final double dashLength = 7;
+  final double gapLength = 5;
+
+  const _DashedBorderPainter({
+    required this.color,
+    required this.radius,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)),
+      );
+
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
+
+    for (final metric in path.computeMetrics()) {
+      double distance = 0;
+      while (distance < metric.length) {
+        canvas.drawPath(
+          metric.extractPath(distance, distance + dashLength),
+          paint,
+        );
+        distance += dashLength + gapLength;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedBorderPainter oldDelegate) =>
+      oldDelegate.color != color ||
+      oldDelegate.radius != radius ||
+      oldDelegate.strokeWidth != strokeWidth ||
+      oldDelegate.dashLength != dashLength ||
+      oldDelegate.gapLength != gapLength;
 }

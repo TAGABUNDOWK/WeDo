@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import '../../models/event.dart';
 import '../../models/user_entity.dart';
 import '../../services/event/event_service.dart';
+import '../../services/group/group_service.dart';
 import '../../services/auth/user_service.dart';
 import '../../utils/constants.dart';
+import 'event_card_widgets.dart';
 
 const _fontFamily = 'PlusJakartaSans';
 
@@ -33,11 +35,13 @@ class EventMessageCard extends StatefulWidget {
 
 class _EventMessageCardState extends State<EventMessageCard> {
   final _eventService = EventService();
+  final _groupService = GroupService();
   final _userService = UserService();
   late final Stream<ChatEvent?> _eventStream;
   Timer? _expiryTimer;
   final Map<String, UserEntity> _userCache = {};
   final Set<String> _requestedUids = {};
+  int? _groupMemberCount;
 
   @override
   void initState() {
@@ -50,12 +54,26 @@ class _EventMessageCardState extends State<EventMessageCard> {
     _expiryTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
+    _loadGroupMemberCount();
   }
 
   @override
   void dispose() {
     _expiryTimer?.cancel();
     super.dispose();
+  }
+
+  /// One light read of the group document so the proportional vote fills can
+  /// use the real member count (direct chats are handled without a fetch).
+  Future<void> _loadGroupMemberCount() async {
+    final groupId = widget.event.groupId;
+    if (groupId == null) return;
+    try {
+      final group = await _groupService.getGroup(groupId);
+      if (group != null && mounted) {
+        setState(() => _groupMemberCount = group.memberCount);
+      }
+    } catch (_) {}
   }
 
   void _loadAttendeeUsers(ChatEvent event) {
@@ -73,19 +91,62 @@ class _EventMessageCardState extends State<EventMessageCard> {
     }
   }
 
-  Future<void> _rsvp(String response) async {
-    if (widget.currentUid.isEmpty) return;
-    final event = widget.event;
-    final now = DateTime.now();
-    final isStarted = now.isAfter(event.date);
-    final isEnded = event.endDate != null && now.isAfter(event.endDate!);
-    if (!isStarted || isEnded) return;
-    await _eventService.rsvpEvent(
-      eventId: widget.event.id,
+  Future<void> _vote(ChatEvent event, EventResponse response) {
+    return _eventService.submitResponse(
+      event: event,
       uid: widget.currentUid,
       response: response,
-      chatId: widget.event.chatId,
-      groupId: widget.event.groupId,
+    );
+  }
+
+  Widget _buildAvatar(String uid, double size) {
+    final user = _userCache[uid];
+    final photoUrl = user?.photoUrl;
+    final avatarAsset = user?.avatarAsset;
+    final hasAvatarAsset = avatarAsset != null && avatarAsset.isNotEmpty;
+    final hasAvatarUrl = photoUrl != null && photoUrl.isNotEmpty;
+    final initials = uid.isNotEmpty ? uid.substring(0, 1).toUpperCase() : '?';
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: const Color(0xFF211635),
+        border: Border.all(color: AppColors.midnightBg, width: 1.5),
+      ),
+      child: ClipOval(
+        child: hasAvatarAsset
+            ? Image.asset(
+                avatarAsset,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => _buildAvatarFallback(initials, size),
+              )
+            : hasAvatarUrl
+                ? Image.network(
+                    photoUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => _buildAvatarFallback(initials, size),
+                  )
+                : _buildAvatarFallback(initials, size),
+      ),
+    );
+  }
+
+  Widget _buildAvatarFallback(String initials, double size) {
+    return Container(
+      color: const Color(0xFF211635),
+      child: Center(
+        child: Text(
+          initials,
+          style: TextStyle(
+            fontFamily: _fontFamily,
+            fontSize: size * 0.4,
+            fontWeight: FontWeight.w700,
+            color: AppColors.lavenderAccent,
+          ),
+        ),
+      ),
     );
   }
 
@@ -96,8 +157,13 @@ class _EventMessageCardState extends State<EventMessageCard> {
       initialData: widget.event,
       builder: (context, snapshot) {
         final event = snapshot.data ?? widget.event;
-        final myResponse = event.myRsvp(widget.currentUid);
         _loadAttendeeUsers(event);
+
+        final hasImage = event.imageUrl != null && event.imageUrl!.isNotEmpty;
+        final isLocked = !event.isStarted || event.isEnded;
+        final myResponse = event.myResponse(widget.currentUid);
+        final participants =
+            event.participantCount(groupMemberCount: _groupMemberCount);
 
         return GestureDetector(
           onTap: widget.onTap,
@@ -106,76 +172,101 @@ class _EventMessageCardState extends State<EventMessageCard> {
             children: [
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: BackdropFilter(
-                    filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-                    child: Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: AppColors.eventCardBg,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: AppColors.glassBorder,
-                          width: 1,
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.glassBorder, width: 1),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(15),
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: hasImage
+                              ? Image.network(
+                                  event.imageUrl!,
+                                  fit: BoxFit.cover,
+                                  loadingBuilder: (context, child, progress) {
+                                    if (progress == null) return child;
+                                    return Container(
+                                      color: const Color(0xFF2D1B69),
+                                      child: const Center(
+                                        child: CircularProgressIndicator(),
+                                      ),
+                                    );
+                                  },
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      Container(color: const Color(0xFF2D1B69)),
+                                )
+                              : BackdropFilter(
+                                  filter:
+                                      ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                                  child: Container(color: AppColors.eventCardBg),
+                                ),
                         ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _AppBarSection(
-                            event: event,
-                            onInfoTap: widget.onInfoTap,
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  'EVENT DETAILS',
-                                  style: TextStyle(
-                                    fontFamily: _fontFamily,
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 1.2,
-                                    color: AppColors.textSecondary.withValues(alpha: 0.7),
-                                  ),
+                        if (hasImage)
+                          const Positioned.fill(
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Color(0xB3000000),
+                                    Color(0x59000000),
+                                    Color(0xD9000000),
+                                  ],
+                                  stops: [0.0, 0.4, 1.0],
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  event.title,
-                                  style: const TextStyle(
-                                    fontFamily: _fontFamily,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.textPrimary,
-                                    height: 1.2,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                _AttendeeRow(
-                                  event: event,
-                                  userCache: _userCache,
-                                ),
-                                const SizedBox(height: 8),
-                                _MetadataSection(event: event),
-                                const SizedBox(height: 8),
-                                _StatusBadge(event: event),
-                                const SizedBox(height: 10),
-                                _RsvpRow(
-                                  event: event,
-                                  currentUid: widget.currentUid,
-                                  myResponse: myResponse,
-                                  onRsvp: _rsvp,
-                                ),
-                              ],
+                              ),
                             ),
                           ),
-                        ],
-                      ),
+                        SizedBox(
+                          width: double.infinity,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              EventCardHeaderStrip(onInfoTap: widget.onInfoTap),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    EventInfoChips(event: event),
+                                    const SizedBox(height: 14),
+                                    EventStatusBar(
+                                      eventDate: event.date,
+                                      endDate: event.endDate,
+                                    ),
+                                    const SizedBox(height: 14),
+                                    for (final response in EventResponse.values)
+                                      Padding(
+                                        padding: const EdgeInsets.only(bottom: 10),
+                                        child: EventVoteOption(
+                                          label: response.label,
+                                          count: event.countFor(response),
+                                          total: participants,
+                                          voters: event.votersFor(response),
+                                          avatarBuilder: _buildAvatar,
+                                          isSelected: myResponse == response,
+                                          isLocked: isLocked,
+                                          onTap: () => _vote(event, response),
+                                        ),
+                                      ),
+                                    if (isLocked)
+                                      EventRsvpLockRow(ended: event.isEnded),
+                                    const SizedBox(height: 10),
+                                    _CardFooter(event: event),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -209,517 +300,52 @@ class _EventMessageCardState extends State<EventMessageCard> {
   }
 }
 
-class _AppBarSection extends StatelessWidget {
-  final ChatEvent event;
-  final VoidCallback? onInfoTap;
-
-  const _AppBarSection({required this.event, this.onInfoTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: const BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: AppColors.divider,
-            width: 0.5,
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          const Expanded(
-            child: Center(
-              child: Text(
-                'Event',
-                style: TextStyle(
-                  fontFamily: _fontFamily,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-            ),
-          ),
-          GestureDetector(
-            onTap: onInfoTap,
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: const Icon(
-                Icons.info_outline,
-                size: 14,
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AttendeeRow extends StatelessWidget {
-  final ChatEvent event;
-  final Map<String, UserEntity> userCache;
-
-  const _AttendeeRow({
-    required this.event,
-    required this.userCache,
-  });
-
-  Widget _buildAvatar(String uid, double size) {
-    final user = userCache[uid];
-    final photoUrl = user?.photoUrl;
-    final avatarAsset = user?.avatarAsset;
-    final hasAvatarAsset = avatarAsset != null && avatarAsset.isNotEmpty;
-    final hasAvatarUrl = photoUrl != null && photoUrl.isNotEmpty;
-    final initials = uid.isNotEmpty ? uid.substring(0, 1).toUpperCase() : '?';
-
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: const Color(0xFF211635),
-        border: Border.all(color: AppColors.midnightBg, width: 1.5),
-      ),
-      child: ClipOval(
-        child: hasAvatarAsset
-            ? Image.asset(
-                avatarAsset,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _buildFallback(initials, size),
-              )
-            : hasAvatarUrl
-                ? Image.network(
-                    photoUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => _buildFallback(initials, size),
-                  )
-                : _buildFallback(initials, size),
-      ),
-    );
-  }
-
-  Widget _buildFallback(String initials, double size) {
-    return Container(
-      color: const Color(0xFF211635),
-      child: Center(
-        child: Text(
-          initials,
-          style: TextStyle(
-            fontFamily: _fontFamily,
-            fontSize: size * 0.4,
-            fontWeight: FontWeight.w700,
-            color: AppColors.lavenderAccent,
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final respondents = event.rsvps.keys.toList();
-    if (respondents.isEmpty) {
-      return Text(
-        'No responses yet',
-        style: TextStyle(
-          fontFamily: _fontFamily,
-          fontSize: 11,
-          color: AppColors.textSecondary.withValues(alpha: 0.6),
-        ),
-      );
-    }
-
-    final visibleCount = respondents.length.clamp(0, 4);
-    final overflow = respondents.length - visibleCount;
-
-    return Row(
-      children: [
-        SizedBox(
-          width: visibleCount * 22.0,
-          height: 24,
-          child: Stack(
-            children: List.generate(visibleCount, (i) {
-              return Positioned(
-                left: i * 16.0,
-                child: _buildAvatar(respondents[i], 20),
-              );
-            }),
-          ),
-        ),
-        if (overflow > 0) ...[
-          const SizedBox(width: 3),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: AppColors.lavenderAccent.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: AppColors.lavenderAccent.withValues(alpha: 0.3),
-                width: 0.5,
-              ),
-            ),
-            child: Text(
-              '+$overflow',
-              style: const TextStyle(
-                fontFamily: _fontFamily,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: AppColors.lavenderAccent,
-              ),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _MetadataSection extends StatelessWidget {
+class _CardFooter extends StatelessWidget {
   final ChatEvent event;
 
-  const _MetadataSection({required this.event});
+  const _CardFooter({required this.event});
 
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _MetadataRow(
-          icon: Icons.calendar_today_outlined,
-          text: '${_formatDate(event.date)} at ${_formatTime(event.date)}${event.endDate != null ? ' - ${_formatTime(event.endDate!)}' : ''}',
-        ),
-        if (event.location != null && event.location!.isNotEmpty) ...[
-          const SizedBox(height: 5),
-          _MetadataRow(
-            icon: Icons.location_on_outlined,
-            text: event.location!,
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          decoration: BoxDecoration(
+            color: AppColors.lavenderAccent.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(50),
+            border: Border.all(
+              color: AppColors.lavenderAccent.withValues(alpha: 0.3),
+              width: 1,
+            ),
           ),
-        ],
-        if (event.dressCode != null && event.dressCode!.isNotEmpty) ...[
-          const SizedBox(height: 5),
-          _MetadataRow(
-            icon: Icons.checkroom_outlined,
-            text: event.dressCode!,
-          ),
-        ],
-      ],
-    );
-  }
-
-  String _formatDate(DateTime date) {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    return '${months[date.month - 1]} ${date.day}, ${date.year}';
-  }
-
-  String _formatTime(DateTime date) {
-    final hour = date.hour;
-    final minute = date.minute.toString().padLeft(2, '0');
-    final period = hour >= 12 ? 'PM' : 'AM';
-    final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
-    return '$displayHour:$minute $period';
-  }
-}
-
-class _MetadataRow extends StatelessWidget {
-  final IconData icon;
-  final String text;
-
-  const _MetadataRow({required this.icon, required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 13, color: AppColors.lavenderAccent),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(
+          child: const Text(
+            'EVENT NAME',
+            style: TextStyle(
+              color: AppColors.lavenderAccent,
               fontFamily: _fontFamily,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w700,
+              fontSize: 10,
+              letterSpacing: 1.4,
             ),
           ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          event.title,
+          style: const TextStyle(
+            color: AppColors.lavenderAccent,
+            fontFamily: _fontFamily,
+            fontWeight: FontWeight.w800,
+            fontSize: 20,
+            height: 1.15,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
         ),
       ],
-    );
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  final ChatEvent event;
-
-  const _StatusBadge({required this.event});
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final isStarted = now.isAfter(event.date);
-    final isEnded = event.endDate != null && now.isAfter(event.endDate!);
-
-    String text;
-    Color bgColor;
-    Color textColor;
-    IconData icon;
-    List<BoxShadow>? glow;
-
-    if (isEnded) {
-      text = 'Ended';
-      bgColor = AppColors.glassBg;
-      textColor = AppColors.textSecondary;
-      icon = Icons.check_circle;
-      glow = null;
-    } else if (isStarted && event.endDate != null) {
-      final remaining = event.endDate!.difference(now);
-      text = 'Happening now \u2014 Ends in ${remaining.inMinutes}m ${remaining.inSeconds % 60}s';
-      bgColor = AppColors.neonMagenta;
-      textColor = AppColors.textPrimary;
-      icon = Icons.play_circle_filled;
-      glow = [
-        BoxShadow(
-          color: AppColors.neonMagenta.withValues(alpha: 0.4),
-          offset: Offset.zero,
-          blurRadius: 14,
-          spreadRadius: 1,
-        ),
-      ];
-    } else if (isStarted) {
-      text = 'Happening now';
-      bgColor = AppColors.neonMagenta;
-      textColor = AppColors.textPrimary;
-      icon = Icons.play_circle_filled;
-      glow = [
-        BoxShadow(
-          color: AppColors.neonMagenta.withValues(alpha: 0.4),
-          offset: Offset.zero,
-          blurRadius: 14,
-          spreadRadius: 1,
-        ),
-      ];
-    } else {
-      final diff = event.date.difference(now);
-      if (diff.inMinutes < 60) {
-        text = 'Starts in ${diff.inMinutes}m ${diff.inSeconds % 60}s';
-      } else if (diff.inHours < 24) {
-        text = 'Starts in ${diff.inHours}h ${diff.inMinutes % 60}m';
-      } else {
-        text = 'Starts in ${diff.inDays}d ${diff.inHours % 24}h';
-      }
-      bgColor = AppColors.glassBg;
-      textColor = AppColors.textSecondary;
-      icon = Icons.access_time;
-      glow = null;
-    }
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(50),
-        boxShadow: glow,
-        border: Border.all(
-          color: isStarted && !isEnded
-              ? AppColors.neonMagenta.withValues(alpha: 0.5)
-              : AppColors.glassBorder,
-          width: 1,
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: textColor),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              text,
-              style: TextStyle(
-                fontFamily: _fontFamily,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: textColor,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RsvpRow extends StatelessWidget {
-  final ChatEvent event;
-  final String currentUid;
-  final String? myResponse;
-  final Future<void> Function(String) onRsvp;
-
-  const _RsvpRow({
-    required this.event,
-    required this.currentUid,
-    required this.myResponse,
-    required this.onRsvp,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final isStarted = now.isAfter(event.date);
-    final isEnded = event.endDate != null && now.isAfter(event.endDate!);
-    final isLocked = !isStarted || isEnded;
-
-    return Row(
-      children: [
-        Expanded(
-          child: _RsvpButton(
-            label: 'Interested',
-            count: event.interestedCount,
-            isSelected: myResponse == 'yes',
-            isActive: true,
-            isLocked: isLocked,
-            onTap: () => onRsvp('yes'),
-          ),
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: _RsvpButton(
-            label: 'Not Interested',
-            count: event.notInterestedCount,
-            isSelected: myResponse == 'no',
-            isActive: false,
-            isLocked: isLocked,
-            onTap: () => onRsvp('no'),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _RsvpButton extends StatelessWidget {
-  final String label;
-  final int count;
-  final bool isSelected;
-  final bool isActive;
-  final bool isLocked;
-  final VoidCallback onTap;
-
-  const _RsvpButton({
-    required this.label,
-    required this.count,
-    required this.isSelected,
-    required this.isActive,
-    required this.isLocked,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final Color bgColor;
-    final Color borderColor;
-    final Color textColor;
-    final Color iconColor;
-
-    if (isSelected && isActive) {
-      bgColor = AppColors.lavenderAccent;
-      borderColor = AppColors.lavenderAccent;
-      textColor = AppColors.midnightBg;
-      iconColor = AppColors.midnightBg;
-    } else if (isSelected) {
-      bgColor = AppColors.lavenderAccent;
-      borderColor = AppColors.lavenderAccent;
-      textColor = AppColors.midnightBg;
-      iconColor = AppColors.midnightBg;
-    } else if (isLocked) {
-      bgColor = AppColors.glassBg;
-      borderColor = AppColors.glassBorder;
-      textColor = AppColors.textSecondary.withValues(alpha: 0.4);
-      iconColor = AppColors.textSecondary.withValues(alpha: 0.4);
-    } else {
-      bgColor = Colors.transparent;
-      borderColor = AppColors.glassBorder;
-      textColor = AppColors.textSecondary;
-      iconColor = AppColors.textSecondary;
-    }
-
-    return GestureDetector(
-      onTap: isLocked ? null : onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: borderColor,
-            width: isSelected ? 1.5 : 1,
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (isSelected) ...[
-                  Icon(
-                    Icons.close,
-                    size: 11,
-                    color: iconColor,
-                  ),
-                  const SizedBox(width: 2),
-                ],
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontFamily: _fontFamily,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: textColor,
-                  ),
-                ),
-              ],
-            ),
-            if (count > 0) ...[
-              const SizedBox(height: 2),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? Colors.white.withValues(alpha: 0.2)
-                      : AppColors.glassBg,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  '$count',
-                  style: TextStyle(
-                    fontFamily: _fontFamily,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                    color: isSelected
-                        ? AppColors.midnightBg
-                        : AppColors.textSecondary.withValues(alpha: 0.6),
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
     );
   }
 }
