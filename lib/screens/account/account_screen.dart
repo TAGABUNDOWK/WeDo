@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/auth/user_service.dart';
 import '../../services/friends/friend_service.dart';
+import '../../services/group/group_service.dart';
 import '../../services/profile/profile_service.dart';
 import '../../services/session/session_service.dart';
 import '../../services/tri_race/tri_race_service.dart';
@@ -34,6 +35,7 @@ class _AccountScreenState extends State<AccountScreen>
   final _auth = FirebaseAuth.instance;
   final _userService = UserService();
   final _friendService = FriendService();
+  final _groupService = GroupService();
   final _profileService = ProfileService();
   final _sessionService = SessionService();
   final _triRaceService = TriRaceService();
@@ -302,6 +304,21 @@ class _AccountScreenState extends State<AccountScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text(
+          'Account',
+          style: TextStyle(
+            fontFamily: 'PlusJakartaSans',
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+            color: Colors.white,
+          ),
+        ),
+      ),
       body: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onTap: _closeIfBothVisible,
@@ -363,6 +380,7 @@ class _AccountScreenState extends State<AccountScreen>
                     ),
                   )
                 : SafeArea(
+                    top: false,
                     child: RefreshIndicator(
                       color: const Color(0xFFFE4EF0),
                       backgroundColor: const Color(0xFF1A0A2E),
@@ -373,14 +391,12 @@ class _AccountScreenState extends State<AccountScreen>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _buildTopBar(),
-                            const SizedBox(height: 24),
                             _buildProfileHeader(),
-                            const SizedBox(height: 12),
-                            _buildWeDoSlider(),
-                            const SizedBox(height: 20),
-                            _buildGameMatchStatsCard(context),
                             const SizedBox(height: 16),
+                            _buildWeDoSlider(),
+                            const SizedBox(height: 24),
+                            _buildGameMatchStatsCard(context),
+                            const SizedBox(height: 24),
                             _buildAccountMenu(context),
                           ],
                         ),
@@ -443,52 +459,6 @@ class _AccountScreenState extends State<AccountScreen>
       ),
     ),
   );
-  }
-
-  Widget _buildTopBar() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        GestureDetector(
-          onTap: () {},
-          behavior: HitTestBehavior.opaque,
-          child: SizedBox(
-            width: 36,
-            height: 36,
-            child: Center(
-              child: Image.asset(
-                'assets/icons/create.png',
-                width: 26,
-                height: 26,
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) =>
-                    const Icon(Icons.add, color: Colors.white70, size: 26),
-              ),
-            ),
-          ),
-        ),
-        const Spacer(),
-        GestureDetector(
-          onTap: () {},
-          behavior: HitTestBehavior.opaque,
-          child: SizedBox(
-            width: 36,
-            height: 36,
-            child: Center(
-              child: Image.asset(
-                'assets/icons/menu.png',
-                width: 30,
-                height: 30,
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) =>
-                    const Icon(Icons.menu, color: Colors.white70, size: 30),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
   }
 
   Widget _buildProfileHeader() {
@@ -653,31 +623,37 @@ class _AccountScreenState extends State<AccountScreen>
   Widget _buildStatsPanel() {
     return StreamBuilder<List>(
       stream: _friendService.getFriendsStream(_uid),
-      builder: (context, snapshot) {
-        final friendsCount = snapshot.data?.length ?? 0;
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  width: 1,
+      builder: (context, friendsSnap) {
+        final friendsCount = friendsSnap.data?.length ?? 0;
+        return StreamBuilder<List>(
+          stream: _groupService.getUserGroupsStream(_uid),
+          builder: (context, groupsSnap) {
+            final groupsCount = groupsSnap.data?.length ?? 0;
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      vertical: 16, horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      _buildStatItem(count: friendsCount, label: 'Friends'),
+                      _buildStatItem(count: groupsCount, label: 'Groups'),
+                    ],
+                  ),
                 ),
               ),
-              child: Row(
-                children: [
-                  _buildStatItem(count: friendsCount, label: 'Friends'),
-                  _buildStatItem(count: 0, label: 'Following'),
-                  _buildStatItem(count: 0, label: 'Followers'),
-                ],
-              ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
