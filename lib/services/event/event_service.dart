@@ -1,9 +1,12 @@
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../../models/event.dart';
 import '../../utils/constants.dart';
 
 class EventService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseStorage _storage = FirebaseStorage.instance;
 
   CollectionReference<Map<String, dynamic>> _events(String? chatId, {String? groupId}) {
     if (groupId != null) {
@@ -26,6 +29,7 @@ class EventService {
     DateTime? endDate,
     String? location,
     String? dressCode,
+    String? imageUrl,
     bool showRsvpMessages = false,
     String? chatId,
     String? groupId,
@@ -40,6 +44,7 @@ class EventService {
       endDate: endDate,
       location: location,
       dressCode: dressCode,
+      imageUrl: imageUrl,
       showRsvpMessages: showRsvpMessages,
       chatId: chatId,
       groupId: groupId,
@@ -47,6 +52,27 @@ class EventService {
     );
     await eventRef.set(eventData.toFirestore());
     return eventRef.id;
+  }
+
+  /// Uploads an optional event cover photo to Firebase Storage and returns
+  /// the download URL. Mirrors [uploadGroupPhoto] in GroupService.
+  Future<String> uploadEventImage({
+    required String? chatId,
+    required String? groupId,
+    required File file,
+  }) async {
+    final scope = groupId ?? chatId;
+    if (scope == null) {
+      throw Exception('Event image requires a chatId or groupId');
+    }
+
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final ref = _storage.ref('event_photos/$scope/$timestamp.jpg');
+    await ref.putFile(
+      file,
+      SettableMetadata(contentType: 'image/jpeg'),
+    );
+    return ref.getDownloadURL();
   }
 
   Stream<ChatEvent?> getEventStream(String eventId, {String? chatId, String? groupId}) {
@@ -75,6 +101,46 @@ class EventService {
     await _events(chatId, groupId: groupId).doc(eventId).update({
       'rsvps.$uid': response,
     });
+  }
+
+  /// Removes the user's RSVP (used when they tap their own selection again).
+  Future<void> clearRsvp({
+    required String eventId,
+    required String uid,
+    String? chatId,
+    String? groupId,
+  }) async {
+    await _events(chatId, groupId: groupId).doc(eventId).update({
+      'rsvps.$uid': FieldValue.delete(),
+    });
+  }
+
+  /// Single write path for three-option voting, shared by the chat card and
+  /// the detail screen: clears the RSVP when [uid] taps their current
+  /// selection again (toggle off), otherwise writes [response]. No-ops while
+  /// RSVPs are locked (event not started / ended).
+  Future<void> submitResponse({
+    required ChatEvent event,
+    required String uid,
+    required EventResponse response,
+  }) async {
+    if (uid.isEmpty || !event.isStarted || event.isEnded) return;
+    if (event.myResponse(uid) == response) {
+      await clearRsvp(
+        eventId: event.id,
+        uid: uid,
+        chatId: event.chatId,
+        groupId: event.groupId,
+      );
+    } else {
+      await rsvpEvent(
+        eventId: event.id,
+        uid: uid,
+        response: response.storage,
+        chatId: event.chatId,
+        groupId: event.groupId,
+      );
+    }
   }
 
   Future<void> deleteEvent({

@@ -175,14 +175,18 @@ class _AllTriRacesScreenState extends State<AllTriRacesScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: const Color(0xFF4ECDC4).withValues(alpha: 0.15),
+                color: isFinished
+                    ? const Color(0xFF4ECDC4).withValues(alpha: 0.15)
+                    : Colors.orange.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
-                race.status.value,
-                style: const TextStyle(
+                isFinished ? 'Finished' : race.status.value,
+                style: TextStyle(
                   fontFamily: _fontFamily,
-                  color: Color(0xFF4ECDC4),
+                  color: isFinished
+                      ? const Color(0xFF4ECDC4)
+                      : Colors.orange,
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
                 ),

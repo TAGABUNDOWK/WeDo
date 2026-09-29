@@ -86,9 +86,6 @@ class _OptionsEditorSheetState extends State<OptionsEditorSheet> {
 
   void _reorder(int oldIndex, int newIndex) {
     setState(() {
-      if (oldIndex < newIndex) {
-        newIndex -= 1;
-      }
       final item = _options.removeAt(oldIndex);
       _options.insert(newIndex, item);
     });
@@ -176,7 +173,7 @@ class _OptionsEditorSheetState extends State<OptionsEditorSheet> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 20, vertical: 12),
                     itemCount: _options.length,
-                    onReorder: _reorder,
+                    onReorderItem: _reorder,
                     itemBuilder: (context, index) {
                       final option = _options[index];
                       return Container(

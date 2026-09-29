@@ -589,7 +589,7 @@ class _EmailSheetState extends State<_EmailSheet> {
               },
               decoration: InputDecoration(
                 hintText: 'Enter new email address',
-                hintStyle: TextStyle(color: Colors.white38, fontFamily: _font),
+                hintStyle: const TextStyle(color: Colors.white38, fontFamily: _font),
                 filled: true,
                 fillColor: const Color(0x991A0A2E),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -609,7 +609,7 @@ class _EmailSheetState extends State<_EmailSheet> {
               validator: (v) => (v == null || v.isEmpty) ? 'Enter your current password' : null,
               decoration: InputDecoration(
                 hintText: 'Enter current password to confirm',
-                hintStyle: TextStyle(color: Colors.white38, fontFamily: _font),
+                hintStyle: const TextStyle(color: Colors.white38, fontFamily: _font),
                 filled: true,
                 fillColor: const Color(0x991A0A2E),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -729,7 +729,7 @@ class _PasswordChangeSheetState extends State<_PasswordChangeSheet> {
       validator: validator ?? ((v) => (v == null || v.isEmpty) ? 'This field is required' : null),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: Colors.white54, fontFamily: _font),
+        labelStyle: const TextStyle(color: Colors.white54, fontFamily: _font),
         filled: true,
         fillColor: const Color(0x991A0A2E),
         contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -782,7 +782,7 @@ class _PasswordDialogState extends State<_PasswordDialog> {
           validator: (v) => (v == null || v.isEmpty) ? 'Enter your password' : null,
           decoration: InputDecoration(
             hintText: 'Enter your current password',
-            hintStyle: TextStyle(color: Colors.white38, fontFamily: _font),
+            hintStyle: const TextStyle(color: Colors.white38, fontFamily: _font),
             filled: true,
             fillColor: const Color(0x991A0A2E),
             contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
