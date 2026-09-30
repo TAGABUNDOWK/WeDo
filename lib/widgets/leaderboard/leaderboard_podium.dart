@@ -71,6 +71,7 @@ class LeaderboardPodium extends StatelessWidget {
   final String field;
   final Set<String> favorites;
   final Map<String, String> photoUrls;
+  final Map<String, String> frameAssets;
   final void Function(UserStatsEntity)? onStarToggle;
 
   const LeaderboardPodium({
@@ -80,6 +81,7 @@ class LeaderboardPodium extends StatelessWidget {
     required this.field,
     required this.favorites,
     this.photoUrls = const {},
+    this.frameAssets = const {},
     this.onStarToggle,
   });
 
@@ -142,34 +144,47 @@ class LeaderboardPodium extends StatelessWidget {
     return SizedBox(
       width: tier.avatarSize + ring * 2,
       height: tier.avatarSize + ring * 2,
-      child: Container(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: tier.gradient,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: isCurrent
-                  ? const Color(0xFFFF4FD8).withValues(alpha: 0.75)
-                  : tier.glow.withValues(alpha: 0.5),
-              blurRadius: tier.ringGlow,
-              spreadRadius: 2,
+      child: Stack(
+        fit: StackFit.expand,
+        alignment: Alignment.center,
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: tier.gradient,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: isCurrent
+                      ? const Color(0xFFFF4FD8).withValues(alpha: 0.75)
+                      : tier.glow.withValues(alpha: 0.5),
+                  blurRadius: tier.ringGlow,
+                  spreadRadius: 2,
+                ),
+              ],
             ),
-          ],
-        ),
-        child: ClipOval(
-          child: Padding(
-            padding: const EdgeInsets.all(2.5),
+          ),
+          Center(
             child: LeaderboardAvatar(
               photoUrl: photoUrls[entry.userId],
               asset: entry.avatarAsset,
               size: tier.avatarSize,
             ),
           ),
-        ),
+          if (frameAssets[entry.userId]?.isNotEmpty ?? false)
+            IgnorePointer(
+              child: Image.asset(
+                frameAssets[entry.userId]!,
+                width: tier.avatarSize + ring * 2,
+                height: tier.avatarSize + ring * 2,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+              ),
+            ),
+        ],
       ),
     );
   }

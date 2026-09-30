@@ -6,30 +6,56 @@ import 'package:flutter/material.dart';
 class LeaderboardAvatar extends StatelessWidget {
   final String? photoUrl;
   final String? asset;
+  final String? frameAsset;
   final double size;
 
   const LeaderboardAvatar({
     super.key,
     this.photoUrl,
     this.asset,
+    this.frameAsset,
     required this.size,
   });
 
   @override
   Widget build(BuildContext context) {
     final url = photoUrl?.trim() ?? '';
-    if (url.isNotEmpty) {
-      return ClipOval(
-        child: Image.network(
-          url,
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => _assetOrBlob(),
-        ),
-      );
-    }
-    return _assetOrBlob();
+    final avatar = url.isNotEmpty
+        ? ClipOval(
+            child: Image.network(
+              url,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => _assetOrBlob(),
+            ),
+          )
+        : _assetOrBlob();
+
+    final frame = frameAsset?.trim() ?? '';
+    if (frame.isEmpty) return avatar;
+
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        fit: StackFit.expand,
+        alignment: Alignment.center,
+        children: [
+          avatar,
+          IgnorePointer(
+            child: Transform.scale(
+              scale: frame.contains('Frame-4') ? 1.2 : 1,
+              child: Image.asset(
+                frame,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _assetOrBlob() {
