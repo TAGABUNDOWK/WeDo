@@ -7,6 +7,7 @@ import '../../services/call/call_manager.dart';
 import '../../services/call/call_service.dart';
 import '../../services/direct/direct_service.dart';
 import '../../services/group/group_service.dart';
+import '../../widgets/call_avatar.dart';
 import 'call_screen.dart';
 
 class IncomingCallScreen extends StatefulWidget {
@@ -207,19 +208,13 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
                           ),
                         ),
                         child: Center(
-                          child: CircleAvatar(
+                          child: CallAvatar(
                             radius: 55,
-                            backgroundColor: const Color(0xFFFE4EF0).withValues(alpha: 0.3),
-                            child: Text(
-                              widget.callerName.isNotEmpty
-                                  ? widget.callerName[0].toUpperCase()
-                                  : '?',
-                              style: const TextStyle(
-                                fontSize: 44,
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
+                            groupId: widget.call.groupId,
+                            userUid: widget.call.groupId == null
+                                ? widget.call.createdBy
+                                : null,
+                            fallbackName: widget.callerName,
                           ),
                         ),
                       ),

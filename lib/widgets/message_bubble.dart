@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/chat_theme.dart';
 import '../utils/time_format.dart';
 import '../screens/chat/image_viewer_screen.dart';
@@ -169,9 +171,106 @@ class MessageBubble extends StatefulWidget {
 class _MessageBubbleState extends State<MessageBubble> {
   bool _showDetails = false;
 
+  static final RegExp _urlRegExp = RegExp(
+    r'https?://[^\s]+',
+    caseSensitive: false,
+  );
+  final List<TapGestureRecognizer> _linkRecognizers = [];
+  String? _linkSpanContent;
+  TextSpan? _linkSpan;
+
   void _toggleDetails() {
     if (widget.isSystem || widget.event != null || widget.poll != null) return;
     setState(() => _showDetails = !_showDetails);
+  }
+
+  void _disposeLinkRecognizers() {
+    for (final recognizer in _linkRecognizers) {
+      recognizer.dispose();
+    }
+    _linkRecognizers.clear();
+  }
+
+  Future<void> _openLink(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      debugPrint('Error opening link: $e');
+    }
+  }
+
+  /// Builds a span with tappable link highlights for [content], or returns
+  /// null when the content has no links (callers keep the plain Text path).
+  TextSpan? _buildLinkSpan(String content) {
+    if (_linkSpanContent == content && _linkSpan != null) return _linkSpan;
+
+    _disposeLinkRecognizers();
+
+    final matches = _urlRegExp.allMatches(content).toList();
+    if (matches.isEmpty) {
+      _linkSpanContent = content;
+      _linkSpan = null;
+      return null;
+    }
+
+    const trailingPunctuation = '.,;:!?)]}\'"’”';
+    final spans = <InlineSpan>[];
+    var lastEnd = 0;
+    for (final match in matches) {
+      final raw = match.group(0)!;
+      var end = raw.length;
+      while (end > 0 && trailingPunctuation.contains(raw[end - 1])) {
+        end--;
+      }
+      if (end == 0) continue;
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(text: content.substring(lastEnd, match.start)));
+      }
+      final url = raw.substring(0, end);
+      final trailing = raw.substring(end);
+      final recognizer = TapGestureRecognizer()
+        ..onTap = () => _openLink(url);
+      _linkRecognizers.add(recognizer);
+      spans.add(
+        TextSpan(
+          text: url,
+          style: const TextStyle(
+            color: Color(0xFFFE4EF0),
+            decoration: TextDecoration.underline,
+            decorationColor: Color(0xFFFE4EF0),
+          ),
+          recognizer: recognizer,
+        ),
+      );
+      if (trailing.isNotEmpty) {
+        spans.add(TextSpan(text: trailing));
+      }
+      lastEnd = match.end;
+    }
+    if (lastEnd < content.length) {
+      spans.add(TextSpan(text: content.substring(lastEnd)));
+    }
+
+    final span = TextSpan(
+      style: const TextStyle(
+        fontSize: 15,
+        color: Colors.white,
+        height: 1.3,
+      ),
+      children: spans,
+    );
+    _linkSpanContent = content;
+    _linkSpan = span;
+    return span;
+  }
+
+  @override
+  void dispose() {
+    _disposeLinkRecognizers();
+    super.dispose();
   }
 
   void _showContextMenu() {
@@ -452,6 +551,8 @@ class _MessageBubbleState extends State<MessageBubble> {
     final hasPhoto = widget.senderPhotoUrl != null && widget.senderPhotoUrl!.isNotEmpty;
     final hasAvatar = hasAsset || hasPhoto;
     final senderInitial = (widget.senderName ?? '?').substring(0, 1).toUpperCase();
+    final linkSpan =
+        widget.content.isNotEmpty ? _buildLinkSpan(widget.content) : null;
 
     return GestureDetector(
       onTap: _toggleDetails,
@@ -575,6 +676,7 @@ class _MessageBubbleState extends State<MessageBubble> {
                                       child: Image.network(
                                         widget.imageUrl!,
                                         width: 240,
+                                        cacheWidth: 720,
                                         fit: BoxFit.cover,
                                         loadingBuilder: (context, child, loadingProgress) {
                                           if (loadingProgress == null) return child;
@@ -597,14 +699,16 @@ class _MessageBubbleState extends State<MessageBubble> {
                                 if (widget.imageUrl != null && widget.content.isNotEmpty)
                                   const SizedBox(height: 4),
                                 if (widget.content.isNotEmpty)
-                                  Text(
-                                    widget.content,
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      color: Colors.white,
-                                      height: 1.3,
-                                    ),
-                                  ),
+                                  linkSpan != null
+                                      ? Text.rich(linkSpan)
+                                      : Text(
+                                          widget.content,
+                                          style: const TextStyle(
+                                            fontSize: 15,
+                                            color: Colors.white,
+                                            height: 1.3,
+                                          ),
+                                        ),
                                 _SenderTag(
                                   senderName: widget.senderName,
                                   isMe: widget.isMe,

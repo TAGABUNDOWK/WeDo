@@ -264,6 +264,7 @@ class _ChatTabState extends State<ChatTab> {
     Navigator.push(
       context,
       PageRouteBuilder(
+        settings: RouteSettings(name: 'group_chat:$groupId'),
         transitionDuration: const Duration(milliseconds: 250),
         reverseTransitionDuration: const Duration(milliseconds: 200),
         pageBuilder: (_, __, ___) => GroupChatScreen(groupId: groupId),

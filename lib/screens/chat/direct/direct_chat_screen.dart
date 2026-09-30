@@ -108,9 +108,15 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     return _nicknames[widget.otherUid] ?? _otherName;
   }
 
+  final Set<String> _refLoadAttempts = {};
+
   Future<void> _loadEventPollData(ChatMessage msg) async {
     if (msg.refId == null) return;
-    if (msg.type == MessageType.event && !_events.containsKey(msg.refId)) {
+    if (msg.type == MessageType.event) {
+      if (_events.containsKey(msg.refId) ||
+          !_refLoadAttempts.add('event:${msg.refId}')) {
+        return;
+      }
       final event = await _eventService.getEvent(
         msg.refId!,
         chatId: widget.chatId,
@@ -118,7 +124,11 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       if (event != null && mounted) {
         setState(() => _events[msg.refId!] = event);
       }
-    } else if (msg.type == MessageType.poll && !_polls.containsKey(msg.refId)) {
+    } else if (msg.type == MessageType.poll) {
+      if (_polls.containsKey(msg.refId) ||
+          !_refLoadAttempts.add('poll:${msg.refId}')) {
+        return;
+      }
       final poll = await _pollService.getPoll(
         msg.refId!,
         chatId: widget.chatId,
@@ -696,15 +706,13 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                         }
                       }
 
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        for (final m in messages) {
-                          if ((m.type == MessageType.event ||
-                                  m.type == MessageType.poll) &&
-                              m.refId != null) {
-                            _loadEventPollData(m);
-                          }
+                      for (final m in messages) {
+                        if ((m.type == MessageType.event ||
+                                m.type == MessageType.poll) &&
+                            m.refId != null) {
+                          _loadEventPollData(m);
                         }
-                      });
+                      }
 
                       return ListView.builder(
                         reverse: true,
@@ -983,15 +991,17 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                           );
                         }
 
+                        final item = wrapWithSwipe(buildMessage());
                         if (showDateSeparator) {
                           return Column(
+                            key: ValueKey(msg.id),
                             children: [
                               DateSeparator(timestamp: msg.createdAt),
-                              wrapWithSwipe(buildMessage()),
+                              item,
                             ],
                           );
                         }
-                        return wrapWithSwipe(buildMessage());
+                        return KeyedSubtree(key: ValueKey(msg.id), child: item);
                       },
                     );
                   },

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../models/call.dart';
 import '../../services/call/call_manager.dart';
+import '../../widgets/call_avatar.dart';
 
 class OutgoingCallScreen extends StatefulWidget {
   final Call call;
@@ -121,6 +123,17 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
     }
   }
 
+  /// For direct calls, the other member's uid (used to load their photo).
+  /// Null for group calls (those use the group photo instead).
+  String? get _peerUid {
+    if (widget.call.groupId != null) return null;
+    final myUid = FirebaseAuth.instance.currentUser?.uid;
+    for (final uid in widget.call.members) {
+      if (uid != myUid) return uid;
+    }
+    return widget.call.createdBy.isNotEmpty ? widget.call.createdBy : null;
+  }
+
   @override
   void dispose() {
     _pulseController.dispose();
@@ -177,19 +190,11 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
                             ),
                           ),
                           child: Center(
-                            child: CircleAvatar(
+                            child: CallAvatar(
                               radius: 55,
-                              backgroundColor: const Color(0xFFFE4EF0).withValues(alpha: 0.3),
-                              child: Text(
-                                widget.callName.isNotEmpty
-                                    ? widget.callName[0].toUpperCase()
-                                    : '?',
-                                style: const TextStyle(
-                                  fontSize: 44,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
+                              groupId: widget.call.groupId,
+                              userUid: _peerUid,
+                              fallbackName: widget.callName,
                             ),
                           ),
                         ),

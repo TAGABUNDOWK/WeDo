@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/message.dart';
 import '../services/direct/direct_service.dart';
 import '../services/group/group_service.dart';
@@ -189,6 +190,7 @@ class _MediaFilesLinksSectionState extends State<MediaFilesLinksSection>
             child: Image.network(
               _imageUrls[index],
               fit: BoxFit.cover,
+              cacheWidth: 480,
               errorBuilder: (_, _, _) => const Center(
                 child: Icon(Icons.broken_image, color: Colors.grey),
               ),
@@ -251,6 +253,7 @@ class _MediaFilesLinksSectionState extends State<MediaFilesLinksSection>
         final link = links[index];
         return ListTile(
           contentPadding: EdgeInsets.zero,
+          onTap: () => _openLink(link.url),
           leading: Container(
             width: 40,
             height: 40,
@@ -281,6 +284,17 @@ class _MediaFilesLinksSectionState extends State<MediaFilesLinksSection>
         );
       },
     );
+  }
+
+  Future<void> _openLink(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      debugPrint('Error opening link: $e');
+    }
   }
 
   Widget _buildEmptyState(IconData icon, String message) {
