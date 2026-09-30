@@ -15,9 +15,11 @@ import '../../../services/event/event_service.dart';
 import '../../../services/poll/poll_service.dart';
 import '../../../services/call/call_service.dart';
 import '../../../services/call/call_manager.dart';
+import '../../../services/user_cache.dart';
 import '../../../services/theme/chat_theme_resolver.dart';
 import '../../../utils/time_format.dart';
 import '../../../widgets/message_bubble.dart';
+import '../../../widgets/call_button.dart';
 import '../../../widgets/date_separator.dart';
 import '../../../widgets/invite_message_card.dart';
 import '../../../widgets/tri_race_invite_message_card.dart';
@@ -43,6 +45,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   final _scrollCtrl = ScrollController();
   final _groupService = GroupService();
   final _callService = CallService();
+  final _callManager = CallManager();
   final _eventService = EventService();
   final _pollService = PollService();
   final _currentUser = FirebaseAuth.instance.currentUser;
@@ -75,6 +78,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       _groupService.markMessagesAsRead(widget.groupId, _currentUser.uid);
     }
     _scrollCtrl.addListener(_onScroll);
+    _callManager.addListener(_onCallManagerUpdate);
   }
 
   Future<void> _loadGroupInfo() async {
@@ -98,8 +102,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   Future<void> _preloadMemberProfiles(List<String> memberUids) async {
+    final cache = UserCache();
     final futures = memberUids.map((uid) async {
-      final user = await _groupService.getUser(uid);
+      final user = await cache.getUser(uid);
       if (user != null && mounted) {
         if (user.photoUrl != null && user.photoUrl!.isNotEmpty) {
           _memberPhotos[uid] = user.photoUrl!;
@@ -118,7 +123,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   Future<void> _loadMemberPhoto(String uid) async {
     if (_memberPhotos.containsKey(uid) && _memberAvatarAssets.containsKey(uid)) return;
-    final user = await _groupService.getUser(uid);
+    final cache = UserCache();
+    final user = await cache.getUser(uid);
     if (user != null && mounted) {
       if (user.photoUrl != null && user.photoUrl!.isNotEmpty) {
         _memberPhotos[uid] = user.photoUrl!;
@@ -162,9 +168,14 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   @override
   void dispose() {
+    _callManager.removeListener(_onCallManagerUpdate);
     _messageCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
+  }
+
+  void _onCallManagerUpdate() {
+    if (mounted) setState(() {});
   }
 
   void _onScroll() {
@@ -429,6 +440,147 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     );
   }
 
+  void _rejoinCall() {
+    _callManager.rejoinCall();
+  }
+
+  void _returnToCall() {
+    _callManager.returnToCall();
+  }
+
+  Widget _buildActiveCallBanner() {
+    final active = _callManager.activeCall;
+    final outgoing = _callManager.outgoingCall;
+    final left = _callManager.leftCall;
+    final call = (active != null && active.groupId == widget.groupId
+            ? active
+            : null) ??
+        (outgoing != null && outgoing.groupId == widget.groupId
+            ? outgoing
+            : null) ??
+        (left != null && left.groupId == widget.groupId ? left : null);
+    if (call == null) return const SizedBox.shrink();
+
+    final isActive = active != null && active.groupId == widget.groupId;
+    final isOutgoing =
+        outgoing != null && outgoing.groupId == widget.groupId;
+    final hasLeft = !isActive &&
+        !isOutgoing &&
+        left != null &&
+        left.groupId == widget.groupId;
+    final isVideo = call.callType == CallType.video;
+    final duration = _callManager.callDuration;
+
+    return GestureDetector(
+      onTap: hasLeft ? _rejoinCall : _returnToCall,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: isActive
+                ? [const Color(0xFF2D1B69), const Color(0xFF1A0A2E)]
+                : [const Color(0xFF1A0A2E), const Color(0xFF2D1B69)],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: const Color(0xFFFE4EF0).withValues(alpha: 0.4),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFFE4EF0).withValues(alpha: 0.2),
+              blurRadius: 12,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFFFE4EF0).withValues(alpha: 0.2),
+              ),
+              child: Icon(
+                isVideo ? Icons.videocam : Icons.call,
+                color: const Color(0xFFFE4EF0),
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                      Text(
+                        isActive
+                            ? 'Group Call in Progress'
+                            : hasLeft
+                                ? 'You left the call'
+                                : 'Outgoing Call...',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: isActive
+                                  ? Colors.green
+                                  : hasLeft
+                                      ? Colors.redAccent
+                                      : Colors.orange,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            isActive
+                                ? '${call.members.length} participants \u2022 ${formatSeconds(duration)}'
+                                : hasLeft
+                                    ? '${call.members.length} participants \u2022 Tap to rejoin'
+                                    : 'Ringing...',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.7),
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFE4EF0),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                hasLeft ? 'Rejoin' : 'Join',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showComposerMenu() {
     showModalBottomSheet<void>(
       context: context,
@@ -671,80 +823,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                            ListenableBuilder(
-                              listenable: CallManager(),
-                              builder: (context, _) {
-                                final mgr = CallManager();
-                                bool matches(String? id) =>
-                                    id == widget.groupId;
-                                final active = mgr.activeCall;
-                                final outgoing = mgr.outgoingCall;
-                                final inCall = (active != null &&
-                                        matches(active.groupId)) ||
-                                    (outgoing != null &&
-                                        matches(outgoing.groupId));
-                                final activeType = active != null &&
-                                        matches(active.groupId)
-                                    ? active.callType
-                                    : (outgoing != null &&
-                                            matches(outgoing.groupId)
-                                        ? outgoing.callType
-                                        : null);
-                                final audioActive =
-                                    inCall && activeType == CallType.audio;
-                                final videoActive =
-                                    inCall && activeType == CallType.video;
-                                Widget callBtn(
-                                    String asset, IconData fallback,
-                                    bool beating, VoidCallback onTap,
-                                    {double size = 24,
-                                    double fallbackSize = 22}) {
-                                  final btn = GestureDetector(
-                                    onTap: onTap,
-                                    child: Image.asset(
-                                      asset,
-                                      width: size,
-                                      height: size,
-                                      fit: BoxFit.contain,
-                                      errorBuilder:
-                                          (context, error, stackTrace) => Icon(
-                                        fallback,
-                                        color: Colors.white,
-                                        size: fallbackSize,
-                                      ),
-                                    ),
-                                  );
-                                  if (!beating) return btn;
-                                  return _BeatingCircle(child: btn);
-                                }
-
-                                return Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    callBtn(
-                                      'assets/icons/call.png',
-                                      Icons.phone,
-                                      audioActive,
-                                      () => _startCall(CallType.audio),
-                                      size: 18,
-                                      fallbackSize: 16,
-                                    ),
-                                    const SizedBox(width: 14),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 4),
-                                      child: callBtn(
-                                        'assets/icons/video-call.png',
-                                        Icons.videocam,
-                                        videoActive,
-                                        () => _startCall(CallType.video),
-                                        size: 28,
-                                        fallbackSize: 26,
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              },
+                            CallButtons(
+                              chatId: widget.groupId,
+                              isGroup: true,
+                              onStartAudioCall: () => _startCall(CallType.audio),
+                              onStartVideoCall: () => _startCall(CallType.video),
+                              onRejoin: _rejoinCall,
+                              onReturnToCall: _returnToCall,
                             ),
                           ],
                         ),
@@ -756,6 +841,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                   ),
                 ),
               ),
+              if (_callManager.activeCall?.groupId == widget.groupId ||
+                  _callManager.outgoingCall?.groupId == widget.groupId ||
+                  _callManager.leftCall?.groupId == widget.groupId)
+                _buildActiveCallBanner(),
               if (_isUploading)
                 const LinearProgressIndicator(
                     backgroundColor: Colors.transparent),
@@ -1434,57 +1523,6 @@ class _HeartbeatDotState extends State<_HeartbeatDot>
               size: 13,
             ),
           ),
-        );
-      },
-    );
-  }
-}
-
-// ── Beating-circle wrapper for an active call icon ───────────────────────────
-
-class _BeatingCircle extends StatefulWidget {
-  final Widget child;
-  const _BeatingCircle({required this.child});
-
-  @override
-  State<_BeatingCircle> createState() => _BeatingCircleState();
-}
-
-class _BeatingCircleState extends State<_BeatingCircle>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _ctrl,
-      builder: (context, _) {
-        return Container(
-          padding: const EdgeInsets.all(3),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: const Color(0xFFFE4EF0)
-                  .withValues(alpha: 0.4 + (_ctrl.value * 0.5)),
-              width: 2,
-            ),
-          ),
-          child: widget.child,
         );
       },
     );

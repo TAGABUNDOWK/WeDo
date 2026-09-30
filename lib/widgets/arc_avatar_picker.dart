@@ -44,7 +44,6 @@ class _ArcAvatarPickerState extends State<ArcAvatarPicker>
   static const double _radius = 340;
   static const double _visibleExtent = 115;
   static const double _angularSpread = 1.15;
-  static const double _trackWidth = 84;
   static const double _maxAvatarSize = 72;
   static const double _minAvatarSize = 26;
   static const double _maxFrameSize = 85;
@@ -200,7 +199,8 @@ class _ArcAvatarPickerState extends State<ArcAvatarPicker>
                           child: Transform(
                             alignment: Alignment.center,
                             transform: isRight
-                                ? (Matrix4.identity()..scale(-1.0, 1.0))
+                                ? (Matrix4.identity()
+                                    ..scaleByDouble(-1.0, 1.0, 1.0, 1.0))
                                 : Matrix4.identity(),
                             child: Image.asset(
                               widget.arrowAsset,

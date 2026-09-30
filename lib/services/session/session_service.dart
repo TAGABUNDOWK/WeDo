@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../../models/topic_entity.dart';
 import '../../models/session_entity.dart';
 import '../../utils/constants.dart';
+import '../leaderboard/leaderboard_service.dart';
 
 class SessionService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -429,7 +430,10 @@ class SessionService {
 
   /// Aggregates results from all finished participants.
   /// Computes card tally, winner card, and time-based standings.
-  /// Should be called by the host or first finisher.
+  /// Called by every participant when they finish — always re-aggregates so
+  /// the ResultsScreen reflects everyone who has completed so far.
+  /// The leaderboard write is gated by [statsRecorded] and only runs once
+  /// when all participants are done (or on first finish for solo play).
   Future<void> aggregateResults(String sessionId) async {
     try {
       final sessionDoc = await _sessions.doc(sessionId).get();
@@ -450,6 +454,11 @@ class SessionService {
 
       final finished = participants.where((p) => p.status == ParticipantStatus.finished).toList();
       if (finished.isEmpty) return;
+
+      // Determine whether everyone has finished so we can lock the leaderboard.
+      final totalParticipantCount = participants.length;
+      final allDone = finished.length >= totalParticipantCount;
+      final alreadyRecorded = sessionData['statsRecorded'] == true;
 
       // ── Card Tally: count eliminations per card across all participants ──
       final Map<String, int> eliminationCounts = {};
@@ -535,7 +544,9 @@ class SessionService {
         speedShieldWinnerCardId = fastest.value['chosenWinnerCardId'] as String? ?? '';
       }
 
-      await _sessions.doc(sessionId).update({
+      // Always update the aggregated results so the ResultsScreen's StreamBuilder
+      // reflects the latest standings as each participant finishes.
+      final Map<String, dynamic> updatePayload = {
         'status': SessionStatus.completed.value,
         'speedShieldWinnerId': speedShieldWinnerId,
         'aggregatedResults': {
@@ -543,11 +554,36 @@ class SessionService {
           'winnerCardId': winnerCardId,
           'winnerCardTitle': winnerCardTitle,
           'winnerCardEmoji': winnerCardEmoji,
+          'winnerCardVoteCount':
+              winnerCardId.isEmpty ? 0 : (winnerVotes[winnerCardId] ?? 0),
           'totalParticipants': finished.length,
+          'finishedCount': finished.length,
+          'totalPlayers': participants.length,
           'standings': orderedStandings,
           'speedShieldWinnerCardId': speedShieldWinnerCardId,
         },
-      });
+      };
+
+      // Lock the leaderboard write when everyone is done (or for solo runs).
+      if (!alreadyRecorded && allDone) {
+        updatePayload['statsRecorded'] = true;
+      }
+
+      await _sessions.doc(sessionId).update(updatePayload);
+
+      // Records the completed session against each finisher's leaderboard
+      // stats: total matches +1, a win +1 for the speed-shield winner.
+      // Only fires once — when all participants have finished and stats
+      // haven't been recorded yet.
+      if (!alreadyRecorded && allDone) {
+        final finishedIds = finished.map((p) => p.id).toList();
+        if (finishedIds.isNotEmpty) {
+          await LeaderboardService().recordPickFightResult(
+            participantIds: finishedIds,
+            winnerId: speedShieldWinnerId,
+          );
+        }
+      }
     } on FirebaseException catch (e) {
       throw SessionException('Failed to aggregate results: ${e.message}');
     }
@@ -559,12 +595,6 @@ class SessionService {
     required List<String> invitedUserIds,
   }) async {
     try {
-      final doc = await _sessions.doc(sessionId).get();
-      if (!doc.exists) throw const SessionException('Session not found.');
-      final data = doc.data() as Map<String, dynamic>;
-      if (data['hostId'] != hostId) {
-        throw const SessionException('Only the host can send invites.');
-      }
       await _sessions.doc(sessionId).update({
         'invitedUserIds': FieldValue.arrayUnion(invitedUserIds),
       });

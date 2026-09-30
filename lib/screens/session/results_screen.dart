@@ -105,6 +105,18 @@ class _ResultsScreenState extends State<ResultsScreen> with TickerProviderStateM
     final standings = results['standings'] as Map<String, dynamic>? ?? {};
     final speedShieldCardId = results['speedShieldWinnerCardId'] as String? ?? '';
 
+    final finishedCount = results['finishedCount'] as int? ?? totalParticipants;
+    final totalPlayers = results['totalPlayers'] as int? ??
+        (session.participantUids.isNotEmpty
+            ? session.participantUids.length
+            : finishedCount);
+
+    int? winnerVoteCount = results['winnerCardVoteCount'] as int?;
+    winnerVoteCount ??= standings.values.where((data) {
+      final votedFor = (data as Map<String, dynamic>)['chosenWinnerCardId'] as String?;
+      return winnerCardId.isNotEmpty && votedFor == winnerCardId;
+    }).length;
+
     _resolveNames(standings.keys.toList());
 
     return SingleChildScrollView(
@@ -112,7 +124,13 @@ class _ResultsScreenState extends State<ResultsScreen> with TickerProviderStateM
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildWinnerHero(winnerCardTitle, winnerCardEmoji, totalParticipants),
+          _buildFinishedIndicator(finishedCount, totalPlayers),
+          _buildWinnerHero(
+            winnerCardTitle,
+            winnerCardEmoji,
+            winnerVoteCount,
+            showVoteCount: winnerCardId.isNotEmpty,
+          ),
           const SizedBox(height: 28),
           _buildSectionHeader('Card Tally', 'X marks = how many players eliminated this card'),
           const SizedBox(height: 12),
@@ -131,7 +149,60 @@ class _ResultsScreenState extends State<ResultsScreen> with TickerProviderStateM
     );
   }
 
-  Widget _buildWinnerHero(String title, String emoji, int totalParticipants) {
+  Widget _buildFinishedIndicator(int finishedCount, int totalPlayers) {
+    if (totalPlayers <= 0 || finishedCount >= totalPlayers) {
+      return const SizedBox.shrink();
+    }
+
+    final progress = (finishedCount / totalPlayers).clamp(0.0, 1.0);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Waiting for players',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                '$finishedCount of $totalPlayers players finished',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 6,
+              backgroundColor: Colors.white.withValues(alpha: 0.12),
+              valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF4CAF50)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWinnerHero(
+    String title,
+    String emoji,
+    int winnerVoteCount, {
+    required bool showVoteCount,
+  }) {
     return Container(
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
@@ -175,11 +246,13 @@ class _ResultsScreenState extends State<ResultsScreen> with TickerProviderStateM
               fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 10),
-          Text(
-            '$totalParticipants player${totalParticipants == 1 ? '' : 's'} voted',
-            style: const TextStyle(color: Colors.white70, fontSize: 13),
-          ),
+          if (showVoteCount) ...[
+            const SizedBox(height: 10),
+            Text(
+              '$winnerVoteCount player${winnerVoteCount == 1 ? '' : 's'} voted for this card',
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+          ],
         ],
       ),
     );

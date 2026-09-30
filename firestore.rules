@@ -38,6 +38,17 @@ service cloud.firestore {
       }
     }
 
+    match /userStats/{userId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /leaderboards/{userId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
     match /friends/{friendshipId} {
       allow create: if isSignedIn()
         && request.resource.data.userIds is list
@@ -182,7 +193,10 @@ service cloud.firestore {
       allow delete: if isSignedIn();
 
       match /signals/{signalId} {
-        allow read, write: if isSignedIn();
+        allow read: if isSignedIn() && isCallMember(callId);
+        allow create: if isSignedIn() && isCallMember(callId);
+        allow update: if isSignedIn() && isCallMember(callId);
+        allow delete: if isSignedIn();
       }
 
       match /participants/{participantUid} {

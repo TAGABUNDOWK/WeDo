@@ -21,7 +21,7 @@ const _senderTagColor = Color(0xFFFFFFFF);
 
 /// Inside-bubble sender tag: friend → name bottom-right + send-by icon
 /// pointing right; own → flipped send-by icon pointing left + name
-/// bottom-left. Uses assets/icons/send-by.png for both directions.
+/// bottom-left. Uses assets/icons/sent.png for both directions.
 class _SenderTag extends StatelessWidget {
   final String? senderName;
   final bool isMe;
@@ -31,16 +31,16 @@ class _SenderTag extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = (senderName ?? '').trim();
     if (name.isEmpty) return const SizedBox.shrink();
-    const icon = 'assets/icons/send-by.png';
+    const icon = 'assets/icons/sent.png';
     Widget directionIcon(bool flip) {
       final img = Image.asset(
         icon,
-        width: 16,
-        height: 16,
+        width: 8,
+        height: 8,
         fit: BoxFit.contain,
         errorBuilder: (context, error, stackTrace) => Icon(
           flip ? Icons.arrow_back : Icons.arrow_forward,
-          size: 14,
+          size: 8,
           color: _senderTagColor.withValues(alpha: 0.9),
         ),
       );

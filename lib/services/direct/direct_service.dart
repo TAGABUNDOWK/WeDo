@@ -7,10 +7,12 @@ import '../../models/message.dart';
 import '../../models/user_entity.dart';
 import '../../utils/constants.dart';
 import '../../utils/time_format.dart';
+import '../user_cache.dart';
 
 class DirectService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final _userCache = UserCache();
 
   CollectionReference<Map<String, dynamic>> get _chats =>
       _db.collection(AppConstants.directChatsCollection);
@@ -20,15 +22,15 @@ class DirectService {
   CollectionReference<Map<String, dynamic>> _messages(String chatId) =>
       _chats.doc(chatId).collection(AppConstants.directChatMessagesSubcollection);
 
-  Future<UserEntity?> getUser(String uid) async {
-    final doc = await _db.collection(AppConstants.usersCollection).doc(uid).get();
-    if (!doc.exists) return null;
-    return UserEntity.fromJson(doc.data()!);
-  }
+  Future<UserEntity?> getUser(String uid) => _userCache.getUser(uid);
 
   Stream<UserEntity?> getUserStream(String uid) {
     return _db.collection(AppConstants.usersCollection).doc(uid).snapshots().map(
-      (doc) => doc.exists ? UserEntity.fromJson(doc.data()!) : null,
+      (doc) {
+        final user = doc.exists ? UserEntity.fromJson(doc.data()!) : null;
+        _userCache.putUser(uid, user);
+        return user;
+      },
     );
   }
 
@@ -481,7 +483,14 @@ class DirectService {
   Future<void> markMessagesAsRead(String chatId, String uid) async {
     final unreadDocs = await _messages(chatId)
         .where('read_by', isNotEqualTo: uid)
+        .limit(500)
         .get();
+    if (unreadDocs.docs.isEmpty) {
+      await _chats.doc(chatId).update({
+        'lastMessageReadBy': FieldValue.arrayUnion([uid]),
+      });
+      return;
+    }
     final batch = _db.batch();
     for (final doc in unreadDocs.docs) {
       batch.update(doc.reference, {

@@ -6,19 +6,21 @@ import '../../models/message.dart';
 import '../../models/user_entity.dart';
 import '../../utils/constants.dart';
 import '../../utils/time_format.dart';
+import '../user_cache.dart';
 
 class GroupService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final _userCache = UserCache();
 
-  Future<UserEntity?> getUser(String uid) async {
-    final doc = await _db.collection(AppConstants.usersCollection).doc(uid).get();
-    if (!doc.exists) return null;
-    return UserEntity.fromJson(doc.data()!);
-  }
+  Future<UserEntity?> getUser(String uid) => _userCache.getUser(uid);
 
   Stream<UserEntity?> getUserStream(String uid) {
     return _db.collection(AppConstants.usersCollection).doc(uid).snapshots().map(
-      (doc) => doc.exists ? UserEntity.fromJson(doc.data()!) : null,
+      (doc) {
+        final user = doc.exists ? UserEntity.fromJson(doc.data()!) : null;
+        _userCache.putUser(uid, user);
+        return user;
+      },
     );
   }
 
@@ -436,7 +438,14 @@ class GroupService {
   Future<void> markMessagesAsRead(String groupId, String uid) async {
     final unreadDocs = await _messages(groupId)
         .where('read_by', isNotEqualTo: uid)
+        .limit(500)
         .get();
+    if (unreadDocs.docs.isEmpty) {
+      await _groups.doc(groupId).update({
+        'lastMessageReadBy': FieldValue.arrayUnion([uid]),
+      });
+      return;
+    }
     final batch = _db.batch();
     for (final doc in unreadDocs.docs) {
       batch.update(doc.reference, {

@@ -24,6 +24,13 @@ class UserService {
     return UserEntity.fromJson(doc.data()!);
   }
 
+  Stream<UserEntity?> userDocumentStream(String userId) {
+    return _db.collection('users').doc(userId).snapshots().map((doc) {
+      if (!doc.exists) return null;
+      return UserEntity.fromJson(doc.data()!);
+    });
+  }
+
   Future<void> updateEmailVerified(String userId) async {
     await _db.collection('users').doc(userId).update({
       'is_email_verified': true,
@@ -85,14 +92,20 @@ class UserService {
           .get();
 
       for (final doc in snap.docs) {
-        final user = UserEntity.fromJson(doc.data());
-        if (user.geohash == null ||
-            user.latitude == null ||
-            user.longitude == null) {
+        try {
+          final data = doc.data();
+          data['user_id'] ??= doc.id;
+          final user = UserEntity.fromJson(data);
+          if (user.geohash == null ||
+              user.latitude == null ||
+              user.longitude == null) {
+            continue;
+          }
+          if (user.userId == excludeUid) continue;
+          results.add(user);
+        } catch (_) {
           continue;
         }
-        if (user.userId == excludeUid) continue;
-        results.add(user);
       }
     }
 
@@ -150,5 +163,40 @@ class UserService {
     if (updates.isNotEmpty) {
       await _db.collection('users').doc(userId).update(updates);
     }
+  }
+
+  /// Update the email field in the Firestore user document.
+  Future<void> updateUserEmail(String userId, String email) async {
+    await _db.collection('users').doc(userId).update({
+      'email': email,
+    });
+  }
+
+  /// Request account deletion. Sets a 24-hour grace period before actual deletion.
+  Future<void> requestAccountDeletion(String userId) async {
+    final now = DateTime.now();
+    final scheduledDeletion = now.add(const Duration(hours: 24));
+    await _db.collection('users').doc(userId).update({
+      'deletion_requested_at': FieldValue.serverTimestamp(),
+      'scheduled_deletion_at': Timestamp.fromDate(scheduledDeletion),
+    });
+  }
+
+  /// Cancel a pending account deletion request.
+  Future<void> cancelAccountDeletion(String userId) async {
+    await _db.collection('users').doc(userId).update({
+      'deletion_requested_at': FieldValue.delete(),
+      'scheduled_deletion_at': FieldValue.delete(),
+    });
+  }
+
+  /// Get the scheduled deletion time for the user, if any.
+  Future<DateTime?> getScheduledDeletionAt(String userId) async {
+    final doc = await _db.collection('users').doc(userId).get();
+    if (!doc.exists) return null;
+    final data = doc.data();
+    final ts = data?['scheduled_deletion_at'];
+    if (ts is Timestamp) return ts.toDate();
+    return null;
   }
 }

@@ -245,7 +245,7 @@ class SpinWheelPainter extends CustomPainter {
     final hubHighlightPaint = Paint()
       ..color = Colors.white.withValues(alpha: 0.15)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
-    canvas.drawCircle(Offset(-8, -10), 10, hubHighlightPaint);
+    canvas.drawCircle(const Offset(-8, -10), 10, hubHighlightPaint);
 
     // SPIN text on hub
     final spinTextPainter = TextPainter(

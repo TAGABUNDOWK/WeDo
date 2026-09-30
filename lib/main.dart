@@ -110,12 +110,11 @@ class _IncomingCallListenerState extends State<_IncomingCallListener> {
 
   void _listenForCall() {
     _callSub = _callService.getCallStream(widget.callId).listen((call) async {
-      if (call == null) {
-        if (mounted) Navigator.of(context).pop();
-        return;
-      }
-
-      if (call.status.name == 'ended') {
+      if (call == null ||
+          call.status == CallStatus.ended ||
+          call.status == CallStatus.declined ||
+          call.status == CallStatus.missed ||
+          call.status == CallStatus.cancelled) {
         if (mounted) Navigator.of(context).pop();
         return;
       }

@@ -23,7 +23,7 @@ class _GameData {
 }
 
 final _games = [
-  _GameData(
+  const _GameData(
     title: 'PickFight',
     imagePath: 'assets/images/Flashcards.png',
     instructions:
@@ -32,7 +32,7 @@ final _games = [
         'PickFight is a fun and interactive card-swiping game that helps you decide.',
     screenBuilder: _pickFightBuilder,
   ),
-  _GameData(
+  const _GameData(
     title: 'Wheel',
     imagePath: 'assets/images/SpinWheel.png',
     instructions:
@@ -41,7 +41,7 @@ final _games = [
         'let fate decide!',
     screenBuilder: _wheelBuilder,
   ),
-  _GameData(
+  const _GameData(
     title: 'TriRace',
     imagePath: 'assets/images/TriRace.png',
     instructions:
@@ -309,7 +309,7 @@ class _GameDetailPopupContent extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
+                            const Text(
                               'Game instructions:',
                               style: TextStyle(
                                 fontFamily: _fontFamily,

@@ -19,6 +19,8 @@ class UserEntity {
   final double? longitude;
   final String? geohash;
   final DateTime? lastLocationAt;
+  final DateTime? deletionRequestedAt;
+  final DateTime? scheduledDeletionAt;
 
   UserEntity({
     required this.userId,
@@ -39,11 +41,13 @@ class UserEntity {
     this.longitude,
     this.geohash,
     this.lastLocationAt,
+    this.deletionRequestedAt,
+    this.scheduledDeletionAt,
   });
 
   factory UserEntity.fromJson(Map<String, dynamic> json) {
     return UserEntity(
-      userId: json['user_id'] as String,
+      userId: json['user_id'] as String? ?? '',
       displayName: json['display_name'] as String? ?? '',
       username: json['username'] as String? ?? '',
       usernameLower: json['username_lower'] as String? ?? '',
@@ -53,7 +57,9 @@ class UserEntity {
       frameAsset: json['frame_asset'] as String?,
       authProvider: json['auth_provider'] as String? ?? 'email',
       isPremium: json['is_premium'] as bool? ?? false,
-      createdAt: _parseTimestamp(json['created_at']),
+      createdAt: json['created_at'] == null
+          ? DateTime.now()
+          : _parseTimestamp(json['created_at']),
       isGuest: json['is_guest'] as bool? ?? false,
       lastActiveAt: _parseOptionalTimestamp(json['last_active_at']) ?? DateTime.now(),
       isEmailVerified: json['is_email_verified'] as bool? ?? false,
@@ -61,6 +67,8 @@ class UserEntity {
       longitude: (json['longitude'] as num?)?.toDouble(),
       geohash: json['geohash'] as String?,
       lastLocationAt: _parseOptionalTimestamp(json['last_location_at']),
+      deletionRequestedAt: _parseOptionalTimestamp(json['deletion_requested_at']),
+      scheduledDeletionAt: _parseOptionalTimestamp(json['scheduled_deletion_at']),
     );
   }
 
@@ -84,6 +92,8 @@ class UserEntity {
       'longitude': longitude,
       'geohash': geohash,
       'last_location_at': lastLocationAt?.toIso8601String(),
+      'deletion_requested_at': deletionRequestedAt?.toIso8601String(),
+      'scheduled_deletion_at': scheduledDeletionAt?.toIso8601String(),
     };
   }
 
@@ -119,6 +129,8 @@ class UserEntity {
     double? longitude,
     String? geohash,
     DateTime? lastLocationAt,
+    DateTime? deletionRequestedAt,
+    DateTime? scheduledDeletionAt,
   }) {
     return UserEntity(
       userId: userId ?? this.userId,
@@ -139,6 +151,8 @@ class UserEntity {
       longitude: longitude ?? this.longitude,
       geohash: geohash ?? this.geohash,
       lastLocationAt: lastLocationAt ?? this.lastLocationAt,
+      deletionRequestedAt: deletionRequestedAt ?? this.deletionRequestedAt,
+      scheduledDeletionAt: scheduledDeletionAt ?? this.scheduledDeletionAt,
     );
   }
 

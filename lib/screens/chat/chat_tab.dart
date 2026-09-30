@@ -7,6 +7,7 @@ import '../../models/group_chat.dart';
 import '../../models/user_entity.dart';
 import '../../services/group/group_service.dart';
 import '../../services/direct/direct_service.dart';
+import '../../services/user_cache.dart';
 import '../../utils/time_format.dart';
 import '../../utils/responsive.dart';
 import 'group/group_chat_screen.dart';
@@ -26,7 +27,7 @@ class ChatTab extends StatefulWidget {
 class _ChatTabState extends State<ChatTab> {
   final _groupService = GroupService();
   final _directService = DirectService();
-  final Map<String, UserEntity?> _userCache = {};
+  final _userCache = UserCache();
   final _searchCtrl = TextEditingController();
 
   _ChatFilter _filter = _ChatFilter.all;
@@ -50,15 +51,10 @@ class _ChatTabState extends State<ChatTab> {
   }
 
   Future<UserEntity?> _getCachedUser(String uid) async {
-    if (_userCache.containsKey(uid)) return _userCache[uid];
-    final user = await _directService.getUser(uid);
-    if (mounted) {
-      _userCache[uid] = user;
-      // Refresh search filtering once names resolve.
-      if (_query.isNotEmpty) setState(() {});
-    } else {
-      _userCache[uid] = user;
-    }
+    final cached = _userCache.getCachedUser(uid);
+    if (cached != null) return cached;
+    final user = await _userCache.getUser(uid);
+    if (mounted && _query.isNotEmpty) setState(() {});
     return user;
   }
 
@@ -784,7 +780,7 @@ class _ChatTabState extends State<ChatTab> {
                                           continue;
                                         }
                                         final cachedName =
-                                            _userCache[otherUid]
+                                            _userCache.getCachedUser(otherUid)
                                                     ?.displayName ??
                                                 otherUid;
                                         if (_passesSearch(
@@ -929,7 +925,7 @@ class _ChatTabState extends State<ChatTab> {
                                             builder:
                                                 (context, userSnap) {
                                               final user = userSnap.data ??
-                                                  _userCache[otherUid];
+                                                  _userCache.getCachedUser(otherUid);
                                               final displayName =
                                                   user?.displayName ??
                                                       otherUid;

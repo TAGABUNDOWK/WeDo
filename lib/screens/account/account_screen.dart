@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'dart:math' as math;
 import 'package:firebase_auth/firebase_auth.dart';
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/auth/user_service.dart';
 import '../../services/friends/friend_service.dart';
+import '../../services/group/group_service.dart';
 import '../../services/profile/profile_service.dart';
 import '../../services/session/session_service.dart';
 import '../../services/tri_race/tri_race_service.dart';
@@ -13,6 +15,7 @@ import '../../widgets/animated_background.dart';
 import '../../widgets/arc_avatar_picker.dart';
 import '../../widgets/terms_agreement_dialog.dart';
 import 'edit_profile_page.dart';
+import 'account_info_screen.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -32,12 +35,14 @@ class _AccountScreenState extends State<AccountScreen>
   final _auth = FirebaseAuth.instance;
   final _userService = UserService();
   final _friendService = FriendService();
+  final _groupService = GroupService();
   final _profileService = ProfileService();
   final _sessionService = SessionService();
   final _triRaceService = TriRaceService();
   final _imagePicker = ImagePicker();
   UserEntity? _user;
   bool _loading = true;
+  StreamSubscription<UserEntity?>? _userSub;
   int _totalMatches = 0;
   int _pickFightWins = 0;
   int _triRaceWins = 0;
@@ -63,12 +68,13 @@ class _AccountScreenState extends State<AccountScreen>
       duration: const Duration(milliseconds: 550),
       value: 0,
     );
-    _loadUser();
+    _listenToUser();
     _loadStats();
   }
 
   @override
   void dispose() {
+    _userSub?.cancel();
     _arcRevealCtrl.dispose();
     _frameRevealCtrl.dispose();
     super.dispose();
@@ -156,19 +162,51 @@ class _AccountScreenState extends State<AccountScreen>
     }
   }
 
+  void _listenToUser() {
+    _userSub?.cancel();
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) {
+      if (mounted) {
+        setState(() {
+          _user = null;
+          _loading = false;
+        });
+      }
+      return;
+    }
+    _userSub = _userService.userDocumentStream(uid).listen(
+      (user) {
+        if (mounted) {
+          setState(() {
+            _user = user;
+            _loading = false;
+          });
+        }
+      },
+      onError: (Object e) {
+        debugPrint('user stream error: $e');
+        if (mounted) setState(() => _loading = false);
+      },
+    );
+  }
+
   Future<void> _loadUser() async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
       return;
     }
-    final user = await _userService.getUserDocument(uid);
-
-    if (mounted) {
-      setState(() {
-        _user = user;
-        _loading = false;
-      });
+    try {
+      final user = await _userService.getUserDocument(uid);
+      if (mounted) {
+        setState(() {
+          _user = user;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('_loadUser error: $e');
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -266,6 +304,21 @@ class _AccountScreenState extends State<AccountScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text(
+          'Account',
+          style: TextStyle(
+            fontFamily: 'PlusJakartaSans',
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+            color: Colors.white,
+          ),
+        ),
+      ),
       body: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onTap: _closeIfBothVisible,
@@ -280,7 +333,7 @@ class _AccountScreenState extends State<AccountScreen>
               child: Transform(
                 alignment: Alignment.center,
                 transform: Matrix4.identity()
-                  ..scale(-1.0, 1.0)
+                  ..scaleByDouble(-1.0, 1.0, 1.0, 1.0)
                   ..rotateZ(-0.55),
                 child: Opacity(
                   opacity: 0.05,
@@ -297,16 +350,37 @@ class _AccountScreenState extends State<AccountScreen>
                     child: CircularProgressIndicator(color: Color(0xFFFE4EF0)),
                   )
                 : _user == null
-                ? const Center(
-                    child: Text(
-                      'No user data found',
-                      style: TextStyle(
-                        color: Colors.white54,
-                        fontFamily: 'Poppins',
-                      ),
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'No user data found',
+                          style: TextStyle(
+                            color: Colors.white54,
+                            fontFamily: 'Poppins',
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextButton(
+                          onPressed: () {
+                            setState(() => _loading = true);
+                            _listenToUser();
+                            _loadUser();
+                          },
+                          child: const Text(
+                            'Retry',
+                            style: TextStyle(
+                              color: Color(0xFFFE4EF0),
+                              fontFamily: 'Poppins',
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   )
                 : SafeArea(
+                    top: false,
                     child: RefreshIndicator(
                       color: const Color(0xFFFE4EF0),
                       backgroundColor: const Color(0xFF1A0A2E),
@@ -317,14 +391,12 @@ class _AccountScreenState extends State<AccountScreen>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _buildTopBar(),
-                            const SizedBox(height: 24),
                             _buildProfileHeader(),
-                            const SizedBox(height: 12),
-                            _buildWeDoSlider(),
-                            const SizedBox(height: 20),
-                            _buildGameMatchStatsCard(context),
                             const SizedBox(height: 16),
+                            _buildWeDoSlider(),
+                            const SizedBox(height: 24),
+                            _buildGameMatchStatsCard(context),
+                            const SizedBox(height: 24),
                             _buildAccountMenu(context),
                           ],
                         ),
@@ -387,52 +459,6 @@ class _AccountScreenState extends State<AccountScreen>
       ),
     ),
   );
-  }
-
-  Widget _buildTopBar() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        GestureDetector(
-          onTap: () {},
-          behavior: HitTestBehavior.opaque,
-          child: SizedBox(
-            width: 36,
-            height: 36,
-            child: Center(
-              child: Image.asset(
-                'assets/icons/create.png',
-                width: 26,
-                height: 26,
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) =>
-                    const Icon(Icons.add, color: Colors.white70, size: 26),
-              ),
-            ),
-          ),
-        ),
-        const Spacer(),
-        GestureDetector(
-          onTap: () {},
-          behavior: HitTestBehavior.opaque,
-          child: SizedBox(
-            width: 36,
-            height: 36,
-            child: Center(
-              child: Image.asset(
-                'assets/icons/menu.png',
-                width: 30,
-                height: 30,
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) =>
-                    const Icon(Icons.menu, color: Colors.white70, size: 30),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
   }
 
   Widget _buildProfileHeader() {
@@ -597,31 +623,37 @@ class _AccountScreenState extends State<AccountScreen>
   Widget _buildStatsPanel() {
     return StreamBuilder<List>(
       stream: _friendService.getFriendsStream(_uid),
-      builder: (context, snapshot) {
-        final friendsCount = snapshot.data?.length ?? 0;
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  width: 1,
+      builder: (context, friendsSnap) {
+        final friendsCount = friendsSnap.data?.length ?? 0;
+        return StreamBuilder<List>(
+          stream: _groupService.getUserGroupsStream(_uid),
+          builder: (context, groupsSnap) {
+            final groupsCount = groupsSnap.data?.length ?? 0;
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      vertical: 16, horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      _buildStatItem(count: friendsCount, label: 'Friends'),
+                      _buildStatItem(count: groupsCount, label: 'Groups'),
+                    ],
+                  ),
                 ),
               ),
-              child: Row(
-                children: [
-                  _buildStatItem(count: friendsCount, label: 'Friends'),
-                  _buildStatItem(count: 0, label: 'Following'),
-                  _buildStatItem(count: 0, label: 'Decisions'),
-                ],
-              ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -1053,8 +1085,11 @@ class _AccountScreenState extends State<AccountScreen>
             context: context,
             icon: Icons.credit_card,
             title: 'Account Info',
-            subtitle: 'Manage email, security & IDs',
-            onTap: () {},
+            subtitle: 'Email, password & deletion',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AccountInfoScreen()),
+            ),
             showDivider: true,
           ),
           _buildMenuItem(
