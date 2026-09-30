@@ -9,6 +9,9 @@ import '../leaderboard/leaderboard_service.dart';
 class SessionService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
+  /// Number of X marks the Speed Shield absorbs from the shielded card.
+  static const int _shieldAbsorbCount = 1;
+
   CollectionReference get _sessions =>
       _db.collection(AppConstants.sessionsCollection);
 
@@ -429,7 +432,9 @@ class SessionService {
   }
 
   /// Aggregates results from all finished participants.
-  /// Computes card tally, winner card, and time-based standings.
+  /// Computes card tally (shield-adjusted), winner card, and time-based
+  /// standings (the fastest finisher holds the Speed Shield, which absorbs
+  /// one X mark from their card and feeds the winner-card tie-break).
   /// Called by every participant when they finish — always re-aggregates so
   /// the ResultsScreen reflects everyone who has completed so far.
   /// The leaderboard write is gated by [statsRecorded] and only runs once
@@ -472,46 +477,9 @@ class SessionService {
         }
       }
 
-      final Map<String, dynamic> cardTally = {};
-      for (final card in sessionCards) {
-        final cardId = card['id'] as String;
-        cardTally[cardId] = {
-          'title': card['title'] as String? ?? '',
-          'emoji': card['emoji'] as String? ?? '',
-          'eliminationCount': eliminationCounts[cardId] ?? 0,
-        };
-      }
-
-      // ── Winner Card: most chosen as winner by participants ──
-      final Map<String, int> winnerVotes = {};
-      for (final p in finished) {
-        if (p.chosenWinnerCardId != null && p.chosenWinnerCardId!.isNotEmpty) {
-          winnerVotes[p.chosenWinnerCardId!] =
-              (winnerVotes[p.chosenWinnerCardId!] ?? 0) + 1;
-        }
-      }
-
-      String winnerCardId = '';
-      String winnerCardTitle = '';
-      String winnerCardEmoji = '';
-      if (winnerVotes.isNotEmpty) {
-        final sortedVotes = winnerVotes.entries.toList()
-          ..sort((a, b) {
-            if (b.value != a.value) return b.value.compareTo(a.value);
-            final aElims = eliminationCounts[a.key] ?? 999;
-            final bElims = eliminationCounts[b.key] ?? 999;
-            return aElims.compareTo(bElims);
-          });
-        winnerCardId = sortedVotes.first.key;
-        final winnerCard = sessionCards.firstWhere(
-          (c) => c['id'] == winnerCardId,
-          orElse: () => {},
-        );
-        winnerCardTitle = winnerCard['title'] as String? ?? '';
-        winnerCardEmoji = winnerCard['emoji'] as String? ?? '';
-      }
-
       // ── Standings: sorted by elapsed time (fastest first) ──
+      // Computed before the winner card because the Speed Shield (the fastest
+      // finisher) feeds the winner-card decision.
       final resolvedNames = await fetchDisplayNames(finished.map((p) => p.id).toList());
       final Map<String, dynamic> standings = {};
       for (final p in finished) {
@@ -523,11 +491,17 @@ class SessionService {
         };
       }
 
+      // Deterministic order: fastest time, then fewer timeouts, then uid so
+      // equal-time ties never depend on Firestore read order.
       final sortedEntries = standings.entries.toList()
         ..sort((a, b) {
           final timeA = a.value['elapsedTimeMs'] as int? ?? 999999;
           final timeB = b.value['elapsedTimeMs'] as int? ?? 999999;
-          return timeA.compareTo(timeB);
+          if (timeA != timeB) return timeA.compareTo(timeB);
+          final timeoutsA = a.value['timeoutCount'] as int? ?? 0;
+          final timeoutsB = b.value['timeoutCount'] as int? ?? 0;
+          if (timeoutsA != timeoutsB) return timeoutsA.compareTo(timeoutsB);
+          return a.key.compareTo(b.key);
         });
 
       final orderedStandings = <String, dynamic>{};
@@ -544,6 +518,75 @@ class SessionService {
         speedShieldWinnerCardId = fastest.value['chosenWinnerCardId'] as String? ?? '';
       }
 
+      // ── Shield absorption: the shielded card loses one X mark ──
+      // Effective counts feed both the displayed tally and the winner-card
+      // tie-break, so the shield can flip a tied decision. Rebuilt from raw
+      // participant data on every re-aggregation, so it never double-absorbs.
+      final shieldAbsorbedCount =
+          speedShieldWinnerCardId.isNotEmpty &&
+                  (eliminationCounts[speedShieldWinnerCardId] ?? 0) > 0
+              ? _shieldAbsorbCount
+              : 0;
+      final Map<String, int> effectiveEliminationCounts = {};
+      for (final entry in eliminationCounts.entries) {
+        effectiveEliminationCounts[entry.key] = entry.key == speedShieldWinnerCardId
+            ? entry.value - shieldAbsorbedCount
+            : entry.value;
+      }
+
+      final Map<String, dynamic> cardTally = {};
+      for (final card in sessionCards) {
+        final cardId = card['id'] as String;
+        cardTally[cardId] = {
+          'title': card['title'] as String? ?? '',
+          'emoji': card['emoji'] as String? ?? '',
+          'eliminationCount': effectiveEliminationCounts[cardId] ?? 0,
+          'rawEliminationCount': eliminationCounts[cardId] ?? 0,
+          'shieldAbsorbed': cardId == speedShieldWinnerCardId && shieldAbsorbedCount > 0,
+        };
+      }
+
+      // ── Winner Card: most chosen as winner by participants ──
+      final Map<String, int> winnerVotes = {};
+      for (final p in finished) {
+        if (p.chosenWinnerCardId != null && p.chosenWinnerCardId!.isNotEmpty) {
+          winnerVotes[p.chosenWinnerCardId!] =
+              (winnerVotes[p.chosenWinnerCardId!] ?? 0) + 1;
+        }
+      }
+
+      final Map<String, String> cardTitles = {
+        for (final card in sessionCards)
+          card['id'] as String: card['title'] as String? ?? '',
+      };
+      final Map<String, String> cardEmojis = {
+        for (final card in sessionCards)
+          card['id'] as String: card['emoji'] as String? ?? '',
+      };
+
+      String winnerCardId = '';
+      String winnerCardTitle = '';
+      String winnerCardEmoji = '';
+      if (winnerVotes.isNotEmpty) {
+        // Deterministic order: most votes, then fewest (shield-adjusted)
+        // eliminations, then alphabetical title, then card id — never
+        // dependent on Firestore read order.
+        final sortedVotes = winnerVotes.entries.toList()
+          ..sort((a, b) {
+            if (b.value != a.value) return b.value.compareTo(a.value);
+            final aElims = effectiveEliminationCounts[a.key] ?? 999;
+            final bElims = effectiveEliminationCounts[b.key] ?? 999;
+            if (aElims != bElims) return aElims.compareTo(bElims);
+            final aTitle = (cardTitles[a.key] ?? '').toLowerCase();
+            final bTitle = (cardTitles[b.key] ?? '').toLowerCase();
+            if (aTitle != bTitle) return aTitle.compareTo(bTitle);
+            return a.key.compareTo(b.key);
+          });
+        winnerCardId = sortedVotes.first.key;
+        winnerCardTitle = cardTitles[winnerCardId] ?? '';
+        winnerCardEmoji = cardEmojis[winnerCardId] ?? '';
+      }
+
       // Always update the aggregated results so the ResultsScreen's StreamBuilder
       // reflects the latest standings as each participant finishes.
       final Map<String, dynamic> updatePayload = {
@@ -557,6 +600,9 @@ class SessionService {
           'totalParticipants': finished.length,
           'standings': orderedStandings,
           'speedShieldWinnerCardId': speedShieldWinnerCardId,
+          'speedShieldAbsorbed': shieldAbsorbedCount,
+          'speedShieldIntact': speedShieldWinnerCardId.isNotEmpty &&
+              shieldAbsorbedCount == 0,
         },
       };
 

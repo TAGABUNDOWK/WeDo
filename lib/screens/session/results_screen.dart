@@ -114,7 +114,7 @@ class _ResultsScreenState extends State<ResultsScreen> with TickerProviderStateM
         children: [
           _buildWinnerHero(winnerCardTitle, winnerCardEmoji, totalParticipants),
           const SizedBox(height: 28),
-          _buildSectionHeader('Card Tally', 'X marks = how many players eliminated this card'),
+          _buildSectionHeader('Card Tally', 'X marks = players who eliminated this card (Speed Shield absorbs 1)'),
           const SizedBox(height: 12),
           _buildCardTally(cardTally, winnerCardId, speedShieldCardId),
           if (standings.isNotEmpty) ...[
@@ -239,6 +239,7 @@ class _ResultsScreenState extends State<ResultsScreen> with TickerProviderStateM
             final eliminations = data['eliminationCount'] as int? ?? 0;
             final isWinner = cardId == winnerCardId;
             final isSpeedShield = cardId == speedShieldCardId;
+            final shieldAbsorbed = data['shieldAbsorbed'] as bool? ?? false;
 
             return _buildCardTile(
               title: title,
@@ -246,6 +247,7 @@ class _ResultsScreenState extends State<ResultsScreen> with TickerProviderStateM
               eliminations: eliminations,
               isWinner: isWinner,
               isSpeedShield: isSpeedShield,
+              shieldAbsorbed: shieldAbsorbed,
             );
           },
         );
@@ -259,8 +261,12 @@ class _ResultsScreenState extends State<ResultsScreen> with TickerProviderStateM
     required int eliminations,
     required bool isWinner,
     required bool isSpeedShield,
+    required bool shieldAbsorbed,
   }) {
     final isBoth = isWinner && isSpeedShield;
+    // The shield is "used up" only when it actually absorbed an X mark;
+    // sessions saved before this field existed render as intact.
+    final shieldUsed = isSpeedShield && shieldAbsorbed;
     final showBluePulse = isSpeedShield;
     final pulseAlpha = 0.15 + (_shieldPulseController.value * 0.30);
 
@@ -296,110 +302,123 @@ class _ResultsScreenState extends State<ResultsScreen> with TickerProviderStateM
             ? _accent.withValues(alpha: 0.12)
             : Colors.black.withValues(alpha: 0.35);
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor, width: borderWidth),
-        boxShadow: boxShadow,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              if (isBoth)
-                const Padding(
-                  padding: EdgeInsets.only(right: 2),
-                  child: Icon(Icons.emoji_events, color: _accent, size: 14),
-                ),
-              if (showBluePulse)
-                const Padding(
-                  padding: EdgeInsets.only(right: 4),
-                  child: Icon(Icons.shield, color: _shieldBlue, size: 14),
-                ),
-              if (emoji.isNotEmpty)
-                Text(emoji, style: const TextStyle(fontSize: 16)),
-              if (emoji.isNotEmpty) const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: (isWinner || isSpeedShield) ? FontWeight.w700 : FontWeight.w600,
-                    color: showBluePulse
-                        ? _shieldBlue
-                        : isWinner
-                            ? _accent
-                            : Colors.white,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const Spacer(),
-          if (isBoth)
-            const Text(
-              'Shielded Winner',
-              style: TextStyle(
-                color: _shieldBlue,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-              ),
-            )
-          else if (isSpeedShield)
-            const Text(
-              'Shielded',
-              style: TextStyle(
-                color: _shieldBlue,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-              ),
-            )
-          else if (isWinner)
-            const Text(
-              'Safe',
-              style: TextStyle(
-                color: Color(0xFF4CAF50),
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-              ),
-            )
-          else if (eliminations > 0)
+    final shieldIcon = shieldUsed ? Icons.shield_outlined : Icons.shield;
+
+    String label;
+    Color labelColor;
+    FontWeight labelWeight;
+    if (isBoth) {
+      label = 'Shielded Winner';
+      labelColor = _shieldBlue;
+      labelWeight = FontWeight.w700;
+    } else if (isSpeedShield) {
+      label = shieldUsed ? 'Shield Used' : 'Shielded';
+      labelColor = _shieldBlue;
+      labelWeight = FontWeight.w700;
+    } else if (isWinner) {
+      label = 'Safe';
+      labelColor = const Color(0xFF4CAF50);
+      labelWeight = FontWeight.w700;
+    } else {
+      label = 'Safe';
+      labelColor = Colors.white.withValues(alpha: 0.4);
+      labelWeight = FontWeight.w600;
+    }
+
+    // Shielded cards always show their (shield-adjusted) X count under the
+    // label; other cards keep the original behaviour of hiding marks on the
+    // winning card.
+    final showXMarks = eliminations > 0 && (isSpeedShield || !isWinner);
+
+    return CustomPaint(
+      painter: shieldUsed
+          ? _BrokenShieldBorderPainter(color: _shieldBlue, strokeWidth: borderWidth)
+          : null,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(16),
+          border: shieldUsed
+              ? null
+              : Border.all(color: borderColor, width: borderWidth),
+          boxShadow: boxShadow,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             Row(
               children: [
-                ...List.generate(
-                  eliminations.clamp(0, 5),
-                  (i) => const Padding(
-                    padding: EdgeInsets.only(right: 3),
-                    child: Icon(Icons.close, color: Colors.redAccent, size: 14),
+                if (isBoth)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 2),
+                    child: Icon(Icons.emoji_events, color: _accent, size: 14),
                   ),
-                ),
-                if (eliminations > 5)
-                  Text(
-                    '\u00d7$eliminations',
-                    style: const TextStyle(
-                      color: Colors.redAccent,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
+                if (showBluePulse)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: Icon(shieldIcon, color: _shieldBlue, size: 14),
+                  ),
+                if (emoji.isNotEmpty)
+                  Text(emoji, style: const TextStyle(fontSize: 16)),
+                if (emoji.isNotEmpty) const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: (isWinner || isSpeedShield) ? FontWeight.w700 : FontWeight.w600,
+                      color: showBluePulse
+                          ? _shieldBlue
+                          : isWinner
+                              ? _accent
+                              : Colors.white,
                     ),
                   ),
+                ),
               ],
-            )
-          else
+            ),
+            const Spacer(),
             Text(
-              'Safe',
+              label,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.4),
+                color: labelColor,
                 fontSize: 11,
-                fontWeight: FontWeight.w600,
+                fontWeight: labelWeight,
               ),
             ),
-        ],
+            if (showXMarks) ...[
+              const SizedBox(height: 4),
+              _buildEliminationMarks(eliminations),
+            ],
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildEliminationMarks(int eliminations) {
+    return Row(
+      children: [
+        ...List.generate(
+          eliminations.clamp(0, 5),
+          (i) => const Padding(
+            padding: EdgeInsets.only(right: 3),
+            child: Icon(Icons.close, color: Colors.redAccent, size: 14),
+          ),
+        ),
+        if (eliminations > 5)
+          Text(
+            '\u00d7$eliminations',
+            style: const TextStyle(
+              color: Colors.redAccent,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+      ],
     );
   }
 
@@ -560,4 +579,52 @@ class _ResultsScreenState extends State<ResultsScreen> with TickerProviderStateM
       ),
     );
   }
+}
+
+/// Dashed blue outline drawn in place of the tile's solid border once the
+/// Speed Shield has absorbed an X mark ("used up" / broken shield).
+class _BrokenShieldBorderPainter extends CustomPainter {
+  final Color color;
+  final double strokeWidth;
+
+  const _BrokenShieldBorderPainter({
+    required this.color,
+    required this.strokeWidth,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+
+    final inset = strokeWidth / 2;
+    final rect = Rect.fromLTWH(
+      inset,
+      inset,
+      (size.width - strokeWidth).clamp(0.0, double.infinity),
+      (size.height - strokeWidth).clamp(0.0, double.infinity),
+    );
+    final path = Path()
+      ..addRRect(RRect.fromRectAndRadius(rect, const Radius.circular(16)));
+
+    const dashLength = 5.0;
+    const gapLength = 4.0;
+    for (final metric in path.computeMetrics()) {
+      double distance = 0;
+      while (distance < metric.length) {
+        canvas.drawPath(
+          metric.extractPath(distance, distance + dashLength),
+          paint,
+        );
+        distance += dashLength + gapLength;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _BrokenShieldBorderPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.strokeWidth != strokeWidth;
 }
