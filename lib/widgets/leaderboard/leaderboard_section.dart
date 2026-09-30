@@ -36,6 +36,8 @@ class _LeaderboardSectionState extends State<LeaderboardSection> {
   final Set<String> _favorites = <String>{};
   final Map<String, String> _photoUrls = <String, String>{};
   final Set<String> _photoQueued = <String>{};
+  final Map<String, String> _frameAssets = <String, String>{};
+  final Set<String> _frameQueued = <String>{};
   final SessionService _sessionService = SessionService();
   List<String> _friendUids = const [];
   StreamSubscription<List<FriendEntity>>? _friendsSub;
@@ -126,6 +128,26 @@ class _LeaderboardSectionState extends State<LeaderboardSection> {
       if (!mounted) return;
       setState(() => _photoUrls.addAll(photos));
     });
+  }
+
+  void _resolvePodiumFrames(List<UserStatsEntity> entries) {
+    final missing = entries
+        .map((entry) => entry.userId)
+        .where((uid) => uid.isNotEmpty && !_frameQueued.contains(uid))
+        .toList();
+    if (missing.isEmpty) return;
+    _frameQueued.addAll(missing);
+
+    Future.wait(missing.map((uid) => UserService().getUserDocument(uid)))
+        .then((users) {
+      if (!mounted) return;
+      final frames = <String, String>{};
+      for (var index = 0; index < missing.length; index++) {
+        final frame = users[index]?.frameAsset?.trim() ?? '';
+        if (frame.isNotEmpty) frames[missing[index]] = frame;
+      }
+      if (frames.isNotEmpty) setState(() => _frameAssets.addAll(frames));
+    }).catchError((_) {});
   }
 
   // ── Build ────────────────────────────────────────────────────────────────
@@ -575,6 +597,7 @@ class _LeaderboardSectionState extends State<LeaderboardSection> {
       ...sorted.take(_listUpperBound).map((e) => e.userId),
       _uid,
     ]);
+    _resolvePodiumFrames(podium);
 
     return Column(
       children: [
@@ -584,6 +607,7 @@ class _LeaderboardSectionState extends State<LeaderboardSection> {
           field: _category.field,
           favorites: _favorites,
           photoUrls: _photoUrls,
+          frameAssets: _frameAssets,
           onStarToggle: _toggleFavorite,
         ),
         const SizedBox(height: 14),
