@@ -6,12 +6,24 @@ enum FriendshipStatus {
 
   static FriendshipStatus fromString(String? value) {
     switch (value) {
+      // Every spelling that has ever been written to `status` for an accepted
+      // friendship. Documents created outside `acceptRequest` can carry one of
+      // these, and the queries used to match only the literal 'friends' — so
+      // those friendships were invisible while the user believed they existed.
       case 'friends':
+      case 'accepted':
+      case 'approved':
+      case 'confirmed':
+      case 'active':
         return FriendshipStatus.friends;
       default:
         return FriendshipStatus.pending;
     }
   }
+
+  /// True for any value that is not an outstanding request.
+  static bool isAcceptedValue(String? value) =>
+      fromString(value) == FriendshipStatus.friends;
 
   String get value {
     switch (this) {
@@ -39,21 +51,31 @@ class FriendEntity {
   });
 
   factory FriendEntity.fromMap(String id, Map<String, dynamic> map) {
+    final rawUserIds = map['userIds'];
     return FriendEntity(
       friendshipId: id,
-      userIds: (map['userIds'] as List?)?.cast<String>() ?? const [],
+      userIds: rawUserIds is List
+          ? rawUserIds.whereType<String>().toList()
+          : const <String>[],
       status: FriendshipStatus.fromString(map['status'] as String?),
       requestedBy: map['requestedBy'] as String? ?? '',
       updatedAt: _parseTimestamp(map['updatedAt']),
     );
   }
 
+  /// Tolerant by design: a single malformed `friends` document must not break
+  /// the whole query. This previously threw `ArgumentError` on a missing or
+  /// unrecognised `updatedAt`, which propagated out of the `snapshots().map()`
+  /// in `FriendService` and errored the entire stream — the profile counter
+  /// then silently fell back to `?? 0` and the list rendered empty.
   static DateTime _parseTimestamp(dynamic value) {
     if (value is Timestamp) return value.toDate();
     if (value is DateTime) return value;
-    if (value is String) return DateTime.parse(value);
+    if (value is String) {
+      return DateTime.tryParse(value) ?? DateTime.now();
+    }
     if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
-    throw ArgumentError('Unsupported timestamp format: $value');
+    return DateTime.now();
   }
 
   bool involves(String uid) => userIds.contains(uid);
