@@ -702,7 +702,7 @@ class _SwipingScreenState extends State<SwipingScreen>
                           letterSpacing: 1,
                         ),
                         child: Text(
-                          isTop ? '↓ ELIMINATE' : '↑ ELIMINATE',
+                          isTop ? '↑ ELIMINATE' : '↓ ELIMINATE',
                         ),
                       ),
                     ],
@@ -786,7 +786,7 @@ class _SwipingScreenState extends State<SwipingScreen>
                           letterSpacing: 1,
                         ),
                         child: Text(
-                          isTop ? '↓ ELIMINATE' : '↑ ELIMINATE',
+                          isTop ? '↑ ELIMINATE' : '↓ ELIMINATE',
                         ),
                       ),
                     ],
