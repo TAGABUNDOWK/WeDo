@@ -15,6 +15,7 @@ class LeaderboardListRow extends StatelessWidget {
   final VoidCallback onStarToggle;
   final String? score;
   final String? nameOverride;
+  final String? photoUrl;
 
   const LeaderboardListRow({
     super.key,
@@ -27,6 +28,7 @@ class LeaderboardListRow extends StatelessWidget {
     this.rankLabel,
     this.score,
     this.nameOverride,
+    this.photoUrl,
   });
 
   @override
@@ -71,7 +73,7 @@ class LeaderboardListRow extends StatelessWidget {
               ),
             ),
           ),
-          LeaderboardAvatar(asset: entry.avatarAsset, size: 34),
+          LeaderboardAvatar(photoUrl: photoUrl, asset: entry.avatarAsset, size: 34),
           const SizedBox(width: 10),
           Expanded(
             child: Text(

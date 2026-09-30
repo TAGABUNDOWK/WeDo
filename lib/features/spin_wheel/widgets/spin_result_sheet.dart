@@ -91,9 +91,13 @@ class _SpinResultSheetState extends State<SpinResultSheet>
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.45,
-      decoration: const BoxDecoration(
-        color: Color(0xFF2A1450),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F0B18),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border.all(
+          color: const Color(0xFFFE4EF0).withValues(alpha: 0.25),
+          width: 1,
+        ),
       ),
       child: Stack(
         children: [

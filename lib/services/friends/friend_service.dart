@@ -134,15 +134,69 @@ class FriendService {
     await _db.collection('friends').doc(friendshipId).delete();
   }
 
-  Stream<List<FriendEntity>> getFriendsStream(String uid) {
+  /// Every friendship document involving [uid], accepted or not.
+  ///
+  /// Deliberately does **not** filter on `status` in the query. The previous
+  /// version used `.where('status', isEqualTo: 'friends')`, which silently
+  /// hid any friendship whose document stored a different accepted value
+  /// (or none at all) — the profile header and the list both showed 0 while
+  /// the user had accepted friends. Filtering in Dart against
+  /// [FriendshipStatus.isAcceptedValue] keeps the behaviour without making the
+  /// result depend on one exact string, and drops the composite index
+  /// requirement for this query.
+  Stream<List<FriendEntity>> getAllFriendshipsStream(String uid) {
     return _db
         .collection('friends')
         .where('userIds', arrayContains: uid)
-        .where('status', isEqualTo: 'friends')
         .snapshots()
         .map((snap) => snap.docs
             .map((doc) => FriendEntity.fromMap(doc.id, doc.data()))
             .toList());
+  }
+
+  Stream<List<FriendEntity>> getFriendsStream(String uid) {
+    return getAllFriendshipsStream(uid).map(
+      (all) => all.where((f) => f.status == FriendshipStatus.friends).toList(),
+    );
+  }
+
+  /// One-shot read of the same query as [getFriendsStream], straight from the
+  /// server rather than the local cache.
+  ///
+  /// `snapshots()` emits a cache-first result, which is empty on a cold start
+  /// and can stay stale; this guarantees the initial count is real.
+  Future<List<FriendEntity>> fetchFriends(String uid) async {
+    final snap =
+        await _db.collection('friends').where('userIds', arrayContains: uid).get();
+    return snap.docs
+        .map((doc) => FriendEntity.fromMap(doc.id, doc.data()))
+        .where((f) => f.status == FriendshipStatus.friends)
+        .toList();
+  }
+
+  /// Rewrites any non-canonical accepted `status` to `'friends'`.
+  ///
+  /// One-off repair for friendships accepted before the value was normalised.
+  /// Returns the number of documents changed. Only touches documents that are
+  /// already accepted and whose status is not exactly `'friends'`, so pending
+  /// requests are left alone.
+  Future<int> normalizeAcceptedStatuses(String uid) async {
+    final snap =
+        await _db.collection('friends').where('userIds', arrayContains: uid).get();
+
+    final batch = _db.batch();
+    var changed = 0;
+
+    for (final doc in snap.docs) {
+      final raw = doc.data()['status'];
+      if (raw is! String || raw == 'friends') continue;
+      if (!FriendshipStatus.isAcceptedValue(raw)) continue;
+      batch.update(doc.reference, {'status': 'friends'});
+      changed++;
+    }
+
+    if (changed > 0) await batch.commit();
+    return changed;
   }
 
   Stream<List<FriendEntity>> getIncomingRequestsStream(String uid) {

@@ -9,10 +9,10 @@ class Responsive {
       MediaQuery.of(context).size.width / _designWidth;
 
   static double cardWidth(BuildContext context) =>
-      (MediaQuery.of(context).size.width * 0.78).clamp(360.0, 760.0);
+      (MediaQuery.of(context).size.width * 0.76).clamp(260.0, 360.0);
 
   static double cardHeight(BuildContext context) =>
-      (cardWidth(context) * 0.56).clamp(202.0, 426.0);
+      (cardWidth(context) * 1.25).clamp(340.0, 430.0);
 
   static double appBarIconSize(BuildContext context) =>
       (28 * scale(context)).clamp(20.0, 36.0);

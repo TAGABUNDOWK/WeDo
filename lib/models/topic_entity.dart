@@ -6,29 +6,49 @@ library;
 class TopicEntity {
   final String id;
   final String title;
+  final String? description;
 
-  const TopicEntity({required this.id, required this.title});
+  const TopicEntity({
+    required this.id,
+    required this.title,
+    this.description,
+  });
 
   factory TopicEntity.fromMap(String id, Map<String, dynamic> map) {
-    return TopicEntity(id: id, title: map['title'] as String? ?? '');
+    return TopicEntity(
+      id: id,
+      title: map['title'] as String? ?? '',
+      description: map['description'] as String?,
+    );
   }
 
-  Map<String, dynamic> toMap() => {'title': title};
+  Map<String, dynamic> toMap() => {
+        'title': title,
+        if (description != null) 'description': description,
+      };
 
-  TopicEntity copyWith({String? id, String? title}) {
-    return TopicEntity(id: id ?? this.id, title: title ?? this.title);
+  TopicEntity copyWith({String? id, String? title, String? description}) {
+    return TopicEntity(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      description: description ?? this.description,
+    );
   }
 
   @override
-  String toString() => 'TopicEntity(id: $id, title: $title)';
+  String toString() =>
+      'TopicEntity(id: $id, title: $title, description: $description)';
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is TopicEntity && other.id == id && other.title == title;
+      other is TopicEntity &&
+          other.id == id &&
+          other.title == title &&
+          other.description == description;
 
   @override
-  int get hashCode => id.hashCode ^ title.hashCode;
+  int get hashCode => id.hashCode ^ title.hashCode ^ description.hashCode;
 }
 
 /// Document at `/topics/{topicId}/cards/{cardId}`.
