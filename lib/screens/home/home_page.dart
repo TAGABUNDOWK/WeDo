@@ -15,7 +15,6 @@ import '../games/all_games_screen.dart';
 import '../chat/chat_tab.dart';
 import '../chat/group/group_chat_screen.dart';
 import '../chat/direct/direct_chat_screen.dart';
-import '../../utils/nav_bar_controller.dart';
 import '../../widgets/animated_background.dart';
 import '../../widgets/leaderboard/leaderboard_section.dart';
 import '../../services/auth/user_service.dart';
@@ -49,7 +48,6 @@ class _HomePageState extends State<HomePage> {
 
   static const _activeColor = Color(0xFFFE4EF0);
   static const _inactiveColor = Color(0x80FFFFFF);
-  static const _friendsTabIndex = 2;
 
   @override
   Widget build(BuildContext context) {
@@ -57,9 +55,6 @@ class _HomePageState extends State<HomePage> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      // The Friends tab hosts a search field over a full-screen map; keep the
-      // body from resizing behind the keyboard while it is focused.
-      resizeToAvoidBottomInset: _currentIndex != _friendsTabIndex,
       body: AnimatedBackground(
         showStars: false,
         child: Stack(
@@ -82,52 +77,31 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
-            Column(
-              children: [
-                Expanded(
-                  child: IndexedStack(
-                    index: _currentIndex,
-                    children: [
-                      // The Friends tab renders edge-to-edge (its map is the
-                      // base layer); every other tab keeps its SafeArea.
-                      for (var i = 0; i < _tabs.length; i++)
-                        i == _friendsTabIndex
-                            ? _tabs[i]
-                            : SafeArea(child: _tabs[i]),
-                    ],
+            SafeArea(
+              child: Column(
+                children: [
+                  Expanded(
+                    child: IndexedStack(index: _currentIndex, children: _tabs),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             Positioned(
               left: 16,
               right: 16,
               bottom: bottomPadding + 20,
-              child: ValueListenableBuilder<bool>(
-                valueListenable: navBarHidden,
-                builder: (context, hidden, child) {
-                  return IgnorePointer(
-                    ignoring: hidden,
-                    child: AnimatedOpacity(
-                      opacity: hidden ? 0 : 1,
-                      duration: const Duration(milliseconds: 250),
-                      child: child,
-                    ),
+              child: StreamBuilder<User?>(
+                stream: FirebaseAuth.instance.authStateChanges(),
+                initialData: FirebaseAuth.instance.currentUser,
+                builder: (context, authSnap) {
+                  return BlobNavBar(
+                    currentIndex: _currentIndex,
+                    activeColor: _activeColor,
+                    inactiveColor: _inactiveColor,
+                    uid: authSnap.data?.uid ?? '',
+                    onTap: (index) => setState(() => _currentIndex = index),
                   );
                 },
-                child: StreamBuilder<User?>(
-                  stream: FirebaseAuth.instance.authStateChanges(),
-                  initialData: FirebaseAuth.instance.currentUser,
-                  builder: (context, authSnap) {
-                    return BlobNavBar(
-                      currentIndex: _currentIndex,
-                      activeColor: _activeColor,
-                      inactiveColor: _inactiveColor,
-                      uid: authSnap.data?.uid ?? '',
-                      onTap: (index) => setState(() => _currentIndex = index),
-                    );
-                  },
-                ),
               ),
             ),
           ],

@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'dart:ui';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geolocator/geolocator.dart';
@@ -12,7 +11,8 @@ import '../../services/direct/direct_service.dart';
 import '../../services/friends/friend_service.dart';
 import '../../services/location/location_service.dart';
 import '../../utils/constants.dart';
-import '../../utils/nav_bar_controller.dart';
+import '../account/account_screen.dart';
+import 'add_friend_page.dart';
 import '../chat/direct/direct_chat_screen.dart';
 
 const _font = 'PlusJakartaSans';
@@ -29,39 +29,11 @@ class _FriendsPageState extends State<FriendsPage> {
   final _friendService = FriendService();
   final _userService = UserService();
   final _directService = DirectService();
-  final _locationService = LocationService();
-  final _searchCtrl = TextEditingController();
-  final _mapController = MapController();
+  UserEntity? _currentUser;
 
   late final Stream<List<FriendEntity>> _incomingRequestsStream;
   late final Stream<List<FriendEntity>> _outgoingRequestsStream;
   late final Stream<List<FriendEntity>> _friendsStream;
-
-  // Full-screen map
-  bool _mapLoading = true;
-  Position? _position;
-  Map<String, String> _partners = {};
-  List<Marker> _markers = [];
-
-  // Floating search
-  bool _searching = false;
-  bool _searchActive = false;
-  bool _hasSearched = false;
-  List<UserEntity> _searchResults = [];
-
-  // Swipeable glass panel
-  bool _panelOpen = false;
-  int _activeTab = 0;
-  double _edgeDrag = 0;
-  double _panelDrag = 0;
-
-  static const _pink = Color(0xFFFE4EF0);
-  static const _tabLabels = [
-    'Nearby',
-    'Incoming Request',
-    'Sent Request',
-    'Friends',
-  ];
 
   String get _uid => _auth.currentUser!.uid;
 
@@ -71,484 +43,103 @@ class _FriendsPageState extends State<FriendsPage> {
     _incomingRequestsStream = _friendService.getIncomingRequestsStream(_uid);
     _outgoingRequestsStream = _friendService.getOutgoingRequestsStream(_uid);
     _friendsStream = _friendService.getFriendsStream(_uid);
-    _loadMap();
+    _loadCurrentUser();
   }
 
-  @override
-  void dispose() {
-    navBarHidden.value = false;
-    _searchCtrl.dispose();
-    _mapController.dispose();
-    super.dispose();
+  Future<void> _loadCurrentUser() async {
+    final user = await _userService.getUserDocument(_uid);
+    if (mounted) setState(() => _currentUser = user);
   }
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final padding = MediaQuery.paddingOf(context);
-    final topInset = padding.top;
-    final panelHeight = (size.height * 0.65).clamp(360.0, 720.0);
-    // Bottom edge of the floating search bar: top inset + 10 pad + 52 height.
-    final chromeBottom = topInset + 62;
-    final showResults = _hasSearched || (_searching && _searchActive);
-
     return Scaffold(
       backgroundColor: Colors.transparent,
-      resizeToAvoidBottomInset: false,
-      body: Stack(
-        children: [
-          // ── Full-screen map (base layer) ──────────────────────────────
-          Positioned.fill(child: _buildMapLayer()),
-
-          // ── Bottom edge swipe zone (reveals the glass panel) ──────────
-          if (!_panelOpen)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              height: math.max(24.0, padding.bottom + 12),
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onVerticalDragStart: (_) => _edgeDrag = 0,
-                onVerticalDragUpdate: (d) => _edgeDrag += d.delta.dy,
-                onVerticalDragEnd: (_) {
-                  final shouldOpen = _edgeDrag < -50;
-                  _edgeDrag = 0;
-                  if (shouldOpen) _openPanel();
-                },
-                child: Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.25),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-          // ── Floating glass search bar ─────────────────────────────────
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                child: _buildSearchBar(),
-              ),
-            ),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        leading: IconButton(
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AddFriendPage()),
+          ).then((_) => _loadCurrentUser()),
+          icon: const Icon(Icons.menu, color: Colors.white, size: 24),
+        ),
+        title: const Text(
+          'Friends',
+          style: TextStyle(
+            fontFamily: _font,
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+            color: Colors.white,
           ),
-
-          // ── Search results overlay ────────────────────────────────────
-          if (showResults)
-            Positioned(
-              top: chromeBottom + 10,
-              left: 16,
-              right: 16,
-              child: _buildSearchResults(size),
+        ),
+        actions: [
+          GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AccountScreen()),
+            ).then((_) => _loadCurrentUser()),
+            child: Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: _UserAvatar(user: _currentUser, size: 32),
             ),
-
-          // ── Floating map action buttons ───────────────────────────────
-          if (!showResults)
-            Positioned(
-              top: chromeBottom + 10,
-              right: 16,
-              child: Column(
-                children: [
-                  _buildMapButton('assets/icons/refresh.png', _loadMap),
-                  const SizedBox(height: 8),
-                  _buildMapButton('assets/icons/zoom-out.png', _zoomOut),
-                ],
-              ),
-            ),
-
-          // ── Swipeable glass panel ─────────────────────────────────────
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 350),
-            curve: Curves.easeOutCubic,
-            left: 8,
-            right: 8,
-            bottom: _panelOpen ? 0 : -(panelHeight + padding.bottom + 40),
-            height: panelHeight,
-            child: _buildPanel(),
           ),
         ],
       ),
-    );
-  }
-
-  // ── Map layer ──────────────────────────────────────────────────────────────
-
-  Widget _buildMapLayer() {
-    if (_position == null) {
-      return Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFF1A0F2E),
-              AppColors.electricViolet.withValues(alpha: 0.25),
-              const Color(0xFF120A20),
-            ],
-          ),
-        ),
-        child: Center(
-          child: _mapLoading
-              ? const CircularProgressIndicator(
-                  color: AppColors.electricViolet,
-                  strokeWidth: 2,
-                )
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.location_off,
-                      color: Colors.white.withValues(alpha: 0.4),
-                      size: 32,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Location unavailable',
-                      style: TextStyle(
-                        fontFamily: _font,
-                        fontSize: 13,
-                        color: Colors.white.withValues(alpha: 0.4),
-                      ),
-                    ),
-                  ],
-                ),
-        ),
-      );
-    }
-
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        FlutterMap(
-          mapController: _mapController,
-          options: MapOptions(
-            initialCenter: LatLng(_position!.latitude, _position!.longitude),
-            initialZoom: 15,
-            onTap: (_, __) => _dismissSearch(),
-          ),
-          children: [
-            TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'com.example.wedo',
-            ),
-            MarkerLayer(markers: _markers),
-            // User location marker
-            MarkerLayer(
-              markers: [
-                Marker(
-                  point: LatLng(_position!.latitude, _position!.longitude),
-                  width: 80,
-                  height: 54,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.8),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: const Text(
-                          'Me',
-                          style: TextStyle(
-                            fontFamily: _font,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Container(
-                        width: 16,
-                        height: 16,
-                        decoration: BoxDecoration(
-                          color: Colors.blue,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 3),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.blue.withValues(alpha: 0.5),
-                              blurRadius: 8,
-                              spreadRadius: 2,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        if (_mapLoading)
-          Container(
-            color: Colors.black.withValues(alpha: 0.35),
-            child: const Center(
-              child: CircularProgressIndicator(
-                color: AppColors.electricViolet,
-                strokeWidth: 2,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  // ── Floating search bar & results ─────────────────────────────────────────
-
-  Widget _buildSearchBar() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(28),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          height: 52,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.search, color: _pink, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  controller: _searchCtrl,
-                  textInputAction: TextInputAction.search,
-                  onSubmitted: (_) => _onSearch(),
-                  style: const TextStyle(
-                    fontFamily: _font,
-                    fontSize: 14,
-                    color: Colors.white,
-                  ),
-                  decoration: const InputDecoration(
-                    hintText: 'Search Friends...',
-                    hintStyle: TextStyle(
-                      fontFamily: _font,
-                      fontSize: 14,
-                      color: _pink,
-                    ),
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(vertical: 14),
-                    border: InputBorder.none,
-                  ),
-                ),
-              ),
-              ValueListenableBuilder<TextEditingValue>(
-                valueListenable: _searchCtrl,
-                builder: (context, value, _) {
-                  if (value.text.isEmpty) return const SizedBox.shrink();
-                  return GestureDetector(
-                    onTap: _clearSearch,
-                    child: const Icon(Icons.close,
-                        color: Colors.white54, size: 18),
-                  );
-                },
-              ),
-              const SizedBox(width: 6),
-              GestureDetector(
-                onTap: _onSearch,
-                child: Container(
-                  padding: const EdgeInsets.all(6),
-                  child: _searching
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: _pink,
-                          ),
-                        )
-                      : Image.asset(
-                          'assets/icons/send-request.png',
-                          width: 24,
-                          height: 24,
-                        ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSearchResults(Size size) {
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxHeight: size.height * 0.42),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.07),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-            ),
-            child: _searching
-                ? const SizedBox(
-                    height: 64,
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        color: AppColors.electricViolet,
-                        strokeWidth: 2,
-                      ),
-                    ),
-                  )
-                : _searchResults.isEmpty
-                    ? SizedBox(
-                        height: 64,
-                        child: Center(
-                          child: Text(
-                            'No user found with that username',
-                            style: TextStyle(
-                              fontFamily: _font,
-                              fontSize: 13,
-                              color: Colors.white.withValues(alpha: 0.6),
-                            ),
-                          ),
-                        ),
-                      )
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        padding: EdgeInsets.zero,
-                        itemCount: _searchResults.length,
-                        itemBuilder: (context, index) =>
-                            _buildSearchResult(_searchResults[index]),
-                      ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSearchResult(UserEntity user) {
-    final status = _partners[user.userId];
-    final name = user.displayName.isEmpty ? user.username : user.displayName;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
+      body: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
         children: [
-          _UserAvatar(user: user, size: 40),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name.isEmpty ? 'User' : name,
-                  style: const TextStyle(
-                    fontFamily: _font,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (user.username.isNotEmpty &&
-                    user.username != user.displayName) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    '@${user.username}',
-                    style: const TextStyle(
-                      fontFamily: _font,
-                      fontSize: 11,
-                      color: AppColors.softLavender,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ],
+          const _FriendsMapSection(),
+          const SizedBox(height: 20),
+          const _NearbySection(),
+          const SizedBox(height: 20),
+          _friendSection(
+            title: 'Incoming Requests',
+            stream: _incomingRequestsStream,
+            emptyMessage: 'No pending requests',
+            itemBuilder: (f) => _IncomingRequestTile(
+              friendship: f,
+              otherUid: f.otherUserId(_uid),
+              userService: _userService,
+              onAccept: () => _accept(f),
+              onDecline: () => _decline(f),
             ),
           ),
-          if (status == 'friends')
-            _statusChip('Friends', Colors.green)
-          else if (status == 'pending')
-            _statusChip('Sent', Colors.orange)
-          else
-            GestureDetector(
-              onTap: () => _sendRequest(user),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppColors.electricViolet, Color(0xFF5A3AD4)],
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text(
-                  'Add',
-                  style: TextStyle(
-                    fontFamily: _font,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
+          const SizedBox(height: 20),
+          _friendSection(
+            title: 'Sent Requests',
+            stream: _outgoingRequestsStream,
+            emptyMessage: 'No sent requests',
+            itemBuilder: (f) => _SentRequestTile(
+              friendship: f,
+              otherUid: f.otherUserId(_uid),
+              userService: _userService,
+              onCancel: () => _cancel(f),
             ),
+          ),
+          const SizedBox(height: 20),
+          _friendSection(
+            title: 'Friends',
+            stream: _friendsStream,
+            emptyMessage: 'No friends yet',
+            itemBuilder: (f) => _ActiveFriendTile(
+              friendship: f,
+              otherUid: f.otherUserId(_uid),
+              userService: _userService,
+              onChat: () => _openChat(f.otherUserId(_uid)),
+              onRemove: () => _remove(f),
+            ),
+          ),
+          const SizedBox(height: 100),
         ],
-      ),
-    );
-  }
-
-  Widget _statusChip(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontFamily: _font,
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          color: color,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMapButton(String asset, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.6),
-          shape: BoxShape.circle,
-        ),
-        child: Center(
-          child: Image.asset(asset, width: 20, height: 20),
-        ),
       ),
     );
   }
 
   Widget _friendSection({
+    required String title,
     required Stream<List<FriendEntity>> stream,
     required String emptyMessage,
     required Widget Function(FriendEntity) itemBuilder,
@@ -557,28 +148,46 @@ class _FriendsPageState extends State<FriendsPage> {
       stream: stream,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return const _EmptyState(
-              'Something went wrong. Pull to refresh and try again.');
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SectionHeader(title),
+              const _EmptyState('Something went wrong. Pull to refresh and try again.'),
+            ],
+          );
         }
         if (snapshot.connectionState == ConnectionState.waiting &&
             !snapshot.hasData) {
-          return const Padding(
-            padding: EdgeInsets.only(bottom: 12),
-            child: SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                color: AppColors.electricViolet,
-                strokeWidth: 2,
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SectionHeader(title),
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    color: AppColors.electricViolet,
+                    strokeWidth: 2,
+                  ),
+                ),
               ),
-            ),
+            ],
           );
         }
         final list = snapshot.data ?? const <FriendEntity>[];
-        if (list.isEmpty) return _EmptyState(emptyMessage);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: list.map(itemBuilder).toList(),
+          children: [
+            _SectionHeader(
+              list.isNotEmpty ? '$title (${list.length})' : title,
+            ),
+            if (list.isEmpty)
+              _EmptyState(emptyMessage)
+            else
+              ...list.map(itemBuilder),
+          ],
         );
       },
     );
@@ -669,492 +278,25 @@ class _FriendsPageState extends State<FriendsPage> {
       );
     }
   }
+}
 
-  // ── Map logic ──────────────────────────────────────────────────────────────
+// ── Section Header ───────────────────────────────────────────────────────────
 
-  Future<void> _loadMap() async {
-    setState(() => _mapLoading = true);
-    try {
-      Position? position;
-      try {
-        position = await _locationService.getCurrentPosition();
-      } catch (_) {
-        position = null;
-      }
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  const _SectionHeader(this.title);
 
-      if (position == null) {
-        if (!mounted) return;
-        setState(() => _mapLoading = false);
-        return;
-      }
-
-      await _userService.updateLocationIfNeeded(
-        _uid,
-        position.latitude,
-        position.longitude,
-      );
-
-      final users = await _userService.findNearbyUsers(
-        position.latitude,
-        position.longitude,
-        excludeUid: _uid,
-      );
-      final partners = await _friendService.getPartnerStatusMap(_uid);
-
-      final markers = <Marker>[];
-      for (final user in users) {
-        if (user.latitude != null && user.longitude != null) {
-          markers.add(
-            Marker(
-              point: LatLng(user.latitude!, user.longitude!),
-              width: 40,
-              height: 40,
-              child: GestureDetector(
-                onTap: () => _showUserSheet(user, partners[user.userId]),
-                child: _UserAvatar(user: user, size: 32),
-              ),
-            ),
-          );
-        }
-      }
-
-      if (!mounted) return;
-      final hadMap = _position != null;
-      setState(() {
-        _mapLoading = false;
-        _position = position;
-        _partners = partners;
-        _markers = markers;
-      });
-      if (hadMap) {
-        // Re-center on the freshly obtained position (the map stays mounted).
-        _mapController.move(
-          LatLng(position.latitude, position.longitude),
-          _mapController.camera.zoom,
-        );
-      }
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _mapLoading = false);
-    }
-  }
-
-  void _zoomOut() {
-    if (_position == null) return;
-    final camera = _mapController.camera;
-    _mapController.move(camera.center, math.max(3, camera.zoom - 2));
-  }
-
-  Future<void> _sendRequest(UserEntity user) async {
-    try {
-      await _friendService.sendRequest(_uid, user.userId);
-      if (!mounted) return;
-      setState(() => _partners[user.userId] = 'pending');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Request sent to @${user.username}')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
-    }
-  }
-
-  // ── Floating search logic (relocated from AddFriendPage) ──────────────────
-
-  Future<void> _onSearch() async {
-    final query = _searchCtrl.text.trim();
-    if (query.isEmpty) return;
-
-    _searchActive = true;
-    setState(() => _searching = true);
-    try {
-      final results = await _friendService.searchUsers(query, excludeUid: _uid);
-      final partners = await _friendService.getPartnerStatusMap(_uid);
-      if (!mounted || !_searchActive) return;
-      setState(() {
-        _partners = partners;
-        _searchResults = results;
-        _hasSearched = true;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
-    } finally {
-      if (mounted) setState(() => _searching = false);
-    }
-  }
-
-  void _clearSearch() {
-    _searchCtrl.clear();
-    _searchActive = false;
-    setState(() {
-      _hasSearched = false;
-      _searchResults = [];
-    });
-  }
-
-  void _dismissSearch() {
-    FocusScope.of(context).unfocus();
-    if (_hasSearched || _searching || _searchActive) {
-      _searchActive = false;
-      setState(() {
-        _hasSearched = false;
-        _searchResults = [];
-      });
-    }
-  }
-
-  // ── Swipeable glass panel ─────────────────────────────────────────────────
-
-  void _openPanel() {
-    if (_panelOpen) return;
-    _dismissSearch();
-    setState(() => _panelOpen = true);
-    navBarHidden.value = true;
-  }
-
-  void _closePanel() {
-    if (!_panelOpen) return;
-    setState(() => _panelOpen = false);
-    navBarHidden.value = false;
-  }
-
-  Widget _buildPanel() {
-    final padding = MediaQuery.paddingOf(context);
-
-    return IgnorePointer(
-      ignoring: !_panelOpen,
-      child: AnimatedOpacity(
-        opacity: _panelOpen ? 1 : 0,
-        duration: const Duration(milliseconds: 250),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(28),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.14),
-                  width: 1,
-                ),
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    const Color(0xFF1A0F2E).withValues(alpha: 0.55),
-                    const Color(0xFF120A20).withValues(alpha: 0.8),
-                  ],
-                ),
-              ),
-              child: Column(
-                children: [
-                  _buildPanelHeader(),
-                  Expanded(
-                    child: IndexedStack(
-                      index: _activeTab,
-                      children: [
-                        _buildTabBody(0),
-                        _buildTabBody(1),
-                        _buildTabBody(2),
-                        _buildTabBody(3),
-                      ],
-                    ),
-                  ),
-                  SizedBox(
-                    height: padding.bottom > 0 ? padding.bottom : 12,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPanelHeader() {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onVerticalDragStart: (_) => _panelDrag = 0,
-      onVerticalDragUpdate: (d) => _panelDrag += d.delta.dy,
-      onVerticalDragEnd: (_) {
-        final shouldClose = _panelDrag > 50;
-        _panelDrag = 0;
-        if (shouldClose) _closePanel();
-      },
-      child: Container(
-        color: Colors.transparent,
-        width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-        child: Column(
-          children: [
-            // Grabber — also tappable to close.
-            GestureDetector(
-              onTap: _closePanel,
-              child: Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                _buildTab(0, null),
-                _buildTab(1, _incomingRequestsStream),
-                _buildTab(2, _outgoingRequestsStream),
-                _buildTab(3, _friendsStream),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTab(int index, Stream<List<FriendEntity>>? countStream) {
-    final active = _activeTab == index;
-    final style = TextStyle(
-      fontFamily: _font,
-      fontSize: 11,
-      fontWeight: active ? FontWeight.w700 : FontWeight.w600,
-      color: active ? Colors.white : Colors.white60,
-    );
-
-    final Widget label;
-    if (countStream == null) {
-      label = Text(_tabLabels[index], style: style, maxLines: 1);
-    } else {
-      label = StreamBuilder<List<FriendEntity>>(
-        stream: countStream,
-        builder: (context, snapshot) {
-          final n = snapshot.data?.length ?? 0;
-          return Text(
-            n > 0 ? '${_tabLabels[index]} ($n)' : _tabLabels[index],
-            style: style,
-            maxLines: 1,
-          );
-        },
-      );
-    }
-
-    return Expanded(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          if (!active) setState(() => _activeTab = index);
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          margin: const EdgeInsets.symmetric(horizontal: 3),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-          decoration: BoxDecoration(
-            color: active
-                ? _pink.withValues(alpha: 0.12)
-                : Colors.white.withValues(alpha: 0.04),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: active
-                  ? _pink.withValues(alpha: 0.45)
-                  : Colors.white.withValues(alpha: 0.08),
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              FittedBox(fit: BoxFit.scaleDown, child: label),
-              const SizedBox(height: 4),
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                width: active ? 16 : 0,
-                height: 2.5,
-                decoration: BoxDecoration(
-                  color: _pink,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTabBody(int index) {
-    const listPadding = EdgeInsets.fromLTRB(16, 4, 16, 16);
-
-    switch (index) {
-      case 0:
-        return ListView(
-          padding: listPadding,
-          children: const [_NearbySection(showHeader: false)],
-        );
-      case 1:
-        return ListView(
-          padding: listPadding,
-          children: [
-            _friendSection(
-              stream: _incomingRequestsStream,
-              emptyMessage: 'No pending requests',
-              itemBuilder: (f) => _IncomingRequestTile(
-                friendship: f,
-                otherUid: f.otherUserId(_uid),
-                userService: _userService,
-                onAccept: () => _accept(f),
-                onDecline: () => _decline(f),
-              ),
-            ),
-          ],
-        );
-      case 2:
-        return ListView(
-          padding: listPadding,
-          children: [
-            _friendSection(
-              stream: _outgoingRequestsStream,
-              emptyMessage: 'No sent requests',
-              itemBuilder: (f) => _SentRequestTile(
-                friendship: f,
-                otherUid: f.otherUserId(_uid),
-                userService: _userService,
-                onCancel: () => _cancel(f),
-              ),
-            ),
-          ],
-        );
-      default:
-        return ListView(
-          padding: listPadding,
-          children: [
-            _friendSection(
-              stream: _friendsStream,
-              emptyMessage: 'No friends yet',
-              itemBuilder: (f) => _ActiveFriendTile(
-                friendship: f,
-                otherUid: f.otherUserId(_uid),
-                userService: _userService,
-                onChat: () => _openChat(f.otherUserId(_uid)),
-                onRemove: () => _remove(f),
-              ),
-            ),
-          ],
-        );
-    }
-  }
-
-  void _showUserSheet(UserEntity user, String? status) {
-    final name = user.displayName.isNotEmpty
-        ? user.displayName
-        : (user.username.isNotEmpty ? user.username : 'User');
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1E1233),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _UserAvatar(user: user, size: 56),
-            const SizedBox(height: 12),
-            Text(
-              name,
-              style: const TextStyle(
-                fontFamily: _font,
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-              ),
-            ),
-            if (user.username.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                '@${user.username}',
-                style: TextStyle(
-                  fontFamily: _font,
-                  fontSize: 12,
-                  color: Colors.white.withValues(alpha: 0.5),
-                ),
-              ),
-            ],
-            const SizedBox(height: 16),
-            if (status == 'friends')
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.green.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text(
-                  'Friends',
-                  style: TextStyle(
-                    fontFamily: _font,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.green,
-                  ),
-                ),
-              )
-            else if (status == 'pending')
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text(
-                  'Request Sent',
-                  style: TextStyle(
-                    fontFamily: _font,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.orange,
-                  ),
-                ),
-              )
-            else
-              GestureDetector(
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _sendRequest(user);
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 24, vertical: 10),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [AppColors.electricViolet, Color(0xFF5A3AD4)],
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text(
-                    'Add Friend',
-                    style: TextStyle(
-                      fontFamily: _font,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-            const SizedBox(height: 8),
-          ],
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontFamily: _font,
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
         ),
       ),
     );
@@ -1186,11 +328,7 @@ class _EmptyState extends StatelessWidget {
 // ── Nearby Section ──────────────────────────────────────────────────────────
 
 class _NearbySection extends StatefulWidget {
-  /// When `false` the section title is omitted (the enclosing panel tab
-  /// provides it) and only a compact rescan button is shown above the card.
-  final bool showHeader;
-
-  const _NearbySection({this.showHeader = true});
+  const _NearbySection();
 
   @override
   State<_NearbySection> createState() => _NearbySectionState();
@@ -1308,47 +446,6 @@ class _NearbySectionState extends State<_NearbySection> {
 
   @override
   Widget build(BuildContext context) {
-    // Card
-    final card = ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.10),
-              width: 1,
-            ),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                const Color(0xFF1A0F2E).withValues(alpha: 0.4),
-                AppColors.electricViolet.withValues(alpha: 0.08),
-                const Color(0xFF120A20).withValues(alpha: 0.4),
-              ],
-            ),
-          ),
-          child: _buildContent(),
-        ),
-      ),
-    );
-
-    if (!widget.showHeader) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: _buildScanButton(),
-          ),
-          card,
-        ],
-      );
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1370,39 +467,61 @@ class _NearbySectionState extends State<_NearbySection> {
                   ),
                 ),
               ),
-              _buildScanButton(),
+              GestureDetector(
+                onTap: _scanning ? null : _scanSurroundings,
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: AppColors.electricViolet.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: _scanning
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            color: AppColors.electricViolet,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.refresh,
+                          color: AppColors.electricViolet,
+                          size: 14,
+                        ),
+                ),
+              ),
             ],
           ),
         ),
-        card,
-      ],
-    );
-  }
-
-  Widget _buildScanButton() {
-    return GestureDetector(
-      onTap: _scanning ? null : _scanSurroundings,
-      child: Container(
-        padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(
-          color: AppColors.electricViolet.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: _scanning
-            ? const SizedBox(
-                width: 14,
-                height: 14,
-                child: CircularProgressIndicator(
-                  color: AppColors.electricViolet,
-                  strokeWidth: 2,
+        // Card
+        ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.10),
+                  width: 1,
                 ),
-              )
-            : const Icon(
-                Icons.refresh,
-                color: AppColors.electricViolet,
-                size: 14,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    const Color(0xFF1A0F2E).withValues(alpha: 0.4),
+                    AppColors.electricViolet.withValues(alpha: 0.08),
+                    const Color(0xFF120A20).withValues(alpha: 0.4),
+                  ],
+                ),
               ),
-      ),
+              child: _buildContent(),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1628,6 +747,386 @@ class _GlassCard extends StatelessWidget {
             ),
           ),
           child: child,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Friends Map Section ──────────────────────────────────────────────────────
+
+class _FriendsMapSection extends StatefulWidget {
+  const _FriendsMapSection();
+
+  @override
+  State<_FriendsMapSection> createState() => _FriendsMapSectionState();
+}
+
+class _FriendsMapSectionState extends State<_FriendsMapSection> {
+  final _auth = FirebaseAuth.instance;
+  final _locationService = LocationService();
+  final _userService = UserService();
+  final _friendService = FriendService();
+
+  bool _isLoading = true;
+  bool _expanded = false;
+  Position? _position;
+  Map<String, String> _partners = {};
+  List<Marker> _markers = [];
+
+  String get _uid => _auth.currentUser!.uid;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _isLoading = true);
+    try {
+      Position? position;
+      try {
+        position = await _locationService.getCurrentPosition();
+      } catch (_) {
+        position = null;
+      }
+
+      if (position == null) {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      await _userService.updateLocationIfNeeded(
+        _uid,
+        position.latitude,
+        position.longitude,
+      );
+
+      final users = await _userService.findNearbyUsers(
+        position.latitude,
+        position.longitude,
+        excludeUid: _uid,
+      );
+      final partners = await _friendService.getPartnerStatusMap(_uid);
+
+      final markers = <Marker>[];
+      for (final user in users) {
+        if (user.latitude != null && user.longitude != null) {
+          markers.add(
+            Marker(
+              point: LatLng(user.latitude!, user.longitude!),
+              width: 40,
+              height: 40,
+              child: GestureDetector(
+                onTap: () => _showUserSheet(user, partners[user.userId]),
+                child: _UserAvatar(user: user, size: 32),
+              ),
+            ),
+          );
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _position = position;
+        _partners = partners;
+        _markers = markers;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _sendRequest(UserEntity user) async {
+    try {
+      await _friendService.sendRequest(_uid, user.userId);
+      if (!mounted) return;
+      setState(() => _partners[user.userId] = 'pending');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Request sent to @${user.username}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        height: _expanded ? MediaQuery.of(context).size.height * 0.7 : 300,
+        width: double.infinity,
+        child: _isLoading
+            ? Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      const Color(0xFF1A0F2E),
+                      AppColors.electricViolet.withValues(alpha: 0.25),
+                      const Color(0xFF120A20),
+                    ],
+                  ),
+                ),
+                child: const Center(
+                  child: CircularProgressIndicator(
+                    color: AppColors.electricViolet,
+                    strokeWidth: 2,
+                  ),
+                ),
+              )
+            : _position == null
+                ? Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          const Color(0xFF1A0F2E),
+                          AppColors.electricViolet.withValues(alpha: 0.25),
+                          const Color(0xFF120A20),
+                        ],
+                      ),
+                    ),
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.location_off,
+                              color: Colors.white.withValues(alpha: 0.4), size: 32),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Location unavailable',
+                            style: TextStyle(
+                              fontFamily: _font,
+                              fontSize: 13,
+                              color: Colors.white.withValues(alpha: 0.4),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : Stack(
+                    children: [
+                      FlutterMap(
+                        options: MapOptions(
+                          initialCenter: LatLng(_position!.latitude, _position!.longitude),
+                          initialZoom: 15,
+                        ),
+                        children: [
+                          TileLayer(
+                            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'com.example.wedo',
+                          ),
+                          MarkerLayer(markers: _markers),
+                          // User location marker
+                          MarkerLayer(
+                            markers: [
+                              Marker(
+                                point: LatLng(_position!.latitude, _position!.longitude),
+                                width: 80,
+                                height: 54,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withValues(alpha: 0.8),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: const Text(
+                                        'Me',
+                                        style: TextStyle(
+                                          fontFamily: _font,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.white,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Container(
+                                      width: 16,
+                                      height: 16,
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 3),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.blue.withValues(alpha: 0.5),
+                                            blurRadius: 8,
+                                            spreadRadius: 2,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      // Buttons
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Column(
+                          children: [
+                            GestureDetector(
+                              onTap: () => setState(() => _expanded = !_expanded),
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.6),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  _expanded ? Icons.fullscreen_exit : Icons.fullscreen,
+                                  color: AppColors.electricViolet,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            GestureDetector(
+                              onTap: _load,
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.6),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.refresh,
+                                  color: AppColors.electricViolet,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+      ),
+    );
+  }
+
+  void _showUserSheet(UserEntity user, String? status) {
+    final name = user.displayName.isNotEmpty
+        ? user.displayName
+        : (user.username.isNotEmpty ? user.username : 'User');
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E1233),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _UserAvatar(user: user, size: 56),
+            const SizedBox(height: 12),
+            Text(
+              name,
+              style: const TextStyle(
+                fontFamily: _font,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+            if (user.username.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                '@${user.username}',
+                style: TextStyle(
+                  fontFamily: _font,
+                  fontSize: 12,
+                  color: Colors.white.withValues(alpha: 0.5),
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            if (status == 'friends')
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Friends',
+                  style: TextStyle(
+                    fontFamily: _font,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.green,
+                  ),
+                ),
+              )
+            else if (status == 'pending')
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Request Sent',
+                  style: TextStyle(
+                    fontFamily: _font,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.orange,
+                  ),
+                ),
+              )
+            else
+              GestureDetector(
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _sendRequest(user);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [AppColors.electricViolet, Color(0xFF5A3AD4)],
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'Add Friend',
+                    style: TextStyle(
+                      fontFamily: _font,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 8),
+          ],
         ),
       ),
     );
