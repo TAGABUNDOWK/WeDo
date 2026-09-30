@@ -29,23 +29,23 @@ class SpinWheelPainter extends CustomPainter {
     canvas.translate(center.dx, center.dy);
     canvas.rotate(rotation);
 
-    // Ambient glow behind the wheel - layer 1 (purple)
+    // Ambient glow behind the wheel - layer 1 (vibrant purple core)
     final glowPaint = Paint()
-      ..color = const Color(0xFF8B5CF6).withValues(alpha: 0.35)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 28);
-    canvas.drawCircle(Offset.zero, radius + 14, glowPaint);
+      ..color = const Color(0xFF8B5CF6).withValues(alpha: 0.50)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 30);
+    canvas.drawCircle(Offset.zero, radius + 16, glowPaint);
 
-    // Second glow layer tinted pink
+    // Second glow layer (magenta/pink spread)
     final glowPaint2 = Paint()
-      ..color = const Color(0xFFFE4EF0).withValues(alpha: 0.18)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 40);
-    canvas.drawCircle(Offset.zero, radius + 22, glowPaint2);
+      ..color = const Color(0xFFFE4EF0).withValues(alpha: 0.32)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 48);
+    canvas.drawCircle(Offset.zero, radius + 26, glowPaint2);
 
-    // Third glow layer - vibrant outer ring
+    // Third glow layer - wide ambient halo
     final glowPaint3 = Paint()
-      ..color = const Color(0xFFC026D3).withValues(alpha: 0.12)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 50);
-    canvas.drawCircle(Offset.zero, radius + 30, glowPaint3);
+      ..color = const Color(0xFFC026D3).withValues(alpha: 0.20)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 68);
+    canvas.drawCircle(Offset.zero, radius + 36, glowPaint3);
 
     // Draw segments
     for (int i = 0; i < options.length; i++) {
@@ -101,13 +101,16 @@ class SpinWheelPainter extends CustomPainter {
     }
 
     // Draw labels
+    // Multi-line labels are stored as typed but painted as a single line so
+    // segment sizing/truncation math stays correct.
+    String singleLine(String s) => s.replaceAll('\n', ' ').trim();
     if (options.length == 1) {
-      final option = options[0];
+      final label = singleLine(options[0].label);
       const fontSize = 14.0;
 
       final textPainter = TextPainter(
         text: TextSpan(
-          text: option.label,
+          text: label,
           style: TextStyle(
             color: Colors.white,
             fontSize: fontSize,
@@ -132,7 +135,7 @@ class SpinWheelPainter extends CustomPainter {
       final arcWidth = segmentAngle * labelRadius;
 
       final maxLabelLen =
-          options.map((o) => o.label.length).fold(0, math.max);
+          options.map((o) => singleLine(o.label).length).fold(0, math.max);
 
       double fontSize = maxLabelLen > 0
           ? (arcWidth / (maxLabelLen * 0.6)).clamp(7.0, 14.0)
@@ -148,9 +151,10 @@ class SpinWheelPainter extends CustomPainter {
         final labelX = labelRadius * math.cos(midAngle);
         final labelY = labelRadius * math.sin(midAngle);
 
-        final displayLabel = option.label.length > maxChars
-            ? '${option.label.substring(0, maxChars)}...'
-            : option.label;
+        final label = singleLine(option.label);
+        final displayLabel = label.length > maxChars
+            ? '${label.substring(0, maxChars)}...'
+            : label;
 
         canvas.save();
         canvas.translate(labelX, labelY);
@@ -215,15 +219,15 @@ class SpinWheelPainter extends CustomPainter {
 
     // Hub shadow - outer glow
     final hubShadowPaint = Paint()
-      ..color = const Color(0xFFFE4EF0).withValues(alpha: 0.35)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20);
-    canvas.drawCircle(Offset.zero, 40, hubShadowPaint);
+      ..color = const Color(0xFFFE4EF0).withValues(alpha: 0.50)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 22);
+    canvas.drawCircle(Offset.zero, 42, hubShadowPaint);
 
     // Hub outer glow ring
     final hubOuterGlow = Paint()
-      ..color = const Color(0xFF8B5CF6).withValues(alpha: 0.2)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
-    canvas.drawCircle(Offset.zero, 34, hubOuterGlow);
+      ..color = const Color(0xFF8B5CF6).withValues(alpha: 0.30)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14);
+    canvas.drawCircle(Offset.zero, 35, hubOuterGlow);
 
     // Hub body
     final hubPaint = Paint()
@@ -290,8 +294,8 @@ class SpinWheelPainter extends CustomPainter {
 
     // Pointer glow halo
     final glowPaint = Paint()
-      ..color = const Color(0xFFFE4EF0).withValues(alpha: 0.4)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
+      ..color = const Color(0xFFFE4EF0).withValues(alpha: 0.65)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16);
     canvas.drawPath(pointerPath, glowPaint);
 
     // Pointer shadow

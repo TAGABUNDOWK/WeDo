@@ -1,26 +1,47 @@
 import 'package:flutter/material.dart';
 
-/// Renders a player as a round mascot blob avatar. Uses the player's preset
-/// `avatar_asset` when available and falls back to the app's purple blob with
-/// two dot eyes.
+/// Renders a player as a round mascot blob avatar. Priority: the player's
+/// custom profile photo (`photo_url`) when available, then their preset
+/// `avatar_asset`, then the app's purple blob with two dot eyes.
 class LeaderboardAvatar extends StatelessWidget {
+  final String? photoUrl;
   final String? asset;
   final double size;
 
-  const LeaderboardAvatar({super.key, this.asset, required this.size});
+  const LeaderboardAvatar({
+    super.key,
+    this.photoUrl,
+    this.asset,
+    required this.size,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final fallback = _blobAvatar(size);
+    final url = photoUrl?.trim() ?? '';
+    if (url.isNotEmpty) {
+      return ClipOval(
+        child: Image.network(
+          url,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _assetOrBlob(),
+        ),
+      );
+    }
+    return _assetOrBlob();
+  }
+
+  Widget _assetOrBlob() {
     final path = asset?.trim() ?? '';
-    if (path.isEmpty) return fallback;
+    if (path.isEmpty) return _blobAvatar(size);
     return ClipOval(
       child: Image.asset(
         path,
         width: size,
         height: size,
         fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => fallback,
+        errorBuilder: (context, error, stackTrace) => _blobAvatar(size),
       ),
     );
   }

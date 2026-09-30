@@ -34,6 +34,9 @@ class _LeaderboardSectionState extends State<LeaderboardSection> {
   LeaderboardScope _scope = LeaderboardScope.overall;
   LeaderboardCategory _category = LeaderboardCategory.pickFightWins;
   final Set<String> _favorites = <String>{};
+  final Map<String, String> _photoUrls = <String, String>{};
+  final Set<String> _photoQueued = <String>{};
+  final SessionService _sessionService = SessionService();
   List<String> _friendUids = const [];
   StreamSubscription<List<FriendEntity>>? _friendsSub;
   Timer? _friendsTimer;
@@ -108,6 +111,20 @@ class _LeaderboardSectionState extends State<LeaderboardSection> {
       if (!_favorites.remove(entry.userId)) {
         _favorites.add(entry.userId);
       }
+    });
+  }
+
+  /// Resolves custom profile photos (users/{id}.photo_url) for the uids that
+  /// are actually rendered. Each uid is fetched at most once per widget life;
+  /// uids without a photo stay absent so they fall back to preset/blob.
+  void _resolvePhotos(List<String> uids) {
+    final missing =
+        uids.where((id) => id.isNotEmpty && !_photoQueued.contains(id)).toList();
+    if (missing.isEmpty) return;
+    _photoQueued.addAll(missing);
+    _sessionService.fetchProfilePhotos(missing).then((photos) {
+      if (!mounted) return;
+      setState(() => _photoUrls.addAll(photos));
     });
   }
 
@@ -554,6 +571,11 @@ class _LeaderboardSectionState extends State<LeaderboardSection> {
     final podium = sorted.take(3).toList();
     final rest = sorted.skip(3).take(_listUpperBound - 3).toList();
 
+    _resolvePhotos([
+      ...sorted.take(_listUpperBound).map((e) => e.userId),
+      _uid,
+    ]);
+
     return Column(
       children: [
         LeaderboardPodium(
@@ -561,6 +583,7 @@ class _LeaderboardSectionState extends State<LeaderboardSection> {
           currentUid: _uid,
           field: _category.field,
           favorites: _favorites,
+          photoUrls: _photoUrls,
           onStarToggle: _toggleFavorite,
         ),
         const SizedBox(height: 14),
@@ -595,6 +618,7 @@ class _LeaderboardSectionState extends State<LeaderboardSection> {
               field: _category.field,
               isCurrentUser: entry.userId == uid,
               favorited: _favorites.contains(entry.userId),
+              photoUrl: _photoUrls[entry.userId],
               onStarToggle: () => _toggleFavorite(entry),
             ),
           ],
@@ -668,6 +692,7 @@ class _LeaderboardSectionState extends State<LeaderboardSection> {
               nameOverride: 'You',
               isCurrentUser: true,
               favorited: true,
+              photoUrl: _photoUrls[uid],
               onStarToggle: () {},
               score: '${own.scoreFor(_category.field)}',
             );
