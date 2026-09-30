@@ -134,62 +134,57 @@ class _CallScreenState extends State<CallScreen> {
     _pinchTriggered = false;
   }
 
-  void _onPeerTapped(String? peerId) {
+  void _focusPeer(String peerId) {
+    if (_focusedPeerId == peerId) return;
     setState(() {
-      _focusedPeerId = (_focusedPeerId == peerId) ? null : peerId;
+      _focusedPeerId = peerId;
+    });
+  }
+
+  void _clearFocus() {
+    if (_focusedPeerId == null) return;
+    setState(() {
+      _focusedPeerId = null;
     });
   }
 
   Future<void> _loadParticipantNames() async {
     final myUid = FirebaseAuth.instance.currentUser?.uid;
-    if (myUid != null && !_participantNames.containsKey(myUid)) {
+    final pending = <String>{
+      if (myUid != null && !_participantNames.containsKey(myUid)) myUid,
+      for (final uid in widget.members)
+        if (!_participantNames.containsKey(uid)) uid,
+    };
+    if (pending.isEmpty) return;
+
+    final names = <String, String>{};
+    final photos = <String, String>{};
+
+    for (final uid in pending) {
       try {
-        final user = await _userService.getUserDocument(myUid);
-        if (user != null && mounted) {
-          setState(() {
-            _participantNames[myUid] = user.displayName.isNotEmpty
-                ? user.displayName
-                : (user.username.isNotEmpty ? user.username : myUid);
-            if (user.photoUrl != null && user.photoUrl!.isNotEmpty) {
-              _participantPhotos[myUid] = user.photoUrl!;
-            } else if (user.avatarAsset != null && user.avatarAsset!.isNotEmpty) {
-              _participantPhotos[myUid] = 'asset:${user.avatarAsset!}';
-            }
-          });
+        final user = await _userService.getUserDocument(uid);
+        if (user != null) {
+          names[uid] = user.displayName.isNotEmpty
+              ? user.displayName
+              : (user.username.isNotEmpty ? user.username : uid);
+          if (user.photoUrl != null && user.photoUrl!.isNotEmpty) {
+            photos[uid] = user.photoUrl!;
+          } else if (user.avatarAsset != null && user.avatarAsset!.isNotEmpty) {
+            photos[uid] = 'asset:${user.avatarAsset!}';
+          }
+        } else {
+          names[uid] = uid;
         }
       } catch (_) {
-        if (mounted) {
-          setState(() {
-            _participantNames[myUid] = myUid;
-          });
-        }
+        names[uid] = uid;
       }
     }
 
-    for (final uid in widget.members) {
-      if (_participantNames.containsKey(uid)) continue;
-      try {
-        final user = await _userService.getUserDocument(uid);
-        if (user != null && mounted) {
-          setState(() {
-            _participantNames[uid] = user.displayName.isNotEmpty
-                ? user.displayName
-                : (user.username.isNotEmpty ? user.username : uid);
-            if (user.photoUrl != null && user.photoUrl!.isNotEmpty) {
-              _participantPhotos[uid] = user.photoUrl!;
-            } else if (user.avatarAsset != null && user.avatarAsset!.isNotEmpty) {
-              _participantPhotos[uid] = 'asset:${user.avatarAsset!}';
-            }
-          });
-        }
-      } catch (_) {
-        if (mounted) {
-          setState(() {
-            _participantNames[uid] = uid;
-          });
-        }
-      }
-    }
+    if (!mounted || names.isEmpty) return;
+    setState(() {
+      _participantNames.addAll(names);
+      _participantPhotos.addAll(photos);
+    });
   }
 
   String _getParticipantName(String uid) {
@@ -244,7 +239,9 @@ class _CallScreenState extends State<CallScreen> {
 
   void _initPipPosition(BoxConstraints constraints) {
     if (!_pipInitialized) {
-      _pipPosition = Offset(constraints.maxWidth - 136, 16);
+      _pipPosition = widget.isGroup
+          ? Offset(16, constraints.maxHeight - 160 - 140)
+          : Offset(constraints.maxWidth - 136, 16);
       _pipInitialized = true;
     }
   }
@@ -299,13 +296,14 @@ class _CallScreenState extends State<CallScreen> {
             return Stack(
               children: [
                 if (isVideo) ...[
-                  if (widget.isGroup)
+                  if (widget.isGroup) ...[
                     GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onDoubleTap: _focusedPeerId != null ? _flipCamera : null,
                       child: _buildGroupView(constraints),
-                    )
-                  else ...[
+                    ),
+                    if (_hasLocalStream) _buildDraggablePip(constraints),
+                  ] else ...[
                     _buildVideoBackground(),
                     if (_hasRemoteStream && _hasLocalStream)
                       _buildDraggablePip(constraints),
@@ -346,21 +344,17 @@ class _CallScreenState extends State<CallScreen> {
 
   Widget _buildGroupView(BoxConstraints constraints) {
     final renderers = _callManager.remoteRenderers;
-    final hasLocalStream = _callManager.localRenderer?.srcObject != null;
-    final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
 
-    if (_focusedPeerId != null && renderers.containsKey(_focusedPeerId)) {
+    // Drop stale focus (e.g. renderer disposed during a group reconnect).
+    if (_focusedPeerId != null && !renderers.containsKey(_focusedPeerId)) {
+      _focusedPeerId = null;
+    }
+
+    if (_focusedPeerId != null) {
       return _buildFocusedPeerView(constraints, renderers.entries.toList());
     }
 
     final participants = <_Participant>[];
-    if (hasLocalStream) {
-      participants.add(_Participant(
-        uid: myUid,
-        renderer: _callManager.localRenderer,
-        isLocal: true,
-      ));
-    }
     for (final entry in renderers.entries) {
       participants.add(_Participant(
         uid: entry.key,
@@ -426,7 +420,9 @@ class _CallScreenState extends State<CallScreen> {
 
     return Positioned.fill(
       child: GestureDetector(
-        onTap: participant.isLocal ? null : () => _onPeerTapped(participant.uid),
+        key: ValueKey(participant.uid),
+        behavior: HitTestBehavior.opaque,
+        onTap: participant.isLocal ? null : () => _focusPeer(participant.uid),
         child: hasVideo
             ? FittedBox(
                 fit: BoxFit.cover,
@@ -554,7 +550,9 @@ class _CallScreenState extends State<CallScreen> {
         : _getParticipantName(participant.uid);
 
     return GestureDetector(
-      onTap: participant.isLocal ? null : () => _onPeerTapped(participant.uid),
+      key: ValueKey(participant.uid),
+      behavior: HitTestBehavior.opaque,
+      onTap: participant.isLocal ? null : () => _focusPeer(participant.uid),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: Stack(
@@ -614,15 +612,6 @@ class _CallScreenState extends State<CallScreen> {
     final hasVideo = _hasActiveVideo(focusedEntry.value);
 
     final miniParticipants = <_Participant>[];
-    final localRenderer = _callManager.localRenderer;
-    if (localRenderer != null && localRenderer.srcObject != null) {
-      final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
-      miniParticipants.add(_Participant(
-        uid: myUid,
-        renderer: localRenderer,
-        isLocal: true,
-      ));
-    }
     for (final entry in entries) {
       if (entry.key != _focusedPeerId) {
         miniParticipants.add(_Participant(
@@ -637,7 +626,8 @@ class _CallScreenState extends State<CallScreen> {
       children: [
         Positioned.fill(
           child: GestureDetector(
-            onTap: () => _onPeerTapped(focusedEntry.key),
+            behavior: HitTestBehavior.opaque,
+            onTap: _clearFocus,
             child: hasVideo
                 ? FittedBox(
                     fit: BoxFit.cover,
@@ -697,9 +687,11 @@ class _CallScreenState extends State<CallScreen> {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: GestureDetector(
+                  key: ValueKey(participant.uid),
+                  behavior: HitTestBehavior.opaque,
                   onTap: participant.isLocal
                       ? null
-                      : () => _onPeerTapped(participant.uid),
+                      : () => _focusPeer(participant.uid),
                   child: Container(
                     width: 80,
                     height: 100,
@@ -892,12 +884,15 @@ class _CallScreenState extends State<CallScreen> {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    Text(
-                      formatSeconds(_callManager.callDuration),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 13,
+                    ValueListenableBuilder<int>(
+                      valueListenable: _callManager.callDurationListenable,
+                      builder: (context, value, _) => Text(
+                        formatSeconds(value),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
                   ],
@@ -957,10 +952,13 @@ class _CallScreenState extends State<CallScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            formatSeconds(_callManager.callDuration),
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white70, fontSize: 16),
+          ValueListenableBuilder<int>(
+            valueListenable: _callManager.callDurationListenable,
+            builder: (context, value, _) => Text(
+              formatSeconds(value),
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70, fontSize: 16),
+            ),
           ),
           if (widget.isGroup) ...[
             const SizedBox(height: 8),
@@ -1082,47 +1080,54 @@ class _CallScreenState extends State<CallScreen> {
         top: false,
         child: Padding(
           padding: const EdgeInsets.only(bottom: 20),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (includeCamera)
-                _buildFloatingControlButton(
-                  asset: _callManager.isVideoOff
-                      ? 'assets/icons/camera-off.png'
-                      : 'assets/icons/camera-on.png',
-                  fallbackIcon: _callManager.isVideoOff
-                      ? Icons.videocam_off
-                      : Icons.videocam,
-                  onTap: _callManager.toggleVideo,
-                  dimmed: _callManager.isVideoOff,
-                ),
-              _buildFloatingControlButton(
-                asset: _callManager.isMuted
-                    ? 'assets/icons/mic-on.png'
-                    : 'assets/icons/mic-off.png',
-                fallbackIcon: _callManager.isMuted ? Icons.mic : Icons.mic_off,
-                onTap: _callManager.toggleMute,
-                dimmed: _callManager.isMuted,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(36),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (includeCamera)
+                    _buildFloatingControlButton(
+                      asset: _callManager.isVideoOff
+                          ? 'assets/icons/camera-off.png'
+                          : 'assets/icons/camera-on.png',
+                      fallbackIcon: _callManager.isVideoOff
+                          ? Icons.videocam_off
+                          : Icons.videocam,
+                      onTap: _callManager.toggleVideo,
+                      dimmed: _callManager.isVideoOff,
+                    ),
+                  _buildFloatingControlButton(
+                    asset: _callManager.isMuted
+                        ? 'assets/icons/mic-off.png'
+                        : 'assets/icons/mic-on.png',
+                    fallbackIcon:
+                        _callManager.isMuted ? Icons.mic_off : Icons.mic,
+                    onTap: _callManager.toggleMute,
+                    dimmed: _callManager.isMuted,
+                  ),
+                  _buildFloatingControlButton(
+                    asset: _callManager.isSpeakerOn
+                        ? 'assets/icons/speaker-high.png'
+                        : 'assets/icons/speaker-low.png',
+                    fallbackIcon: _callManager.isSpeakerOn
+                        ? Icons.volume_up
+                        : Icons.volume_down,
+                    onTap: _callManager.toggleSpeaker,
+                  ),
+                  _buildFloatingControlButton(
+                    asset: 'assets/icons/call.png',
+                    fallbackIcon: Icons.call_end,
+                    backgroundColor:
+                        widget.isGroup ? Colors.orange.shade800 : Colors.red,
+                    iconColor: const Color(0xFFFE4EF0),
+                    iconRotation: -135 * math.pi / 180,
+                    onTap: widget.isGroup ? _leaveGroupCall : _endCall,
+                  ),
+                ],
               ),
-              _buildFloatingControlButton(
-                asset: _callManager.isSpeakerOn
-                    ? 'assets/icons/speaker-high.png'
-                    : 'assets/icons/speaker-low.png',
-                fallbackIcon: _callManager.isSpeakerOn
-                    ? Icons.volume_up
-                    : Icons.volume_down,
-                onTap: _callManager.toggleSpeaker,
-              ),
-              _buildFloatingControlButton(
-                asset: 'assets/icons/call.png',
-                fallbackIcon: Icons.call_end,
-                backgroundColor:
-                    widget.isGroup ? Colors.orange.shade800 : Colors.red,
-                iconColor: const Color(0xFFFE4EF0),
-                iconRotation: -135 * math.pi / 180,
-                onTap: widget.isGroup ? _leaveGroupCall : _endCall,
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -1183,14 +1188,7 @@ class _CallScreenState extends State<CallScreen> {
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: backgroundColor == null
-            ? ClipOval(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                  child: button,
-                ),
-              )
-            : button,
+        child: button,
       ),
     );
   }
