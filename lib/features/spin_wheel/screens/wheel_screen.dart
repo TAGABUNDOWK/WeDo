@@ -267,7 +267,7 @@ class _WheelScreenState extends State<WheelScreen>
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final wheelSize = (screenWidth * 0.72).clamp(250.0, 290.0);
+    final preferredWheelSize = (screenWidth * 0.72).clamp(220.0, 290.0);
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -277,26 +277,32 @@ class _WheelScreenState extends State<WheelScreen>
             // Top App Bar with Sparkles & Subtitle
             _buildAppBar(),
 
-            // Scrollable Content utilizing all vertical space
+            // Keep the editor anchored at the bottom and fit the wheel above it.
             Expanded(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 6),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final panelHeight = (constraints.maxHeight * 0.48)
+                      .clamp(220.0, 350.0)
+                      .toDouble();
+                  final wheelSize = math.min(
+                    preferredWheelSize,
+                    constraints.maxHeight - panelHeight - 24,
+                  ).clamp(150.0, 290.0).toDouble();
 
-                    // Glowing Wheel
-                    _buildWheel(wheelSize),
-
-                    const SizedBox(height: 18),
-
-                    // Integrated Edit Options Panel
-                    _buildOptionsCard(),
-
-                    const SizedBox(height: 16),
-                  ],
-                ),
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+                    child: Column(
+                      children: [
+                        Expanded(child: _buildWheel(wheelSize)),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          height: panelHeight,
+                          child: _buildOptionsCard(),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
             ),
           ],
@@ -487,22 +493,23 @@ class _WheelScreenState extends State<WheelScreen>
           const SizedBox(height: 12),
 
           // Reorderable Option Rows
-          ReorderableListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _options.length,
-            onReorderItem: _reorderOption,
-            itemBuilder: (context, index) {
-              final option = _options[index];
-              return _OptionItemRow(
-                key: ValueKey('option_${option.color.toARGB32()}_$index'),
-                option: option,
-                onChanged: (newLabel) => _updateOptionLabel(index, newLabel),
-                onDelete: _options.length > 2 && !_isSpinning
-                    ? () => _removeOption(index)
-                    : null,
-              );
-            },
+          Expanded(
+            child: ReorderableListView.builder(
+              padding: EdgeInsets.zero,
+              itemCount: _options.length,
+              onReorderItem: _reorderOption,
+              itemBuilder: (context, index) {
+                final option = _options[index];
+                return _OptionItemRow(
+                  key: ValueKey('option_${option.color.toARGB32()}_$index'),
+                  option: option,
+                  onChanged: (newLabel) => _updateOptionLabel(index, newLabel),
+                  onDelete: _options.length > 2 && !_isSpinning
+                      ? () => _removeOption(index)
+                      : null,
+                );
+              },
+            ),
           ),
 
           const SizedBox(height: 10),
@@ -526,7 +533,8 @@ class _WheelScreenState extends State<WheelScreen>
                   child: TextField(
                     controller: _addController,
                     minLines: 1,
-                    maxLines: null,
+                    maxLines: 4,
+                    scrollPhysics: const ClampingScrollPhysics(),
                     keyboardType: TextInputType.multiline,
                     textInputAction: TextInputAction.newline,
                     style: const TextStyle(
