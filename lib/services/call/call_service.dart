@@ -108,10 +108,23 @@ class CallService {
   }
 
   Future<void> deleteUserSignals(String callId, String uid) async {
-    final snap = await _signals(callId).where('toUid', isEqualTo: uid).get();
-    if (snap.docs.isEmpty) return;
+    final inbound =
+        await _signals(callId).where('toUid', isEqualTo: uid).get();
+    final outbound =
+        await _signals(callId).where('fromUid', isEqualTo: uid).get();
+
+    final docsById =
+        <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+    for (final doc in inbound.docs) {
+      docsById[doc.id] = doc;
+    }
+    for (final doc in outbound.docs) {
+      docsById[doc.id] = doc;
+    }
+    if (docsById.isEmpty) return;
+
     final batch = _db.batch();
-    for (final doc in snap.docs) {
+    for (final doc in docsById.values) {
       batch.delete(doc.reference);
     }
     await batch.commit();

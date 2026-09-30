@@ -58,8 +58,10 @@ class CallManager extends ChangeNotifier {
   bool _isMuted = false;
   bool _isVideoOff = false;
   bool _isSpeakerOn = false;
-  final Set<String> _processedSignals = {};
+  final Map<String, String> _processedSignals = {};
   final Set<String> _pendingOfferPeers = {};
+  final Set<String> _outgoingOfferPeers = {};
+  final Map<String, DateTime> _noPcSince = {};
   final Set<String> _departedPeers = {};
   final Map<String, Timer> _reconnectTimers = {};
   final _currentUser = FirebaseAuth.instance.currentUser;
@@ -69,6 +71,8 @@ class CallManager extends ChangeNotifier {
 
   RTCVideoRenderer? _localRenderer;
   final Map<String, RTCVideoRenderer> _remoteRenderers = {};
+  final Set<String> _rendererReady = {};
+  final Map<String, MediaStream> _pendingRemoteStreams = {};
   final Set<String> _reconnectingPeers = {};
 
   ActiveCallData? get activeCall => _activeCall;
@@ -340,6 +344,8 @@ class CallManager extends ChangeNotifier {
     _isSpeakerOn = audioOnly;
     _processedSignals.clear();
     _pendingOfferPeers.clear();
+    _outgoingOfferPeers.clear();
+    _noPcSince.clear();
     _departedPeers.clear();
     _leftCall = null;
 
@@ -389,18 +395,41 @@ class CallManager extends ChangeNotifier {
       final (peerId, stream) = pair;
       _remoteStreamController?.add(stream);
 
-      var renderer = _remoteRenderers[peerId];
-      if (renderer == null) {
-        renderer = RTCVideoRenderer();
+      final existing = _remoteRenderers[peerId];
+      if (existing == null) {
+        final renderer = RTCVideoRenderer();
+        _remoteRenderers[peerId] = renderer;
+        _pendingRemoteStreams[peerId] = stream;
         renderer.initialize().then((_) {
-          renderer!.srcObject = stream;
+          if (!identical(_remoteRenderers[peerId], renderer)) {
+            try {
+              renderer.dispose();
+            } catch (_) {}
+            return;
+          }
+          _rendererReady.add(peerId);
+          final pending = _pendingRemoteStreams.remove(peerId);
+          renderer.srcObject = pending ?? stream;
+          notifyListeners();
+        }).catchError((Object e) {
+          debugPrint('Error initializing remote renderer: $e');
+          _pendingRemoteStreams.remove(peerId);
+          if (identical(_remoteRenderers[peerId], renderer)) {
+            _remoteRenderers.remove(peerId);
+            _rendererReady.remove(peerId);
+          }
+          try {
+            renderer.dispose();
+          } catch (_) {}
           notifyListeners();
         });
-        _remoteRenderers[peerId] = renderer;
+      } else if (_rendererReady.contains(peerId)) {
+        existing.srcObject = stream;
+        notifyListeners();
       } else {
-        renderer.srcObject = stream;
+        // Renderer is still initializing; assign once ready.
+        _pendingRemoteStreams[peerId] = stream;
       }
-      notifyListeners();
     });
 
     _webrtcService!.onIceCandidateGenerated = (peerId, candidateJson) {
@@ -420,18 +449,20 @@ class CallManager extends ChangeNotifier {
         _reconnectTimers.remove(peerId);
         _reconnectTimers['single']?.cancel();
         _reconnectTimers.remove('single');
+        _reconnectTimers['offer_$peerId']?.cancel();
+        _reconnectTimers.remove('offer_$peerId');
         _reconnectingPeers.remove(peerId);
+        _outgoingOfferPeers.remove(peerId);
+        _noPcSince.remove(peerId);
         return;
       }
 
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
           state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
         _purgeSignalsForPeer(peerId);
+        _noPcSince.putIfAbsent(peerId, () => DateTime.now());
         if (callData.isGroup && !_reconnectingPeers.contains(peerId)) {
-          final renderer = _remoteRenderers.remove(peerId);
-          renderer?.srcObject = null;
-          renderer?.dispose();
-          notifyListeners();
+          _disposeRemoteRenderer(peerId);
 
           _reconnectingPeers.add(peerId);
           _pendingOfferPeers.remove(peerId);
@@ -445,14 +476,12 @@ class CallManager extends ChangeNotifier {
               final key = webrtc.WebRTCService.pcKeyForTest(_currentUser?.uid ?? '', peerId);
               _webrtcService?.peerConnections.remove(key)?.close();
               _pendingOfferPeers.remove(peerId);
+              _outgoingOfferPeers.remove(peerId);
               _createGroupOfferTo(peerId);
             }
           });
         } else if (!callData.isGroup) {
-          final renderer = _remoteRenderers.remove(peerId);
-          renderer?.srcObject = null;
-          renderer?.dispose();
-          notifyListeners();
+          _disposeRemoteRenderer(peerId);
 
           if (_reconnectTimers.isEmpty) {
             _reconnectTimers['single'] = Timer(const Duration(seconds: 5), () {
@@ -485,18 +514,22 @@ class CallManager extends ChangeNotifier {
         .getSignalsForUser(callData.callId, user.uid)
         .listen((snapshot) {
       for (final doc in snapshot.docs) {
-        if (_processedSignals.contains(doc.id)) continue;
-        _processedSignals.add(doc.id);
-
         final data = doc.data();
         final fromUid = data['fromUid'] as String?;
         final type = data['type'] as String?;
         if (fromUid == null || type == null) continue;
 
+        final signature = _signalSignature(data);
+        if (_processedSignals[doc.id] == signature) continue;
+        _processedSignals[doc.id] = signature;
+
         try {
           if (type == 'offer') {
             final sdp = data['sdp'] as String?;
             if (sdp == null) continue;
+            if (callData.isGroup && !_resolveOfferGlare(user.uid, fromUid)) {
+              continue;
+            }
             _webrtcService!.handleOffer(
               callId: callData.callId,
               fromUid: fromUid,
@@ -506,6 +539,7 @@ class CallManager extends ChangeNotifier {
           } else if (type == 'answer') {
             final sdp = data['sdp'] as String?;
             if (sdp == null) continue;
+            _outgoingOfferPeers.remove(fromUid);
             _webrtcService!.handleAnswer(
               fromUid: fromUid,
               toUid: user.uid,
@@ -536,9 +570,7 @@ class CallManager extends ChangeNotifier {
           if (uid == null || uid == user.uid) continue;
           if (status == 'active') {
             _departedPeers.remove(uid);
-            final key = webrtc.WebRTCService.pcKeyForTest(user.uid, uid);
-            if (!_webrtcService!.peerConnections.containsKey(key) &&
-                !_pendingOfferPeers.contains(uid) &&
+            if (!_pendingOfferPeers.contains(uid) &&
                 !_reconnectingPeers.contains(uid)) {
               _createGroupOfferTo(uid);
             }
@@ -547,13 +579,15 @@ class CallManager extends ChangeNotifier {
             _purgeSignalsForPeer(uid);
             _reconnectTimers[uid]?.cancel();
             _reconnectTimers.remove(uid);
+            _reconnectTimers['offer_$uid']?.cancel();
+            _reconnectTimers.remove('offer_$uid');
             _reconnectingPeers.remove(uid);
             _pendingOfferPeers.remove(uid);
+            _outgoingOfferPeers.remove(uid);
+            _noPcSince.remove(uid);
             final key = webrtc.WebRTCService.pcKeyForTest(user.uid, uid);
             _webrtcService?.peerConnections.remove(key)?.close();
-            final renderer = _remoteRenderers.remove(uid);
-            renderer?.srcObject = null;
-            renderer?.dispose();
+            _disposeRemoteRenderer(uid);
             notifyListeners();
           }
         }
@@ -590,18 +624,81 @@ class CallManager extends ChangeNotifier {
     _processedSignals.remove('answer_${uid}_$peerId');
   }
 
+  String _signalSignature(Map<String, dynamic> data) {
+    final type = data['type'] ?? '';
+    final payload = data['sdp'] ?? data['candidate'] ?? '';
+    return '$type:$payload';
+  }
+
+  void _disposeRemoteRenderer(String peerId) {
+    final renderer = _remoteRenderers.remove(peerId);
+    _rendererReady.remove(peerId);
+    _pendingRemoteStreams.remove(peerId);
+    if (renderer == null) return;
+    try {
+      renderer.srcObject = null;
+      renderer.dispose();
+    } catch (e) {
+      debugPrint('Error disposing remote renderer: $e');
+    }
+  }
+
+  bool _pcNeedsOffer(RTCPeerConnection? pc) {
+    if (pc == null) return true;
+    final state = pc.connectionState;
+    return state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
+        state ==
+            RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
+        state == RTCPeerConnectionState.RTCPeerConnectionStateClosed;
+  }
+
+  /// Resolves simultaneous offers deterministically: the lexicographically
+  /// smaller uid is the designated offerer and wins a true glare. The larger
+  /// uid's offer is accepted only when we have no offer of our own in flight,
+  /// which also lets either side recover a dead connection.
+  bool _resolveOfferGlare(String myUid, String peerUid) {
+    final iAmDesignated = myUid.compareTo(peerUid) < 0;
+    final haveLocalOffer = _outgoingOfferPeers.contains(peerUid) ||
+        _pendingOfferPeers.contains(peerUid);
+
+    if (iAmDesignated && haveLocalOffer) return false;
+
+    _outgoingOfferPeers.remove(peerUid);
+    _noPcSince.remove(peerUid);
+    _reconnectTimers['offer_$peerUid']?.cancel();
+    _reconnectTimers.remove('offer_$peerUid');
+    return true;
+  }
+
   void _createGroupOfferTo(String peerId) {
     final user = _currentUser;
     if (user == null || _activeCall == null) return;
     final uid = user.uid;
-    if (uid.compareTo(peerId) > 0) return;
     if (_departedPeers.contains(peerId)) return;
     if (_pendingOfferPeers.contains(peerId)) return;
 
     final key = webrtc.WebRTCService.pcKeyForTest(uid, peerId);
-    if (_webrtcService!.peerConnections.containsKey(key)) return;
+    if (!_pcNeedsOffer(_webrtcService!.peerConnections[key])) return;
+
+    if (uid.compareTo(peerId) > 0) {
+      // The smaller uid initiates the first offer. The larger uid only
+      // offers as delayed recovery, so both sides never race an initial one.
+      final since = _noPcSince.putIfAbsent(peerId, () => DateTime.now());
+      final elapsed = DateTime.now().difference(since);
+      const grace = Duration(seconds: 6);
+      if (elapsed < grace) {
+        _reconnectTimers['offer_$peerId']?.cancel();
+        _reconnectTimers['offer_$peerId'] =
+            Timer(grace - elapsed, () {
+          _reconnectTimers.remove('offer_$peerId');
+          _createGroupOfferTo(peerId);
+        });
+        return;
+      }
+    }
 
     _pendingOfferPeers.add(peerId);
+    _outgoingOfferPeers.add(peerId);
     _webrtcService!
         .createOffer(
       callId: _activeCall!.callId,
@@ -612,6 +709,7 @@ class CallManager extends ChangeNotifier {
       _pendingOfferPeers.remove(peerId);
     }).catchError((_) {
       _pendingOfferPeers.remove(peerId);
+      _outgoingOfferPeers.remove(peerId);
     });
   }
 
@@ -621,25 +719,7 @@ class CallManager extends ChangeNotifier {
     final uid = user.uid;
     for (final memberUid in _activeCall!.members) {
       if (memberUid == uid) continue;
-      if (uid.compareTo(memberUid) > 0) continue;
-      if (_departedPeers.contains(memberUid)) continue;
-      if (_pendingOfferPeers.contains(memberUid)) continue;
-
-      final key = webrtc.WebRTCService.pcKeyForTest(uid, memberUid);
-      if (_webrtcService!.peerConnections.containsKey(key)) continue;
-
-      _pendingOfferPeers.add(memberUid);
-      _webrtcService!
-          .createOffer(
-        callId: _activeCall!.callId,
-        fromUid: uid,
-        toUid: memberUid,
-      )
-          .then((_) {
-        _pendingOfferPeers.remove(memberUid);
-      }).catchError((_) {
-        _pendingOfferPeers.remove(memberUid);
-      });
+      _createGroupOfferTo(memberUid);
     }
   }
 
@@ -714,6 +794,8 @@ class CallManager extends ChangeNotifier {
     _callDuration = 0;
     _processedSignals.clear();
     _pendingOfferPeers.clear();
+    _outgoingOfferPeers.clear();
+    _noPcSince.clear();
     _departedPeers.clear();
     _leftCall = null;
     WakelockPlus.disable();
@@ -729,6 +811,8 @@ class CallManager extends ChangeNotifier {
     _remoteStreamController = null;
     _localRenderer = null;
     _remoteRenderers.clear();
+    _rendererReady.clear();
+    _pendingRemoteStreams.clear();
 
     notifyListeners();
 
@@ -781,6 +865,8 @@ class CallManager extends ChangeNotifier {
     _reconnectTimers.clear();
     _reconnectingPeers.clear();
     _pendingOfferPeers.clear();
+    _outgoingOfferPeers.clear();
+    _noPcSince.clear();
     _processedSignals.clear();
     _departedPeers.clear();
 
@@ -816,6 +902,8 @@ class CallManager extends ChangeNotifier {
     _remoteStreamController = null;
     _localRenderer = null;
     _remoteRenderers.clear();
+    _rendererReady.clear();
+    _pendingRemoteStreams.clear();
 
     notifyListeners();
 
