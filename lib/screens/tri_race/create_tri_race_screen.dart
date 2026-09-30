@@ -94,16 +94,8 @@ class _CreateTriRaceScreenState extends State<CreateTriRaceScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Max Players',
-              style: TextStyle(
-                fontFamily: _fontFamily,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 12),
+            _sectionLabel(Icons.people_alt_rounded, 'Max Players'),
+            const SizedBox(height: 10),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
@@ -113,26 +105,29 @@ class _CreateTriRaceScreenState extends State<CreateTriRaceScreen> {
                   return GestureDetector(
                     onTap: () => setState(() => _maxPlayers = count),
                     child: Container(
-                      width: 44,
-                      height: 44,
-                      margin: const EdgeInsets.only(right: 8),
+                      width: 40,
+                      height: 40,
+                      margin: const EdgeInsets.only(right: 7),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? const Color(0xFF4ECDC4)
-                            : Colors.white.withValues(alpha: 0.05),
+                            ? const Color(0xFF23C9C1)
+                            : const Color(0xFF21143A),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
                           color: isSelected
-                              ? const Color(0xFF4ECDC4)
-                              : AppColors.glassBorder,
+                              ? const Color(0xFF23C9C1)
+                              : Colors.white.withValues(alpha: 0.10),
                         ),
+                        boxShadow: isSelected
+                            ? [BoxShadow(color: const Color(0xFF23C9C1).withValues(alpha: 0.20), blurRadius: 12)]
+                            : null,
                       ),
                       alignment: Alignment.center,
                       child: Text(
                         '$count',
                         style: TextStyle(
                           fontFamily: _fontFamily,
-                          fontSize: 16,
+                          fontSize: 14,
                           fontWeight: FontWeight.w700,
                           color: isSelected ? Colors.white : AppColors.textSecondary,
                         ),
@@ -142,39 +137,32 @@ class _CreateTriRaceScreenState extends State<CreateTriRaceScreen> {
                 }),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 9),
             Text(
-              '$_maxPlayers players max',
-              style: const TextStyle(
-                fontFamily: _fontFamily,
-                fontSize: 12,
-                color: AppColors.textSecondary,
-              ),
-            ),
-            const SizedBox(height: 28),
-            const Text(
-              'Color Theme',
+              'TriRace supports up to 8 players',
               style: TextStyle(
                 fontFamily: _fontFamily,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
+                fontSize: 10,
+                color: Colors.white.withValues(alpha: 0.48),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 20),
+            _sectionLabel(Icons.palette_outlined, 'Color Theme'),
+            const SizedBox(height: 10),
             Row(
               children: [
                 _buildThemeOption(
                   label: 'Solid',
+                  subtitle: 'Clean & vibrant colors',
                   isSelected: _colorTheme == 'solid',
                   onTap: () => setState(() => _colorTheme = 'solid'),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: _solidPalette.map((hex) {
                       return Container(
-                        width: 14,
-                        height: 14,
-                        margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                        width: 11,
+                        height: 11,
+                        margin: const EdgeInsets.only(right: 3),
                         decoration: BoxDecoration(
                           color: _hexColor(hex),
                           shape: BoxShape.circle,
@@ -183,9 +171,10 @@ class _CreateTriRaceScreenState extends State<CreateTriRaceScreen> {
                     }).toList(),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 _buildThemeOption(
                   label: 'Neon',
+                  subtitle: 'Glowing neon effect',
                   isSelected: _colorTheme == 'neon',
                   onTap: () => setState(() => _colorTheme = 'neon'),
                   child: Row(
@@ -193,9 +182,9 @@ class _CreateTriRaceScreenState extends State<CreateTriRaceScreen> {
                     children: _neonPalette.map((hex) {
                       final color = _hexColor(hex);
                       return Container(
-                        width: 14,
-                        height: 14,
-                        margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                        width: 11,
+                        height: 11,
+                        margin: const EdgeInsets.only(right: 3),
                         decoration: BoxDecoration(
                           color: color,
                           shape: BoxShape.circle,
@@ -212,6 +201,35 @@ class _CreateTriRaceScreenState extends State<CreateTriRaceScreen> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 18),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF21143A).withValues(alpha: 0.82),
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.bolt_rounded, color: Color(0xFF4ECDC4), size: 23),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('How TriRace works', style: TextStyle(fontFamily: _fontFamily, fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white)),
+                        const SizedBox(height: 7),
+                        Text(
+                          'TriRace supports up to 8 players. Set your player limit above, then watch racers compete automatically to the finish.',
+                          style: TextStyle(fontFamily: _fontFamily, fontSize: 12, height: 1.5, color: Colors.white.withValues(alpha: 0.68)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
             const Spacer(),
             SizedBox(
@@ -248,43 +266,55 @@ class _CreateTriRaceScreenState extends State<CreateTriRaceScreen> {
     );
   }
 
+  Widget _sectionLabel(IconData icon, String label) {
+    return Row(
+      children: [
+        Icon(icon, color: const Color(0xFFD290FF), size: 15),
+        const SizedBox(width: 7),
+        Text(label, style: const TextStyle(fontFamily: _fontFamily, fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white)),
+      ],
+    );
+  }
+
   Widget _buildThemeOption({
     required String label,
+    required String subtitle,
     required bool isSelected,
     required VoidCallback onTap,
     required Widget child,
   }) {
-    return GestureDetector(
+    return Expanded(child: GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 17),
         decoration: BoxDecoration(
           color: isSelected
-              ? const Color(0xFF4ECDC4).withValues(alpha: 0.15)
-              : Colors.white.withValues(alpha: 0.05),
+              ? const Color(0xFF4ECDC4).withValues(alpha: 0.11)
+              : const Color(0xFF21143A),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected
                 ? const Color(0xFF4ECDC4)
-                : AppColors.glassBorder,
+                : Colors.white.withValues(alpha: 0.10),
           ),
         ),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontFamily: _fontFamily,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: isSelected ? const Color(0xFF4ECDC4) : AppColors.textSecondary,
-              ),
+            Row(
+              children: [
+                Expanded(child: Text(label, style: TextStyle(fontFamily: _fontFamily, fontSize: 12, fontWeight: FontWeight.w700, color: isSelected ? const Color(0xFF4ECDC4) : Colors.white))),
+                if (isSelected) const Icon(Icons.check_circle, color: Color(0xFF4ECDC4), size: 16),
+              ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 3),
+            Text(subtitle, style: TextStyle(fontFamily: _fontFamily, fontSize: 9, color: Colors.white.withValues(alpha: 0.55)), maxLines: 1, overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 14),
             child,
           ],
         ),
       ),
-    );
+    ));
   }
 }
