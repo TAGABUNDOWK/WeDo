@@ -7,7 +7,13 @@ import '../../services/poll/poll_service.dart';
 import '../../services/auth/user_service.dart';
 import '../../utils/constants.dart';
 
-const _fontFamily = 'PlusJakartaSans';
+const _fontFamily = 'Poppins';
+
+// ─── Palette ──────────────────────────────────────────────────────────────────
+const _neonMagenta = Color(0xFFFE4EF0);
+const _electricPurple = Color(0xFF800DD8);
+const _electricCyan = Color(0xFF00E5FF);
+const _cardBg = Color(0xFF1A0A2E);
 
 class PollMessageCard extends StatefulWidget {
   final ChatPoll poll;
@@ -29,7 +35,8 @@ class PollMessageCard extends StatefulWidget {
   State<PollMessageCard> createState() => _PollMessageCardState();
 }
 
-class _PollMessageCardState extends State<PollMessageCard> {
+class _PollMessageCardState extends State<PollMessageCard>
+    with SingleTickerProviderStateMixin {
   final _pollService = PollService();
   final _userService = UserService();
   String? _selectedOption;
@@ -42,6 +49,9 @@ class _PollMessageCardState extends State<PollMessageCard> {
   late Stream<ChatPoll?> _pollStream;
   ChatPoll? _latestPoll;
 
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnim;
+
   @override
   void initState() {
     super.initState();
@@ -51,6 +61,14 @@ class _PollMessageCardState extends State<PollMessageCard> {
     _expiryTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..repeat(reverse: true);
+    _pulseAnim = Tween<double>(begin: 0.6, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
   }
 
   Stream<ChatPoll?> _createStream() {
@@ -64,6 +82,7 @@ class _PollMessageCardState extends State<PollMessageCard> {
   @override
   void dispose() {
     _expiryTimer?.cancel();
+    _pulseController.dispose();
     super.dispose();
   }
 
@@ -183,12 +202,15 @@ class _PollMessageCardState extends State<PollMessageCard> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to vote: $e'),
-            backgroundColor: const Color(0xFF211635),
+            content: Text(
+              'Failed to vote: $e',
+              style: const TextStyle(fontFamily: _fontFamily, color: Colors.white),
+            ),
+            backgroundColor: _cardBg,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: AppColors.glassBorder),
+              side: BorderSide(color: _neonMagenta.withValues(alpha: 0.4)),
             ),
           ),
         );
@@ -197,6 +219,8 @@ class _PollMessageCardState extends State<PollMessageCard> {
       if (mounted) setState(() => _isVoting = false);
     }
   }
+
+  // ─── Avatar helpers ──────────────────────────────────────────────────────────
 
   Widget _buildAvatar(String uid, double size) {
     final user = _userCache[uid];
@@ -210,8 +234,8 @@ class _PollMessageCardState extends State<PollMessageCard> {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: const Color(0xFF211635),
-        border: Border.all(color: AppColors.midnightBg, width: 1.5),
+        color: _cardBg,
+        border: Border.all(color: _neonMagenta.withValues(alpha: 0.5), width: 1.5),
       ),
       child: ClipOval(
         child: hasAvatarAsset
@@ -234,13 +258,19 @@ class _PollMessageCardState extends State<PollMessageCard> {
   Widget _buildFallbackAvatar(String uid, double size) {
     final initials = uid.isNotEmpty ? uid.substring(0, 1).toUpperCase() : '?';
     return Container(
-      color: const Color(0xFF211635),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [_electricPurple, _neonMagenta],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
       child: Center(
         child: Text(
           initials,
           style: TextStyle(
             fontSize: size * 0.4,
-            color: AppColors.lavenderAccent,
+            color: Colors.white,
             fontFamily: _fontFamily,
             fontWeight: FontWeight.w700,
           ),
@@ -250,7 +280,7 @@ class _PollMessageCardState extends State<PollMessageCard> {
   }
 
   Widget _buildVoterAvatars(List<String> uids) {
-    const maxVisible = 2;
+    const maxVisible = 3;
     final visible = uids.take(maxVisible).toList();
     final remaining = uids.length - maxVisible;
 
@@ -259,31 +289,29 @@ class _PollMessageCardState extends State<PollMessageCard> {
       children: [
         for (int i = visible.length - 1; i >= 0; i--)
           Padding(
-            padding: EdgeInsets.only(left: i < visible.length - 1 ? -4 : 0),
-            child: _buildAvatar(visible[i], 14),
+            padding: EdgeInsets.only(left: i < visible.length - 1 ? -6.0 : 0),
+            child: _buildAvatar(visible[i], 18),
           ),
         if (remaining > 0)
           Padding(
-            padding: const EdgeInsets.only(left: 2),
+            padding: const EdgeInsets.only(left: 3),
             child: Container(
-              width: 14,
-              height: 14,
-              decoration: BoxDecoration(
+              width: 18,
+              height: 18,
+              decoration: const BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppColors.lavenderAccent.withValues(alpha: 0.15),
-                border: Border.all(
-                  color: AppColors.lavenderAccent.withValues(alpha: 0.3),
-                  width: 0.5,
+                gradient: LinearGradient(
+                  colors: [_electricPurple, _neonMagenta],
                 ),
               ),
               child: Center(
                 child: Text(
                   '+$remaining',
                   style: const TextStyle(
-                    fontSize: 6,
+                    fontSize: 7,
                     fontFamily: _fontFamily,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.lavenderAccent,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
                   ),
                 ),
               ),
@@ -292,6 +320,8 @@ class _PollMessageCardState extends State<PollMessageCard> {
       ],
     );
   }
+
+  // ─── Main build ──────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -309,119 +339,260 @@ class _PollMessageCardState extends State<PollMessageCard> {
   Widget _buildCard(ChatPoll poll) {
     final isCreator = poll.createdBy == widget.currentUid;
     final showResults = _hasVoted || poll.isClosed;
+    final isSecret = poll.type == PollType.secret;
 
     return GestureDetector(
       onTap: widget.onTap,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
           child: Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: AppColors.eventCardBg,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: AppColors.glassBorder,
-                  width: 1,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.07),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.14),
+                width: 1,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // ── Header bar ──────────────────────────────────────────────
+                _buildHeader(poll, isSecret),
+
+                // ── Options ─────────────────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: poll.options.map((option) {
+                      final votes = poll.votesForOption(option);
+                      final total = poll.totalVotes;
+                      final percentage =
+                          total > 0 ? (votes / total * 100) : 0.0;
+                      final isMyVote = _myVote == option;
+                      final isPreSelected = _selectedOption == option;
+                      final voters = _votersByOption[option] ?? [];
+
+                      return _buildOptionRow(
+                        option: option,
+                        votes: votes,
+                        percentage: percentage,
+                        isMyVote: isMyVote,
+                        isPreSelected: isPreSelected,
+                        showResults: showResults,
+                        isSecret: isSecret,
+                        voters: voters,
+                        poll: poll,
+                      );
+                    }).toList(),
+                  ),
+                ),
+
+                // ── Footer ──────────────────────────────────────────────────
+                _buildFooter(poll, showResults, isCreator),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─── Header ──────────────────────────────────────────────────────────────────
+
+  Widget _buildHeader(ChatPoll poll, bool isSecret) {
+    final timeLeft = _formatTimeLeft(poll);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            _electricPurple.withValues(alpha: 0.35),
+            _neonMagenta.withValues(alpha: 0.18),
+          ],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        border: Border(
+          bottom: BorderSide(
+            color: Colors.white.withValues(alpha: 0.1),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Top row: icon + POLL label + type badge
+          Row(
+            children: [
+              // Glowing poll icon
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    colors: [_electricPurple, _neonMagenta],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _neonMagenta.withValues(alpha: 0.5),
+                      blurRadius: 10,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.poll_rounded,
+                  color: Colors.white,
+                  size: 16,
                 ),
               ),
-              child: Column(
+              const SizedBox(width: 10),
+              Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Center(
-                          child: Text(
-                            'POLL',
-                            style: TextStyle(
-                              fontFamily: _fontFamily,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 1.2,
-                              color: AppColors.textSecondary.withValues(alpha: 0.7),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Center(
-                          child: Text(
-                            poll.question,
-                            style: const TextStyle(
-                              fontFamily: _fontFamily,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textPrimary,
-                              height: 1.2,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Center(
-                          child: Text(
-                            poll.type == PollType.secret ? 'Secret' : 'Public',
-                            style: TextStyle(
-                              fontFamily: _fontFamily,
-                              fontSize: 10,
-                              color: AppColors.textSecondary.withValues(alpha: 0.7),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        ...poll.options.map((option) {
-                          final votes = poll.votesForOption(option);
-                          final total = poll.totalVotes;
-                          final percentage = total > 0 ? (votes / total * 100) : 0.0;
-                          final isMyVote = _myVote == option;
-                          final isPreSelected = _selectedOption == option;
-                          final voters = _votersByOption[option] ?? [];
-
-                          return _buildOptionCard(
-                            option: option,
-                            votes: votes,
-                            percentage: percentage,
-                            isMyVote: isMyVote,
-                            isPreSelected: isPreSelected,
-                            showResults: showResults,
-                            isSecret: poll.type == PollType.secret,
-                            voters: voters,
-                            poll: poll,
-                          );
-                        }),
-                        if (poll.type == PollType.public) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            '${poll.totalVotes} vote${poll.totalVotes != 1 ? 's' : ''}',
-                            style: TextStyle(
-                              fontFamily: _fontFamily,
-                              fontSize: 10,
-                              color: AppColors.textSecondary.withValues(alpha: 0.6),
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 8),
-                        if (!showResults)
-                          _buildVoteButton()
-                        else if (poll.isClosed)
-                          _buildClosedBadge()
-                        else if (isCreator)
-                          _buildCloseButton(poll),
-                      ],
+                  const Text(
+                    'POLL',
+                    style: TextStyle(
+                      fontFamily: _fontFamily,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 2,
+                      color: Colors.white54,
+                    ),
+                  ),
+                  Text(
+                    'by ${widget.senderName}',
+                    style: const TextStyle(
+                      fontFamily: _fontFamily,
+                      fontSize: 10,
+                      color: Colors.white54,
                     ),
                   ),
                 ],
               ),
+              const Spacer(),
+              // Type badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isSecret
+                      ? _electricCyan.withValues(alpha: 0.15)
+                      : _electricPurple.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isSecret
+                        ? _electricCyan.withValues(alpha: 0.5)
+                        : _neonMagenta.withValues(alpha: 0.5),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isSecret ? Icons.lock_rounded : Icons.public_rounded,
+                      size: 9,
+                      color: isSecret ? _electricCyan : _neonMagenta,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      isSecret ? 'Secret' : 'Public',
+                      style: TextStyle(
+                        fontFamily: _fontFamily,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
+                        color: isSecret ? _electricCyan : _neonMagenta,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Question text
+          Text(
+            poll.question,
+            style: const TextStyle(
+              fontFamily: _fontFamily,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+              height: 1.3,
             ),
           ),
-        ),
+          if (timeLeft != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                AnimatedBuilder(
+                  animation: _pulseAnim,
+                  builder: (_, __) => Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: poll.isClosed
+                          ? Colors.redAccent
+                          : _electricCyan,
+                      boxShadow: [
+                        BoxShadow(
+                          color: (poll.isClosed
+                                  ? Colors.redAccent
+                                  : _electricCyan)
+                              .withValues(alpha: _pulseAnim.value * 0.8),
+                          blurRadius: 6,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  timeLeft,
+                  style: TextStyle(
+                    fontFamily: _fontFamily,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: poll.isClosed
+                        ? Colors.redAccent.withValues(alpha: 0.8)
+                        : _electricCyan.withValues(alpha: 0.9),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 
-  Widget _buildOptionCard({
+  String? _formatTimeLeft(ChatPoll poll) {
+    if (poll.isClosed) return 'Poll Closed';
+    if (poll.closesAt == null) return null;
+    final diff = poll.closesAt!.difference(DateTime.now());
+    if (diff.isNegative) return 'Poll Closed';
+    if (diff.inDays > 0) return 'Ends in ${diff.inDays}d ${diff.inHours % 24}h';
+    if (diff.inHours > 0) return 'Ends in ${diff.inHours}h ${diff.inMinutes % 60}m';
+    if (diff.inMinutes > 0) return 'Ends in ${diff.inMinutes}m';
+    return 'Ends in ${diff.inSeconds}s';
+  }
+
+  // ─── Option row ──────────────────────────────────────────────────────────────
+
+  Widget _buildOptionRow({
     required String option,
     required int votes,
     required double percentage,
@@ -432,124 +603,228 @@ class _PollMessageCardState extends State<PollMessageCard> {
     required List<String> voters,
     required ChatPoll poll,
   }) {
+    // Determine accent color for this option
+    final accent = isMyVote ? _neonMagenta : _electricCyan;
+    final borderColor = isMyVote
+        ? _neonMagenta.withValues(alpha: 0.7)
+        : isPreSelected
+            ? AppColors.lavenderAccent.withValues(alpha: 0.9)
+            : Colors.white.withValues(alpha: 0.12);
+
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: 8),
       child: GestureDetector(
         onTap: showResults ? null : () => setState(() => _selectedOption = option),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
-            color: showResults && isMyVote
-                ? AppColors.neonMagenta.withValues(alpha: 0.15)
-                : showResults
-                    ? AppColors.glassBg
-                    : isPreSelected
-                        ? AppColors.lavenderAccent.withValues(alpha: 0.1)
-                        : AppColors.glassBg,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: showResults && isMyVote
-                  ? AppColors.neonMagenta.withValues(alpha: 0.5)
-                  : isPreSelected
-                      ? AppColors.lavenderAccent
-                      : AppColors.glassBorder,
-              width: isPreSelected || (showResults && isMyVote) ? 1.5 : 1,
-            ),
+            color: isMyVote
+                ? _neonMagenta.withValues(alpha: 0.12)
+                : isPreSelected
+                    ? AppColors.lavenderAccent.withValues(alpha: 0.08)
+                    : Colors.white.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: borderColor, width: 1.2),
+            boxShadow: isMyVote || isPreSelected
+                ? [
+                    BoxShadow(
+                      color: (isMyVote ? _neonMagenta : AppColors.lavenderAccent)
+                          .withValues(alpha: 0.18),
+                      blurRadius: 10,
+                    ),
+                  ]
+                : null,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  if (!showResults)
-                    Container(
-                      width: 14,
-                      height: 14,
-                      margin: const EdgeInsets.only(right: 8),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: isPreSelected
-                              ? AppColors.neonMagenta
-                              : AppColors.textSecondary.withValues(alpha: 0.4),
-                          width: 1.5,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Stack(
+              children: [
+                // Gradient fill bar (results)
+                if (showResults && percentage > 0)
+                  Positioned.fill(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: FractionallySizedBox(
+                        widthFactor: percentage / 100,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: isMyVote
+                                  ? [
+                                      _electricPurple.withValues(alpha: 0.35),
+                                      _neonMagenta.withValues(alpha: 0.25),
+                                    ]
+                                  : [
+                                      _electricCyan.withValues(alpha: 0.18),
+                                      _electricCyan.withValues(alpha: 0.08),
+                                    ],
+                            ),
+                          ),
                         ),
-                      ),
-                      child: isPreSelected
-                          ? Center(
-                              child: Container(
-                                width: 6,
-                                height: 6,
-                                decoration: const BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: AppColors.neonMagenta,
-                                ),
-                              ),
-                            )
-                          : null,
-                    ),
-                  if (showResults && isMyVote)
-                    const Padding(
-                      padding: EdgeInsets.only(right: 6),
-                      child: Icon(
-                        Icons.check_circle,
-                        size: 12,
-                        color: AppColors.neonMagenta,
-                      ),
-                    ),
-                  Expanded(
-                    child: Text(
-                      option,
-                      style: TextStyle(
-                        fontFamily: _fontFamily,
-                        fontSize: 13,
-                        fontWeight: isMyVote || isPreSelected
-                            ? FontWeight.w600
-                            : FontWeight.w500,
-                        color: showResults && isMyVote
-                            ? AppColors.textPrimary
-                            : isPreSelected
-                                ? AppColors.lavenderAccent
-                                : AppColors.textPrimary,
                       ),
                     ),
                   ),
-                  if (showResults && poll.type == PollType.public && voters.isNotEmpty)
-                    _buildVoterAvatars(voters),
-                  if (showResults && votes > 0)
-                    Text(
-                      isSecret
-                          ? '$votes (${percentage.toStringAsFixed(0)}%)'
-                          : '${percentage.toStringAsFixed(0)}%',
-                      style: TextStyle(
-                        fontFamily: _fontFamily,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: isMyVote
-                            ? AppColors.neonMagenta
-                            : AppColors.textSecondary.withValues(alpha: 0.6),
+                // Content
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  child: Row(
+                    children: [
+                      // Radio / checkmark
+                      if (!showResults)
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: 18,
+                          height: 18,
+                          margin: const EdgeInsets.only(right: 10),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: isPreSelected
+                                  ? _neonMagenta
+                                  : Colors.white.withValues(alpha: 0.35),
+                              width: 1.8,
+                            ),
+                            color: isPreSelected
+                                ? _neonMagenta.withValues(alpha: 0.15)
+                                : Colors.transparent,
+                          ),
+                          child: isPreSelected
+                              ? const Center(
+                                  child: Icon(
+                                    Icons.circle,
+                                    size: 8,
+                                    color: _neonMagenta,
+                                  ),
+                                )
+                              : null,
+                        )
+                      else if (isMyVote)
+                        Container(
+                          width: 20,
+                          height: 20,
+                          margin: const EdgeInsets.only(right: 8),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: _neonMagenta.withValues(alpha: 0.2),
+                            border: Border.all(
+                              color: _neonMagenta,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.check_rounded,
+                            size: 12,
+                            color: _neonMagenta,
+                          ),
+                        ),
+                      // Option text
+                      Expanded(
+                        child: Text(
+                          option,
+                          style: TextStyle(
+                            fontFamily: _fontFamily,
+                            fontSize: 13,
+                            fontWeight: isMyVote || isPreSelected
+                                ? FontWeight.w600
+                                : FontWeight.w500,
+                            color: isMyVote
+                                ? Colors.white
+                                : Colors.white.withValues(alpha: 0.85),
+                          ),
+                        ),
                       ),
-                    ),
-                ],
-              ),
-              if (showResults && votes > 0) ...[
-                const SizedBox(height: 6),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(3),
-                  child: LinearProgressIndicator(
-                    value: percentage / 100,
-                    minHeight: 5,
-                    backgroundColor: AppColors.glassBg,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      isMyVote ? AppColors.neonMagenta : AppColors.lavenderAccent,
-                    ),
+                      const SizedBox(width: 6),
+                      // Voter avatars (public only)
+                      if (showResults &&
+                          poll.type == PollType.public &&
+                          voters.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: _buildVoterAvatars(voters),
+                        ),
+                      // Percentage pill
+                      if (showResults)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: accent.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: accent.withValues(alpha: 0.4),
+                              width: 1,
+                            ),
+                          ),
+                          child: Text(
+                            isSecret && votes > 0
+                                ? '$votes · ${percentage.toStringAsFixed(0)}%'
+                                : '${percentage.toStringAsFixed(0)}%',
+                            style: TextStyle(
+                              fontFamily: _fontFamily,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: accent,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ],
-            ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+
+  // ─── Footer ──────────────────────────────────────────────────────────────────
+
+  Widget _buildFooter(ChatPoll poll, bool showResults, bool isCreator) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Vote count row
+          Row(
+            children: [
+              Icon(
+                Icons.how_to_vote_rounded,
+                size: 12,
+                color: Colors.white.withValues(alpha: 0.4),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                '${poll.totalVotes} vote${poll.totalVotes != 1 ? 's' : ''}',
+                style: TextStyle(
+                  fontFamily: _fontFamily,
+                  fontSize: 11,
+                  color: Colors.white.withValues(alpha: 0.45),
+                ),
+              ),
+              const Spacer(),
+              if (!showResults && _selectedOption != null)
+                Text(
+                  'Tap Vote to confirm',
+                  style: TextStyle(
+                    fontFamily: _fontFamily,
+                    fontSize: 10,
+                    color: AppColors.lavenderAccent.withValues(alpha: 0.7),
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Action button
+          if (!showResults)
+            _buildVoteButton()
+          else if (poll.isClosed)
+            _buildClosedBadge()
+          else if (isCreator && !poll.isClosed)
+            _buildCloseButton(poll),
+        ],
       ),
     );
   }
@@ -561,27 +836,29 @@ class _PollMessageCardState extends State<PollMessageCard> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         width: double.infinity,
-        height: 38,
+        height: 42,
         decoration: BoxDecoration(
           gradient: canSubmit
               ? const LinearGradient(
-                  colors: [AppColors.lavenderAccent, Color(0xFFc4a8ff)],
+                  colors: [_electricPurple, _neonMagenta],
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                 )
               : null,
-          color: canSubmit ? null : AppColors.glassBg,
+          color: canSubmit ? null : Colors.white.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(50),
           border: Border.all(
-            color: canSubmit ? AppColors.lavenderAccent : AppColors.glassBorder,
-            width: 1,
+            color: canSubmit
+                ? _neonMagenta.withValues(alpha: 0.8)
+                : Colors.white.withValues(alpha: 0.12),
+            width: 1.2,
           ),
           boxShadow: canSubmit
               ? [
                   BoxShadow(
-                    color: AppColors.lavenderAccent.withValues(alpha: 0.3),
-                    offset: const Offset(0, 4),
-                    blurRadius: 16,
+                    color: _neonMagenta.withValues(alpha: 0.35),
+                    blurRadius: 20,
+                    spreadRadius: 1,
                   ),
                 ]
               : null,
@@ -589,23 +866,37 @@ class _PollMessageCardState extends State<PollMessageCard> {
         child: Center(
           child: _isVoting
               ? const SizedBox(
-                  width: 16,
-                  height: 16,
+                  width: 18,
+                  height: 18,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: AppColors.midnightBg,
+                    color: Colors.white,
                   ),
                 )
-              : Text(
-                  'Vote',
-                  style: TextStyle(
-                    fontFamily: _fontFamily,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: canSubmit
-                        ? AppColors.midnightBg
-                        : AppColors.textSecondary.withValues(alpha: 0.4),
-                  ),
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.how_to_vote_rounded,
+                      size: 16,
+                      color: canSubmit
+                          ? Colors.white
+                          : Colors.white.withValues(alpha: 0.3),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Cast Vote',
+                      style: TextStyle(
+                        fontFamily: _fontFamily,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                        color: canSubmit
+                            ? Colors.white
+                            : Colors.white.withValues(alpha: 0.3),
+                      ),
+                    ),
+                  ],
                 ),
         ),
       ),
@@ -615,20 +906,34 @@ class _PollMessageCardState extends State<PollMessageCard> {
   Widget _buildClosedBadge() {
     return Center(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
-          color: AppColors.glassBg,
+          color: Colors.white.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(50),
-          border: Border.all(color: AppColors.glassBorder, width: 1),
-        ),
-        child: const Text(
-          'Closed',
-          style: TextStyle(
-            fontFamily: _fontFamily,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: AppColors.textSecondary,
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.15),
+            width: 1,
           ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.lock_outline_rounded,
+              size: 12,
+              color: Colors.white.withValues(alpha: 0.45),
+            ),
+            const SizedBox(width: 5),
+            Text(
+              'Poll Closed',
+              style: TextStyle(
+                fontFamily: _fontFamily,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.white.withValues(alpha: 0.45),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -645,24 +950,39 @@ class _PollMessageCardState extends State<PollMessageCard> {
       },
       child: Container(
         width: double.infinity,
-        height: 30,
+        height: 38,
         decoration: BoxDecoration(
-          color: AppColors.glassBg,
+          color: Colors.redAccent.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(50),
-          border: Border.all(color: AppColors.glassBorder, width: 1),
+          border: Border.all(
+            color: Colors.redAccent.withValues(alpha: 0.4),
+            width: 1,
+          ),
         ),
-        child: const Center(
-          child: Text(
-            'Close',
-            style: TextStyle(
-              fontFamily: _fontFamily,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: Colors.red,
-            ),
+        child: Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.stop_circle_outlined,
+                size: 14,
+                color: Colors.redAccent.withValues(alpha: 0.8),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Close Poll',
+                style: TextStyle(
+                  fontFamily: _fontFamily,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.redAccent.withValues(alpha: 0.8),
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 }
+

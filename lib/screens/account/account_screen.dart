@@ -10,12 +10,15 @@ import '../../services/group/group_service.dart';
 import '../../services/profile/profile_service.dart';
 import '../../services/session/session_service.dart';
 import '../../services/tri_race/tri_race_service.dart';
+import '../../models/friend_entity.dart';
+import '../../models/group_chat.dart';
 import '../../models/user_entity.dart';
 import '../../widgets/animated_background.dart';
 import '../../widgets/arc_avatar_picker.dart';
 import '../../widgets/terms_agreement_dialog.dart';
 import 'edit_profile_page.dart';
 import 'account_info_screen.dart';
+import 'profile_friends_screen.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -43,6 +46,33 @@ class _AccountScreenState extends State<AccountScreen>
   UserEntity? _user;
   bool _loading = true;
   StreamSubscription<UserEntity?>? _userSub;
+
+  /// Counters for the friends/groups queries.
+  ///
+  /// Memoized so both StreamBuilders below keep the same stream instance across
+  /// rebuilds. Building these inline in build() would hand StreamBuilder a new
+  /// object on every setState (including every WeDo-slider drag frame),
+  /// forcing an unsubscribe/resubscribe of both queries and blanking the
+  /// counts to 0.
+  ///
+  /// Deliberately nullable rather than `late final`: a `late` field is not
+  /// initialized by the constructor, so a hot reload that introduces it would
+  /// throw LateInitializationError on the next build (initState does not re-run
+  /// on reload). Created on first use instead.
+  String? _streamUid;
+  Stream<List<FriendEntity>>? _cachedFriendsStream;
+  Stream<List<GroupChat>>? _cachedGroupsStream;
+
+  /// (Re)creates the counter queries if they have not been built yet, or if the
+  /// signed-in uid changed since they were built.
+  void _ensureStreams() {
+    final uid = _uid;
+    if (_streamUid == uid && _cachedFriendsStream != null) return;
+    _streamUid = uid;
+    _cachedFriendsStream = _friendService.getFriendsStream(uid);
+    _cachedGroupsStream = _groupService.getUserGroupsStream(uid);
+  }
+
   int _totalMatches = 0;
   int _pickFightWins = 0;
   int _triRaceWins = 0;
@@ -52,6 +82,8 @@ class _AccountScreenState extends State<AccountScreen>
   late final AnimationController _frameRevealCtrl;
   bool _isAutoHiding = false;
   bool _isFrameAutoHiding = false;
+  bool _showDismissHint = false;
+  Timer? _dismissHintTimer;
 
   String get _uid => _auth.currentUser?.uid ?? '';
 
@@ -75,13 +107,33 @@ class _AccountScreenState extends State<AccountScreen>
   @override
   void dispose() {
     _userSub?.cancel();
+    _dismissHintTimer?.cancel();
     _arcRevealCtrl.dispose();
     _frameRevealCtrl.dispose();
     super.dispose();
   }
 
+  /// Hides the backdrop-dismiss hint immediately, so it never lingers after
+  /// the arcs have already closed by some other route.
+  void _dismissHint() {
+    _dismissHintTimer?.cancel();
+    if (!_showDismissHint || !mounted) return;
+    setState(() => _showDismissHint = false);
+  }
+
+  /// Shows the backdrop-dismiss hint for a moment. Idempotent, so it is safe to
+  /// call on every slider drag frame.
+  void _maybeShowDismissHint() {
+    if (_showDismissHint) return;
+    setState(() => _showDismissHint = true);
+    _dismissHintTimer?.cancel();
+    _dismissHintTimer =
+        Timer(const Duration(milliseconds: 1800), _dismissHint);
+  }
+
   void _closeArcImmediately() {
     if (_arcRevealCtrl.isDismissed) return;
+    _dismissHint();
     _isAutoHiding = true;
     setState(() => _wedoThumbRatio = 0.5);
     _frameRevealCtrl.reverse();
@@ -96,6 +148,7 @@ class _AccountScreenState extends State<AccountScreen>
 
   void _closeFrameImmediately() {
     if (_frameRevealCtrl.isDismissed) return;
+    _dismissHint();
     _isFrameAutoHiding = true;
     setState(() => _wedoThumbRatio = 0.5);
     _arcRevealCtrl.reverse();
@@ -111,11 +164,13 @@ class _AccountScreenState extends State<AccountScreen>
   void _showBothArcs() {
     _arcRevealCtrl.forward();
     _frameRevealCtrl.forward();
+    _maybeShowDismissHint();
   }
 
   void _hideBothArcs() {
     _arcRevealCtrl.reverse();
     _frameRevealCtrl.reverse();
+    _dismissHint();
     setState(() => _wedoThumbRatio = 0.5);
   }
 
@@ -123,9 +178,11 @@ class _AccountScreenState extends State<AccountScreen>
     if (_wedoThumbRatio < 0.45) {
       _arcRevealCtrl.forward();
       _frameRevealCtrl.reverse();
+      _maybeShowDismissHint();
     } else if (_wedoThumbRatio > 0.55) {
       _frameRevealCtrl.forward();
       _arcRevealCtrl.reverse();
+      _maybeShowDismissHint();
     } else {
       _arcRevealCtrl.reverse();
       _frameRevealCtrl.reverse();
@@ -294,10 +351,14 @@ class _AccountScreenState extends State<AccountScreen>
     }
   }
 
-  void _closeIfBothVisible() {
-    if (!_arcRevealCtrl.isDismissed && !_frameRevealCtrl.isDismissed) {
-      _hideBothArcs();
-    }
+  /// Closes whichever arcs are currently open.
+  ///
+  /// Previously required *both* arcs to be visible, which left the one-arc
+  /// states reachable by dragging the WeDo slider to either side with no
+  /// working backdrop exit at all.
+  void _closeIfAnyVisible() {
+    if (_arcRevealCtrl.isDismissed && _frameRevealCtrl.isDismissed) return;
+    _hideBothArcs();
   }
 
   @override
@@ -321,7 +382,7 @@ class _AccountScreenState extends State<AccountScreen>
       ),
       body: GestureDetector(
         behavior: HitTestBehavior.translucent,
-        onTap: _closeIfBothVisible,
+        onTap: _closeIfAnyVisible,
         child: AnimatedBackground(
           showStars: false,
           child: Stack(
@@ -415,8 +476,36 @@ class _AccountScreenState extends State<AccountScreen>
                       sigmaX: 5 * blurValue,
                       sigmaY: 5 * blurValue,
                     ),
-                    child: Container(
-                      color: Colors.black.withValues(alpha: 0.3 * blurValue),
+                    child: Stack(
+                      children: [
+                        Container(
+                          color: Colors.black.withValues(alpha: 0.3 * blurValue),
+                        ),
+                        if (_showDismissHint)
+                          Center(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.55),
+                                borderRadius: BorderRadius.circular(24),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.15),
+                                  width: 1,
+                                ),
+                              ),
+                              child: const Text(
+                                'Tap anywhere to close',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                  fontFamily: 'Poppins',
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   );
                 },
@@ -621,12 +710,16 @@ class _AccountScreenState extends State<AccountScreen>
   }
 
   Widget _buildStatsPanel() {
+    _ensureStreams();
     return StreamBuilder<List>(
-      stream: _friendService.getFriendsStream(_uid),
+      stream: _cachedFriendsStream,
       builder: (context, friendsSnap) {
-        final friendsCount = friendsSnap.data?.length ?? 0;
+        // An errored query must not masquerade as "0 friends" — that silently
+        // hid a crashing friends query behind a plausible-looking count.
+        final friendsCount =
+            friendsSnap.hasError ? 0 : friendsSnap.data?.length ?? 0;
         return StreamBuilder<List>(
-          stream: _groupService.getUserGroupsStream(_uid),
+          stream: _cachedGroupsStream,
           builder: (context, groupsSnap) {
             final groupsCount = groupsSnap.data?.length ?? 0;
             return ClipRRect(
@@ -646,8 +739,24 @@ class _AccountScreenState extends State<AccountScreen>
                   ),
                   child: Row(
                     children: [
-                      _buildStatItem(count: friendsCount, label: 'Friends'),
-                      _buildStatItem(count: groupsCount, label: 'Groups'),
+                      _buildStatItem(
+                        count: friendsCount,
+                        label: 'Friends',
+                        onTap: () => _openFriends(),
+                      ),
+                      // Hairline between the two counters. Fixed height keeps
+                      // it clear of the panel's top and bottom borders, and a
+                      // plain Container avoids VerticalDivider's themed
+                      // indent and colour.
+                      Container(
+                        width: 1,
+                        height: 28,
+                        color: Colors.white.withValues(alpha: 0.15),
+                      ),
+                      _buildStatItem(
+                        count: groupsCount,
+                        label: 'Groups',
+                      ),
                     ],
                   ),
                 ),
@@ -659,30 +768,48 @@ class _AccountScreenState extends State<AccountScreen>
     );
   }
 
-  Widget _buildStatItem({required int count, required String label}) {
+  void _openFriends() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ProfileFriendsScreen()),
+    );
+  }
+
+  Widget _buildStatItem({
+    required int count,
+    required String label,
+    VoidCallback? onTap,
+  }) {
     return Expanded(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '$count',
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-              fontFamily: 'Poppins',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$count',
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+                fontFamily: 'Poppins',
+                height: 1.0,
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 10,
-              color: Color(0xFFFE4EF0),
-              fontFamily: 'Poppins',
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFFFE4EF0),
+                fontFamily: 'Poppins',
+                letterSpacing: 0.4,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -856,213 +983,296 @@ class _AccountScreenState extends State<AccountScreen>
     final totalPlayed = _totalMatches;
     final pfWins = _pickFightWins;
     final trWins = _triRaceWins;
+    final totalWins = pfWins + trWins;
+    final winRateRatio = totalPlayed > 0 ? (totalWins / totalPlayed).clamp(0.0, 1.0) : 0.0;
     final winRate = totalPlayed > 0 
-        ? ((pfWins + trWins) / totalPlayed * 100).toStringAsFixed(1)
+        ? (winRateRatio * 100).toStringAsFixed(1)
         : '0.0';
 
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(16 * s),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xFFFE4EF0).withValues(alpha: 0.3),
-          width: 1,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(16 * s),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.15),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: const Color(0xFFFE4EF0),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFFE4EF0).withValues(alpha: 0.6),
-                      blurRadius: 6,
-                      spreadRadius: 1,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 8 * s,
+                        height: 8 * s,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: const Color(0xFFFE4EF0),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFFE4EF0).withValues(alpha: 0.6),
+                              blurRadius: 6,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(width: 8 * s),
+                      Text(
+                        'Game & Match Stats',
+                        style: TextStyle(
+                          fontSize: 16 * s,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          fontFamily: 'Poppins',
+                        ),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 10 * s, vertical: 4 * s),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFE4EF0).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: const Color(0xFFFE4EF0).withValues(alpha: 0.4),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.bolt_rounded,
+                          size: 14 * s,
+                          color: const Color(0xFFFE4EF0),
+                        ),
+                        SizedBox(width: 3 * s),
+                        Text(
+                          '$winRate% Win Rate',
+                          style: TextStyle(
+                            fontSize: 11 * s,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                            fontFamily: 'Poppins',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 16 * s),
+              IntrinsicHeight(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _buildEnhancedStatBox(
+                        context: context,
+                        iconAsset: 'assets/icons/controller.png',
+                        fallbackIcon: Icons.sports_esports_rounded,
+                        accentColor: const Color(0xFFB388FF),
+                        label: 'Matches',
+                        value: '$totalPlayed',
+                        caption: 'PLAYED',
+                      ),
+                    ),
+                    SizedBox(width: 8 * s),
+                    Expanded(
+                      child: _buildEnhancedStatBox(
+                        context: context,
+                        iconAsset: 'assets/icons/punch.png',
+                        fallbackIcon: Icons.local_fire_department_rounded,
+                        accentColor: const Color(0xFFFE4EF0),
+                        label: 'PickFight',
+                        value: '$pfWins',
+                        caption: 'WINS',
+                      ),
+                    ),
+                    SizedBox(width: 8 * s),
+                    Expanded(
+                      child: _buildEnhancedStatBox(
+                        context: context,
+                        iconAsset: 'assets/icons/racing-flag.png',
+                        fallbackIcon: Icons.emoji_events_rounded,
+                        accentColor: const Color(0xFF00E5FF),
+                        label: 'TriRace',
+                        value: '$trWins',
+                        caption: 'PODIUM',
+                      ),
                     ),
                   ],
                 ),
               ),
-              SizedBox(width: 8 * s),
-              Text(
-                'Game & Match Stats',
-                style: TextStyle(
-                  fontSize: 16 * s,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                  fontFamily: 'Poppins',
+              SizedBox(height: 14 * s),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4 * s),
+                child: Container(
+                  height: 5 * s,
+                  width: double.infinity,
+                  color: Colors.white.withValues(alpha: 0.08),
+                  child: FractionallySizedBox(
+                    alignment: Alignment.centerLeft,
+                    widthFactor: winRateRatio,
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Color(0xFF800DD8),
+                            Color(0xFFFE4EF0),
+                            Color(0xFF00E5FF),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
+              ),
+              SizedBox(height: 6 * s),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Overall Performance',
+                    style: TextStyle(
+                      fontSize: 10 * s,
+                      color: Colors.white54,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                  Text(
+                    '$totalWins of $totalPlayed won',
+                    style: TextStyle(
+                      fontSize: 10 * s,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white70,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-          SizedBox(height: 16 * s),
-          Row(
-            children: [
-              Expanded(
-                child: _buildStatBox(
-                  context: context,
-                  label: 'Total Matches',
-                  value: '$totalPlayed',
-                  valueColor: Colors.white,
-                  caption: 'Played',
-                ),
-              ),
-              SizedBox(width: 8 * s),
-              Expanded(
-                child: _buildWinnerStatBox(context: context, wins: pfWins, winRate: winRate),
-              ),
-              SizedBox(width: 8 * s),
-              Expanded(
-                child: _buildStatBox(
-                  context: context,
-                  label: 'TriRace Wins',
-                  value: '$trWins',
-                  valueColor: const Color(0xFF00E5FF),
-                  caption: 'Top Podium',
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildStatBox({
+  Widget _buildEnhancedStatBox({
     required BuildContext context,
+    required String iconAsset,
+    required IconData fallbackIcon,
+    required Color accentColor,
     required String label,
     required String value,
-    required Color valueColor,
     required String caption,
   }) {
     final s = _rs(context);
     return Container(
-      padding: EdgeInsets.symmetric(vertical: 12 * s, horizontal: 8 * s),
+      padding: EdgeInsets.symmetric(vertical: 12 * s, horizontal: 6 * s),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A0A2E),
+        color: Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
+          color: accentColor.withValues(alpha: 0.25),
           width: 1,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: accentColor.withValues(alpha: 0.06),
+            blurRadius: 10,
+            spreadRadius: 0,
+          ),
+        ],
       ),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10 * s,
-              color: Colors.white70,
-              fontFamily: 'Poppins',
+          Container(
+            width: 36 * s,
+            height: 36 * s,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: accentColor.withValues(alpha: 0.15),
+              border: Border.all(
+                color: accentColor.withValues(alpha: 0.35),
+                width: 1,
+              ),
             ),
-            textAlign: TextAlign.center,
+            child: Center(
+              child: SizedBox(
+                width: 20 * s,
+                height: 20 * s,
+                child: Image.asset(
+                  iconAsset,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) => Icon(
+                    fallbackIcon,
+                    size: 18 * s,
+                    color: accentColor,
+                  ),
+                ),
+              ),
+            ),
           ),
-          SizedBox(height: 6 * s),
+          SizedBox(height: 8 * s),
           Text(
             value,
             style: TextStyle(
               fontSize: 22 * s,
-              fontWeight: FontWeight.w700,
-              color: valueColor,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
               fontFamily: 'Poppins',
-            ),
-          ),
-          SizedBox(height: 4 * s),
-          Text(
-            caption,
-            style: TextStyle(
-              fontSize: 9 * s,
-              color: const Color(0xFFFE4EF0),
-              fontFamily: 'Poppins',
+              height: 1.0,
             ),
             textAlign: TextAlign.center,
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWinnerStatBox({
-    required BuildContext context,
-    required int wins,
-    required String winRate,
-  }) {
-    final s = _rs(context);
-    return Container(
-      padding: EdgeInsets.symmetric(vertical: 12 * s, horizontal: 8 * s),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A0A2E),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: const Color(0xFFFE4EF0).withValues(alpha: 0.6),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFFFE4EF0).withValues(alpha: 0.3),
-            blurRadius: 8,
-            spreadRadius: 1,
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 8 * s, vertical: 2 * s),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF800DD8), Color(0xFFFE4EF0)],
-              ),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              'WINNER',
-              style: TextStyle(
-                fontSize: 8 * s,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-                fontFamily: 'Poppins',
-                letterSpacing: 1,
-              ),
-            ),
-          ),
-          SizedBox(height: 6 * s),
+          SizedBox(height: 4 * s),
           Text(
-            'Pick Fight Wins',
+            label,
             style: TextStyle(
-              fontSize: 10 * s,
+              fontSize: 10.5 * s,
+              fontWeight: FontWeight.w500,
               color: Colors.white70,
               fontFamily: 'Poppins',
+              letterSpacing: 0.2,
             ),
             textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-          SizedBox(height: 4 * s),
-          Text(
-            '$wins',
-            style: TextStyle(
-              fontSize: 24 * s,
-              fontWeight: FontWeight.w700,
-              color: const Color(0xFFFFD600),
-              fontFamily: 'Poppins',
+          SizedBox(height: 6 * s),
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 7 * s, vertical: 2.5 * s),
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(6 * s),
+              border: Border.all(
+                color: accentColor.withValues(alpha: 0.3),
+                width: 0.8,
+              ),
             ),
-          ),
-          SizedBox(height: 2 * s),
-          Text(
-            '$winRate% Win Rate',
-            style: TextStyle(
-              fontSize: 9 * s,
-              color: const Color(0xFFFE4EF0),
-              fontFamily: 'Poppins',
+            child: Text(
+              caption,
+              style: TextStyle(
+                fontSize: 8.5 * s,
+                fontWeight: FontWeight.w700,
+                color: accentColor,
+                fontFamily: 'Poppins',
+                letterSpacing: 0.5,
+              ),
+              textAlign: TextAlign.center,
             ),
-            textAlign: TextAlign.center,
           ),
         ],
       ),
@@ -1070,38 +1280,46 @@ class _AccountScreenState extends State<AccountScreen>
   }
 
   Widget _buildAccountMenu(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
-          width: 1,
-        ),
-      ),
-      child: Column(
-        children: [
-          _buildMenuItem(
-            context: context,
-            icon: Icons.credit_card,
-            title: 'Account Info',
-            subtitle: 'Email, password & deletion',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const AccountInfoScreen()),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.15),
+              width: 1,
             ),
-            showDivider: true,
           ),
-          _buildMenuItem(
-            context: context,
-            icon: Icons.shield,
-            title: 'Terms & Agreement',
-            subtitle: 'Privacy policy, terms of service',
-            onTap: () => showTermsAgreementDialog(context),
-            showDivider: true,
+          child: Column(
+            children: [
+              _buildMenuItem(
+                context: context,
+                icon: Icons.manage_accounts_rounded,
+                accentColor: const Color(0xFFFE4EF0),
+                title: 'Account Info',
+                subtitle: 'Email, password & security',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AccountInfoScreen()),
+                ),
+                showDivider: true,
+              ),
+              _buildMenuItem(
+                context: context,
+                icon: Icons.verified_user_rounded,
+                accentColor: const Color(0xFF00E5FF),
+                title: 'Terms & Agreement',
+                subtitle: 'Privacy policy & terms of service',
+                onTap: () => showTermsAgreementDialog(context),
+                showDivider: true,
+              ),
+              _buildLogoutItem(context: context),
+            ],
           ),
-          _buildLogoutItem(context: context),
-        ],
+        ),
       ),
     );
   }
@@ -1109,6 +1327,7 @@ class _AccountScreenState extends State<AccountScreen>
   Widget _buildMenuItem({
     required BuildContext context,
     required IconData icon,
+    required Color accentColor,
     required String title,
     required String subtitle,
     required VoidCallback onTap,
@@ -1117,64 +1336,89 @@ class _AccountScreenState extends State<AccountScreen>
     final s = _rs(context);
     return Column(
       children: [
-        GestureDetector(
-          onTap: onTap,
-          child: Container(
-            padding: EdgeInsets.symmetric(horizontal: 16 * s, vertical: 14 * s),
-            child: Row(
-              children: [
-                Container(
-                  width: 40 * s,
-                  height: 40 * s,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF800DD8).withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    icon,
-                    color: const Color(0xFFFE4EF0),
-                    size: 20 * s,
-                  ),
-                ),
-                SizedBox(width: 12 * s),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 14 * s,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                          fontFamily: 'Poppins',
-                        ),
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            splashColor: accentColor.withValues(alpha: 0.12),
+            highlightColor: accentColor.withValues(alpha: 0.06),
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16 * s, vertical: 13 * s),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42 * s,
+                    height: 42 * s,
+                    decoration: BoxDecoration(
+                      color: accentColor.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(12 * s),
+                      border: Border.all(
+                        color: accentColor.withValues(alpha: 0.3),
+                        width: 1,
                       ),
-                      SizedBox(height: 2 * s),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 11 * s,
-                          color: Colors.white54,
-                          fontFamily: 'Poppins',
+                      boxShadow: [
+                        BoxShadow(
+                          color: accentColor.withValues(alpha: 0.12),
+                          blurRadius: 8,
+                          spreadRadius: 0,
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
+                    child: Icon(
+                      icon,
+                      color: accentColor,
+                      size: 20 * s,
+                    ),
                   ),
-                ),
-                Icon(
-                  Icons.chevron_right,
-                  color: Colors.white38,
-                  size: 20 * s,
-                ),
-              ],
+                  SizedBox(width: 14 * s),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: 14 * s,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                            fontFamily: 'Poppins',
+                          ),
+                        ),
+                        SizedBox(height: 2 * s),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            fontSize: 11 * s,
+                            color: Colors.white54,
+                            fontFamily: 'Poppins',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    width: 28 * s,
+                    height: 28 * s,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.06),
+                    ),
+                    child: Icon(
+                      Icons.chevron_right_rounded,
+                      color: Colors.white60,
+                      size: 18 * s,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
         if (showDivider)
           Divider(
             height: 1,
-            indent: 68 * s,
+            indent: 72 * s,
+            endIndent: 16 * s,
             color: Colors.white.withValues(alpha: 0.08),
           ),
       ],
@@ -1183,100 +1427,251 @@ class _AccountScreenState extends State<AccountScreen>
 
   Widget _buildLogoutItem({required BuildContext context}) {
     final s = _rs(context);
-    return GestureDetector(
-      onTap: () async {
-        final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            backgroundColor: const Color(0xFF1E1233),
-            title: const Text('Log out',
-                style: TextStyle(color: Colors.white)),
-            content: const Text('Are you sure you want to log out?',
-                style: TextStyle(color: Colors.white70)),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel',
-                    style: TextStyle(color: Colors.white54)),
+    const accentColor = Color(0xFFFF5252);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _showLogoutDialog(context),
+        splashColor: accentColor.withValues(alpha: 0.12),
+        highlightColor: accentColor.withValues(alpha: 0.06),
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16 * s, vertical: 13 * s),
+          child: Row(
+            children: [
+              Container(
+                width: 42 * s,
+                height: 42 * s,
+                decoration: BoxDecoration(
+                  color: accentColor.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(12 * s),
+                  border: Border.all(
+                    color: accentColor.withValues(alpha: 0.3),
+                    width: 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: accentColor.withValues(alpha: 0.12),
+                      blurRadius: 8,
+                      spreadRadius: 0,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.logout_rounded,
+                  color: accentColor,
+                  size: 20,
+                ),
               ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Log out',
-                    style: TextStyle(color: Color(0xFFFF6B6B))),
+              SizedBox(width: 14 * s),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Log Out',
+                      style: TextStyle(
+                        fontSize: 14 * s,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                        fontFamily: 'Poppins',
+                      ),
+                    ),
+                    SizedBox(height: 2 * s),
+                    Text(
+                      'Sign out from this device',
+                      style: TextStyle(
+                        fontSize: 11 * s,
+                        color: Colors.white54,
+                        fontFamily: 'Poppins',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 10 * s, vertical: 5 * s),
+                decoration: BoxDecoration(
+                  color: accentColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(16 * s),
+                  border: Border.all(
+                    color: accentColor.withValues(alpha: 0.35),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Exit',
+                      style: TextStyle(
+                        fontSize: 11 * s,
+                        fontWeight: FontWeight.w600,
+                        color: accentColor,
+                        fontFamily: 'Poppins',
+                      ),
+                    ),
+                    SizedBox(width: 3 * s),
+                    const Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      size: 9,
+                      color: accentColor,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-        );
-        if (confirmed == true) {
-          await _auth.signOut();
-        }
-      },
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 16 * s, vertical: 14 * s),
-        child: Row(
-          children: [
-            Container(
-              width: 40 * s,
-              height: 40 * s,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFF6B6B).withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                Icons.logout,
-                color: const Color(0xFFFF6B6B),
-                size: 20 * s,
-              ),
-            ),
-            SizedBox(width: 12 * s),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Log Out',
-                    style: TextStyle(
-                      fontSize: 14 * s,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                      fontFamily: 'Poppins',
-                    ),
-                  ),
-                  SizedBox(height: 2 * s),
-                  Text(
-                    'Sign out from this device',
-                    style: TextStyle(
-                      fontSize: 11 * s,
-                      color: Colors.white54,
-                      fontFamily: 'Poppins',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 12 * s, vertical: 6 * s),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFF6B6B).withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: const Color(0xFFFF6B6B).withValues(alpha: 0.4),
-                  width: 1,
-                ),
-              ),
-              child: Text(
-                'Exit',
-                style: TextStyle(
-                  fontSize: 12 * s,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFFFF6B6B),
-                  fontFamily: 'Poppins',
-                ),
-              ),
-            ),
-          ],
         ),
       ),
     );
+  }
+
+  Future<void> _showLogoutDialog(BuildContext context) async {
+    final s = _rs(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.65),
+      builder: (ctx) => BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: EdgeInsets.symmetric(horizontal: 28 * s),
+          child: Container(
+            padding: EdgeInsets.all(22 * s),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1F0F35).withValues(alpha: 0.95),
+              borderRadius: BorderRadius.circular(22 * s),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.15),
+                width: 1.2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.5),
+                  blurRadius: 24,
+                  spreadRadius: 4,
+                ),
+                BoxShadow(
+                  color: const Color(0xFFFF5252).withValues(alpha: 0.15),
+                  blurRadius: 20,
+                  spreadRadius: -4,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 54 * s,
+                  height: 54 * s,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFFFF5252).withValues(alpha: 0.15),
+                    border: Border.all(
+                      color: const Color(0xFFFF5252).withValues(alpha: 0.35),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.logout_rounded,
+                      color: Color(0xFFFF5252),
+                      size: 26,
+                    ),
+                  ),
+                ),
+                SizedBox(height: 16 * s),
+                Text(
+                  'Log Out',
+                  style: TextStyle(
+                    fontSize: 18 * s,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    fontFamily: 'Poppins',
+                  ),
+                ),
+                SizedBox(height: 8 * s),
+                Text(
+                  'Are you sure you want to log out from this device?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12.5 * s,
+                    color: Colors.white70,
+                    fontFamily: 'Poppins',
+                    height: 1.4,
+                  ),
+                ),
+                SizedBox(height: 22 * s),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => Navigator.pop(ctx, false),
+                        child: Container(
+                          padding: EdgeInsets.symmetric(vertical: 12 * s),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(12 * s),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.12),
+                              width: 1,
+                            ),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            'Cancel',
+                            style: TextStyle(
+                              fontSize: 13 * s,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white70,
+                              fontFamily: 'Poppins',
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 12 * s),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => Navigator.pop(ctx, true),
+                        child: Container(
+                          padding: EdgeInsets.symmetric(vertical: 12 * s),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFFF5252), Color(0xFFD32F2F)],
+                            ),
+                            borderRadius: BorderRadius.circular(12 * s),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFFF5252).withValues(alpha: 0.35),
+                                blurRadius: 10,
+                                spreadRadius: 0,
+                              ),
+                            ],
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            'Log Out',
+                            style: TextStyle(
+                              fontSize: 13 * s,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                              fontFamily: 'Poppins',
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (confirmed == true) {
+      await _auth.signOut();
+    }
   }
 }
