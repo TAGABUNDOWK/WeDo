@@ -6,17 +6,25 @@ import '../tri_race/tri_race_entry_screen.dart';
 
 const _fontFamily = 'PlusJakartaSans';
 
-// ── Game data model ─────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 class _GameData {
   final String title;
   final String imagePath;
+  final String category;
+  final IconData categoryIcon;
+  final String mode;
+  final String shortDescription;
   final String instructions;
   final Widget Function(BuildContext) screenBuilder;
 
   const _GameData({
     required this.title,
     required this.imagePath,
+    required this.category,
+    required this.categoryIcon,
+    required this.mode,
+    required this.shortDescription,
     required this.instructions,
     required this.screenBuilder,
   });
@@ -26,27 +34,38 @@ final _games = [
   const _GameData(
     title: 'PickFight',
     imagePath: 'assets/images/Flashcards.png',
+    category: 'CARD',
+    categoryIcon: Icons.style_rounded,
+    mode: 'ONLINE',
+    shortDescription: 'Swipe to eliminate choices together.',
     instructions:
-        'Swipe away the card you don’t want! '
-        'Be quick—your choice needs to be protected! '
-        'PickFight is a fun and interactive card-swiping game that helps you decide.',
+        'Two choices face off on screen. Swipe up to eliminate the bottom card, '
+        'or swipe down to eliminate the top card. Keep swiping through the '
+        'choices together until one final pick remains.',
     screenBuilder: _pickFightBuilder,
   ),
   const _GameData(
     title: 'Wheel',
     imagePath: 'assets/images/SpinWheel.png',
+    category: 'LUCK',
+    categoryIcon: Icons.star_rounded,
+    mode: 'LOCAL ONLY',
+    shortDescription: 'Spin to choose one of your options.',
     instructions:
-        'Add your options to the wheel and give it a spin! The wheel will randomly '
-        'select one option. Great for making group decisions when you can\'t agree — '
-        'let fate decide!',
+        'Add the choices you are deciding between, then spin the wheel. It lands '
+        'on one of your options at random to help your group make a decision.',
     screenBuilder: _wheelBuilder,
   ),
   const _GameData(
     title: 'TriRace',
     imagePath: 'assets/images/TriRace.png',
+    category: 'RACING',
+    categoryIcon: Icons.emoji_events_rounded,
+    mode: 'ONLINE',
+    shortDescription: 'Race with friends and reach the finish.',
     instructions:
-        'Race against your friends in a triangular track! Each player controls a '
-        'racer and competes to reach the finish line first. Fastest reaction wins!',
+        'Invite friends and watch each racer compete automatically across the '
+        'track. The first racer to reach the finish line wins.',
     screenBuilder: _triRaceBuilder,
   ),
 ];
@@ -55,13 +74,25 @@ Widget _pickFightBuilder(BuildContext context) => const SessionEntryScreen();
 Widget _wheelBuilder(BuildContext context) => const WheelScreen();
 Widget _triRaceBuilder(BuildContext context) => const TriRaceEntryScreen();
 
-// ── All Games Screen ────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
-class AllGamesScreen extends StatelessWidget {
+class AllGamesScreen extends StatefulWidget {
   const AllGamesScreen({super.key});
 
   @override
+  State<AllGamesScreen> createState() => _AllGamesScreenState();
+}
+
+class _AllGamesScreenState extends State<AllGamesScreen> {
+  String _filter = 'ALL GAMES';
+
+  List<_GameData> get _visibleGames => _games
+      .where((game) => _filter == 'ALL GAMES' || game.mode == _filter)
+      .toList();
+
+  @override
   Widget build(BuildContext context) {
+    final games = _visibleGames;
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: AnimatedBackground(
@@ -70,37 +101,84 @@ class AllGamesScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
-                child: Text(
-                  'ALL GAMES',
-                  style: TextStyle(
-                    fontFamily: _fontFamily,
-                    fontSize: 26,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 2),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.sports_esports_rounded, color: Color(0xFFD35BFF), size: 19),
+                        const SizedBox(width: 8),
+                        Container(width: 2, height: 18, color: const Color(0xFFB567FF)),
+                        const SizedBox(width: 9),
+                        const Text(
+                          'PLAY & HAVE FUN',
+                          style: TextStyle(fontFamily: _fontFamily, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 2.5, color: Color(0xFFD58AFF)),
+                        ),
+                        const Spacer(),
+                        PopupMenuButton<String>(
+                          initialValue: _filter,
+                          tooltip: 'Filter games',
+                          color: const Color(0xFF281747),
+                          onSelected: (value) => setState(() => _filter = value),
+                          itemBuilder: (context) => const [
+                            PopupMenuItem(value: 'ALL GAMES', child: Text('All Games', style: TextStyle(color: Colors.white))),
+                            PopupMenuItem(value: 'ONLINE', child: Text('Online', style: TextStyle(color: Colors.white))),
+                            PopupMenuItem(value: 'LOCAL ONLY', child: Text('Local Only', style: TextStyle(color: Colors.white))),
+                          ],
+                          child: const _HeaderActionButton(icon: Icons.tune_rounded),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'ALL GAMES',
+                      style: TextStyle(fontFamily: _fontFamily, fontSize: 29, fontWeight: FontWeight.w800, letterSpacing: 0.5, color: Colors.white),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: 48,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(4),
+                        gradient: const LinearGradient(colors: [Color(0xFFFF59E7), Color(0xFF783CFF)]),
+                      ),
+                    ),
+                    const SizedBox(height: 9),
+                    Text(
+                      'Explore our games that make deciding more fun and intense.',
+                      style: TextStyle(fontFamily: _fontFamily, fontSize: 12, height: 1.4, color: Colors.white.withValues(alpha: 0.70)),
+                    ),
+                  ],
                 ),
               ),
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: GridView.builder(
-                    padding: const EdgeInsets.only(top: 12, bottom: 24),
+                  child: games.isEmpty
+                      ? Center(
+                          child: Text(
+                            'No games in this filter.',
+                            style: TextStyle(fontFamily: _fontFamily, color: Colors.white.withValues(alpha: 0.6)),
+                          ),
+                        )
+                      : GridView.builder(
+                    padding: const EdgeInsets.only(top: 16, bottom: 24),
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
                       mainAxisSpacing: 14,
                       crossAxisSpacing: 14,
-                      childAspectRatio: 0.82,
+                      childAspectRatio: 0.70,
                     ),
-                    itemCount: _games.length,
+                    itemCount: games.length,
                     itemBuilder: (context, index) {
                       return _GameCard(
-                        data: _games[index],
+                        data: games[index],
                         onTap: () => _showGameDetailPopup(
                           context,
-                          _games[index],
+                          games[index],
                         ),
                       );
                     },
@@ -115,7 +193,29 @@ class AllGamesScreen extends StatelessWidget {
   }
 }
 
-// ── Game Card ───────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+
+class _HeaderActionButton extends StatelessWidget {
+  final IconData icon;
+
+  const _HeaderActionButton({required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFB778FF).withValues(alpha: 0.42)),
+        ),
+        child: Icon(icon, color: Colors.white, size: 20),
+      ),
+    );
+  }
+}
 
 class _GameCard extends StatelessWidget {
   final _GameData data;
@@ -123,18 +223,28 @@ class _GameCard extends StatelessWidget {
 
   const _GameCard({required this.data, required this.onTap});
 
+  Color get _accent => switch (data.category) {
+        'CARD' => const Color(0xFFFE4EF0),
+        'LUCK' => const Color(0xFF437CFF),
+        _ => const Color(0xFF26D7D1),
+      };
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.12),
-            width: 1,
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF271247), Color(0xFF180B35)],
           ),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: _accent.withValues(alpha: 0.7), width: 1),
+          boxShadow: [
+            BoxShadow(color: _accent.withValues(alpha: 0.10), blurRadius: 16),
+          ],
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(18),
@@ -150,31 +260,66 @@ class _GameCard extends StatelessWidget {
                     errorBuilder: (context, error, stackTrace) {
                       return Container(
                         color: const Color(0xFF1A1025),
-                        child: const Icon(
-                          Icons.gamepad,
-                          color: Colors.white24,
-                          size: 40,
-                        ),
+                        child: const Icon(Icons.gamepad, color: Colors.white24, size: 40),
                       );
                     },
                   ),
                 ),
               ),
-              Container(
-                height: 1,
-                color: Colors.white.withValues(alpha: 0.10),
-              ),
               Expanded(
-                flex: 2,
-                child: Center(
-                  child: Text(
-                    data.title,
-                    style: const TextStyle(
-                      fontFamily: _fontFamily,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
+                flex: 4,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 10, 11),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _accent.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: _accent.withValues(alpha: 0.75)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(data.categoryIcon, color: _accent, size: 13),
+                            const SizedBox(width: 5),
+                            Text(data.category, style: TextStyle(fontFamily: _fontFamily, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.4, color: _accent)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                      Expanded(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(data.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontFamily: _fontFamily, fontSize: 17, fontWeight: FontWeight.w800, color: Colors.white)),
+                                  const SizedBox(height: 3),
+                                  Text(data.shortDescription, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontFamily: _fontFamily, fontSize: 10, height: 1.3, color: Colors.white.withValues(alpha: 0.72))),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: const Color(0xFF7029D8).withValues(alpha: 0.32),
+                                border: Border.all(color: const Color(0xFF974BFF).withValues(alpha: 0.6)),
+                              ),
+                              child: const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 20),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -185,9 +330,6 @@ class _GameCard extends StatelessWidget {
     );
   }
 }
-
-// ── Game Detail Popup ───────────────────────────────────────────────────────
-
 void _showGameDetailPopup(BuildContext context, _GameData game) {
   showGeneralDialog(
     context: context,
