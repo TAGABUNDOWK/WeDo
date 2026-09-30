@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -51,10 +52,14 @@ class CallManager extends ChangeNotifier {
   MediaStream? _outgoingLocalStream;
   StreamSubscription? _signalsSub;
   StreamSubscription? _participantsSub;
+  StreamSubscription? _webrtcLocalStreamSub;
+  StreamSubscription? _webrtcRemoteStreamSub;
   Timer? _groupCallDebounce;
   Timer? _callTimer;
   Timer? _outgoingRingTimeout;
   int _callDuration = 0;
+  final ValueNotifier<int> _durationNotifier = ValueNotifier<int>(0);
+  ValueListenable<int> get callDurationListenable => _durationNotifier;
   bool _isMuted = false;
   bool _isVideoOff = false;
   bool _isSpeakerOn = false;
@@ -68,6 +73,8 @@ class CallManager extends ChangeNotifier {
   bool _isTransitioningToActive = false;
   bool _isRejoining = false;
   ActiveCallData? _leftCall;
+  StreamSubscription? _leftWatchCallSub;
+  StreamSubscription? _leftWatchParticipantsSub;
 
   RTCVideoRenderer? _localRenderer;
   final Map<String, RTCVideoRenderer> _remoteRenderers = {};
@@ -339,15 +346,17 @@ class CallManager extends ChangeNotifier {
 
     _activeCall = callData;
     _callDuration = 0;
+    _durationNotifier.value = 0;
     _isMuted = false;
     _isVideoOff = false;
-    _isSpeakerOn = audioOnly;
+    _isSpeakerOn = !audioOnly;
     _processedSignals.clear();
     _pendingOfferPeers.clear();
     _outgoingOfferPeers.clear();
     _noPcSince.clear();
     _departedPeers.clear();
     _leftCall = null;
+    _stopLeftCallWatch();
 
     _webrtcService = webrtc.WebRTCService();
     _localStreamController = StreamController<MediaStream>.broadcast();
@@ -372,26 +381,29 @@ class CallManager extends ChangeNotifier {
     );
     _outgoingLocalStream = null;
 
-    if (_isSpeakerOn) {
-      await _webrtcService!.setSpeakerOn(true);
-    }
+    await _webrtcService!.setSpeakerOn(_isSpeakerOn);
 
     _localRenderer = RTCVideoRenderer();
     await _localRenderer!.initialize();
 
     if (_webrtcService!.localStream != null) {
+      _webrtcService!.setAudioEnabled(!_isMuted);
+      _webrtcService!.setVideoEnabled(!_isVideoOff);
       _localRenderer!.srcObject = _webrtcService!.localStream;
       _localStreamController?.add(_webrtcService!.localStream!);
       notifyListeners();
     }
 
-    _webrtcService!.onLocalStream.listen((stream) {
+    _webrtcLocalStreamSub = _webrtcService!.onLocalStream.listen((stream) {
       _localStreamController?.add(stream);
       _localRenderer?.srcObject = stream;
+      _webrtcService?.setAudioEnabled(!_isMuted);
+      _webrtcService?.setVideoEnabled(!_isVideoOff);
       notifyListeners();
     });
 
-    _webrtcService!.onRemoteStream.listen((pair) {
+    _webrtcRemoteStreamSub =
+        _webrtcService!.onRemoteStream.listen((pair) {
       final (peerId, stream) = pair;
       _remoteStreamController?.add(stream);
 
@@ -608,7 +620,7 @@ class CallManager extends ChangeNotifier {
 
     _callTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _callDuration++;
-      notifyListeners();
+      _durationNotifier.value = _callDuration;
     });
 
     WakelockPlus.enable();
@@ -765,6 +777,10 @@ class CallManager extends ChangeNotifier {
     _callSub?.cancel();
     _signalsSub?.cancel();
     _participantsSub?.cancel();
+    _webrtcLocalStreamSub?.cancel();
+    _webrtcLocalStreamSub = null;
+    _webrtcRemoteStreamSub?.cancel();
+    _webrtcRemoteStreamSub = null;
     _groupCallDebounce?.cancel();
     for (final t in _reconnectTimers.values) {
       t.cancel();
@@ -792,12 +808,14 @@ class CallManager extends ChangeNotifier {
 
     _activeCall = null;
     _callDuration = 0;
+    _durationNotifier.value = 0;
     _processedSignals.clear();
     _pendingOfferPeers.clear();
     _outgoingOfferPeers.clear();
     _noPcSince.clear();
     _departedPeers.clear();
     _leftCall = null;
+    _stopLeftCallWatch();
     WakelockPlus.disable();
 
     final oldWebrtc = _webrtcService;
@@ -858,6 +876,10 @@ class CallManager extends ChangeNotifier {
     _callSub?.cancel();
     _signalsSub?.cancel();
     _participantsSub?.cancel();
+    _webrtcLocalStreamSub?.cancel();
+    _webrtcLocalStreamSub = null;
+    _webrtcRemoteStreamSub?.cancel();
+    _webrtcRemoteStreamSub = null;
     _groupCallDebounce?.cancel();
     for (final t in _reconnectTimers.values) {
       t.cancel();
@@ -889,7 +911,10 @@ class CallManager extends ChangeNotifier {
 
     _activeCall = null;
     _callDuration = 0;
+    _durationNotifier.value = 0;
     WakelockPlus.disable();
+
+    _startLeftCallWatch(callId);
 
     final oldWebrtc = _webrtcService;
     final oldLocalCtrl = _localStreamController;
@@ -925,6 +950,76 @@ class CallManager extends ChangeNotifier {
     });
   }
 
+  void _stopLeftCallWatch() {
+    _leftWatchCallSub?.cancel();
+    _leftWatchCallSub = null;
+    _leftWatchParticipantsSub?.cancel();
+    _leftWatchParticipantsSub = null;
+  }
+
+  void _clearLeftCall() {
+    _stopLeftCallWatch();
+    if (_leftCall == null) return;
+    _leftCall = null;
+    notifyListeners();
+  }
+
+  void _startLeftCallWatch(String callId) {
+    _stopLeftCallWatch();
+    final myUid = _currentUser?.uid;
+
+    _leftWatchCallSub = _callService.getCallStream(callId).listen(
+      (call) {
+        if (_leftCall == null) return;
+        if (call == null ||
+            call.status == CallStatus.ended ||
+            call.status == CallStatus.declined ||
+            call.status == CallStatus.missed ||
+            call.status == CallStatus.cancelled) {
+          _clearLeftCall();
+        }
+      },
+      onError: (Object _) {},
+    );
+
+    _leftWatchParticipantsSub = _callService
+        .getParticipantsStream(callId)
+        .listen(
+      (snapshot) {
+        if (_leftCall == null) return;
+        final hasOtherActive = snapshot.docs.any((doc) {
+          final data = doc.data();
+          final status = data['status'] as String?;
+          final uid = data['uid'] as String? ?? doc.id;
+          return status == 'active' && uid != myUid;
+        });
+        if (!hasOtherActive) {
+          _clearLeftCall();
+        }
+      },
+      onError: (Object _) {},
+    );
+  }
+
+  Future<bool> _hasOtherActiveParticipant(
+      String callId, String myUid) async {
+    try {
+      final snapshot = await _callService
+          .getParticipantsStream(callId)
+          .first
+          .timeout(const Duration(seconds: 10));
+      return snapshot.docs.any((doc) {
+        final data = doc.data();
+        final status = data['status'] as String?;
+        final uid = data['uid'] as String? ?? doc.id;
+        return status == 'active' && uid != myUid;
+      });
+    } catch (_) {
+      // Can't verify; assume someone is still there so rejoin stays available.
+      return true;
+    }
+  }
+
   Future<void> rejoinCall() async {
     if (_isRejoining) return;
     final left = _leftCall;
@@ -951,14 +1046,21 @@ class CallManager extends ChangeNotifier {
           callDoc.status == CallStatus.declined ||
           callDoc.status == CallStatus.missed ||
           callDoc.status == CallStatus.cancelled) {
-        _leftCall = null;
-        notifyListeners();
+        _clearLeftCall();
+        return;
+      }
+
+      final hasOtherActive = await _hasOtherActiveParticipant(
+          callId, user.uid);
+      if (!hasOtherActive) {
+        _clearLeftCall();
         return;
       }
 
       final resolvedCall = callDoc;
       final callName = left.callName;
       _leftCall = null;
+      _stopLeftCallWatch();
 
       try {
         await startNewCall(
@@ -979,6 +1081,7 @@ class CallManager extends ChangeNotifier {
         debugPrint('Error rejoining call: $e');
         if (_activeCall == null) {
           _leftCall = left;
+          _startLeftCallWatch(callId);
         }
         notifyListeners();
         return;
@@ -1005,13 +1108,13 @@ class CallManager extends ChangeNotifier {
 
   void toggleMute() {
     _isMuted = !_isMuted;
-    _webrtcService?.toggleAudio();
+    _webrtcService?.setAudioEnabled(!_isMuted);
     notifyListeners();
   }
 
   void toggleVideo() {
     _isVideoOff = !_isVideoOff;
-    _webrtcService?.toggleVideo();
+    _webrtcService?.setVideoEnabled(!_isVideoOff);
     notifyListeners();
   }
 
@@ -1166,13 +1269,14 @@ class _CallOverlayBannerState extends State<_CallOverlayBanner> {
                             ),
                           ),
                           const SizedBox(width: 5),
-                          Text(
-                            isActive
-                                ? formatSeconds(_callManager.callDuration)
-                                : 'Ringing...',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.7),
-                              fontSize: 11,
+                          ValueListenableBuilder<int>(
+                            valueListenable: _callManager.callDurationListenable,
+                            builder: (context, value, _) => Text(
+                              isActive ? formatSeconds(value) : 'Ringing...',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.7),
+                                fontSize: 11,
+                              ),
                             ),
                           ),
                         ],

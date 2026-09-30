@@ -469,7 +469,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         left != null &&
         left.groupId == widget.groupId;
     final isVideo = call.callType == CallType.video;
-    final duration = _callManager.callDuration;
 
     return GestureDetector(
       onTap: hasLeft ? _rejoinCall : _returnToCall,
@@ -544,15 +543,19 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             ),
                           ),
                           const SizedBox(width: 5),
-                          Text(
-                            isActive
-                                ? '${call.members.length} participants \u2022 ${formatSeconds(duration)}'
-                                : hasLeft
-                                    ? '${call.members.length} participants \u2022 Tap to rejoin'
-                                    : 'Ringing...',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.7),
-                              fontSize: 11,
+                          ValueListenableBuilder<int>(
+                            valueListenable:
+                                _callManager.callDurationListenable,
+                            builder: (context, value, _) => Text(
+                              isActive
+                                  ? '${call.members.length} participants \u2022 ${formatSeconds(value)}'
+                                  : hasLeft
+                                      ? '${call.members.length} participants \u2022 Tap to rejoin'
+                                      : 'Ringing...',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.7),
+                                fontSize: 11,
+                              ),
                             ),
                           ),
                         ],

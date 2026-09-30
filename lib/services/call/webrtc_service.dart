@@ -387,17 +387,17 @@ class WebRTCService {
     }
   }
 
-  Future<void> toggleAudio() async {
+  Future<void> setAudioEnabled(bool enabled) async {
     if (_localStream == null) return;
     for (final track in _localStream!.getAudioTracks()) {
-      track.enabled = !track.enabled;
+      track.enabled = enabled;
     }
   }
 
-  Future<void> toggleVideo() async {
+  Future<void> setVideoEnabled(bool enabled) async {
     if (_localStream == null) return;
     for (final track in _localStream!.getVideoTracks()) {
-      track.enabled = !track.enabled;
+      track.enabled = enabled;
     }
   }
 
