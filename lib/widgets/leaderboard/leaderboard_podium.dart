@@ -70,6 +70,7 @@ class LeaderboardPodium extends StatelessWidget {
   final String currentUid;
   final String field;
   final Set<String> favorites;
+  final Map<String, String> photoUrls;
   final void Function(UserStatsEntity)? onStarToggle;
 
   const LeaderboardPodium({
@@ -78,6 +79,7 @@ class LeaderboardPodium extends StatelessWidget {
     required this.currentUid,
     required this.field,
     required this.favorites,
+    this.photoUrls = const {},
     this.onStarToggle,
   });
 
@@ -161,7 +163,11 @@ class LeaderboardPodium extends StatelessWidget {
         child: ClipOval(
           child: Padding(
             padding: const EdgeInsets.all(2.5),
-            child: LeaderboardAvatar(asset: entry.avatarAsset, size: tier.avatarSize),
+            child: LeaderboardAvatar(
+              photoUrl: photoUrls[entry.userId],
+              asset: entry.avatarAsset,
+              size: tier.avatarSize,
+            ),
           ),
         ),
       ),
