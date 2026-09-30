@@ -739,7 +739,7 @@ class _SessionEntryScreenState extends State<SessionEntryScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'The Speed Shield goes to the first player to finish all their picks.',
+                  'The Speed Shield goes to the first player to finish all their picks. It absorbs one X from their card.',
                   style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
                 ),
               ],
