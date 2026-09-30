@@ -1222,6 +1222,7 @@ class _HomeTabState extends State<_HomeTab> {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
+                                      settings: RouteSettings(name: 'group_chat:$groupId'),
                                       builder: (_) => GroupChatScreen(groupId: groupId),
                                     ),
                                   );

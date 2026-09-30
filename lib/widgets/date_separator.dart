@@ -9,20 +9,21 @@ class DateSeparator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = formatDateSeparator(timestamp);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final lineColor = isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.08);
-    final textColor = isDark ? Colors.white.withValues(alpha: 0.5) : Colors.black.withValues(alpha: 0.4);
+    // Chat background is always dark (scaffold 0xFF190831), but the app theme
+    // is light, so brightness-derived colors would render near-invisible here.
+    const lineColor = Color(0x26FFFFFF); // white @ 0.15
+    const textColor = Color(0x99FFFFFF); // white @ 0.6
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
-          Expanded(child: Divider(height: 1, color: lineColor)),
+          const Expanded(child: Divider(height: 1, color: lineColor)),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Text(
               label,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
                 color: textColor,
@@ -30,7 +31,7 @@ class DateSeparator extends StatelessWidget {
               ),
             ),
           ),
-          Expanded(child: Divider(height: 1, color: lineColor)),
+          const Expanded(child: Divider(height: 1, color: lineColor)),
         ],
       ),
     );

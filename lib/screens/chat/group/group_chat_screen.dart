@@ -121,29 +121,63 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _loadMemberPhoto(String uid) async {
-    if (_memberPhotos.containsKey(uid) && _memberAvatarAssets.containsKey(uid)) return;
+  final Set<String> _profileLoadAttempts = {};
+  final Set<String> _pendingProfileLoads = {};
+  bool _profileLoadScheduled = false;
+  final Set<String> _refLoadAttempts = {};
+
+  void _requestMemberProfile(String uid) {
+    if (_profileLoadAttempts.contains(uid)) return;
+    _pendingProfileLoads.add(uid);
+    if (_profileLoadScheduled) return;
+    _profileLoadScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _profileLoadScheduled = false;
+      final uids = _pendingProfileLoads.toList();
+      _pendingProfileLoads.clear();
+      if (uids.isEmpty) return;
+      for (final uid in uids) {
+        _profileLoadAttempts.add(uid);
+      }
+      _loadMemberPhotos(uids);
+    });
+  }
+
+  Future<void> _loadMemberPhotos(List<String> uids) async {
     final cache = UserCache();
-    final user = await cache.getUser(uid);
-    if (user != null && mounted) {
+    final results = await Future.wait(uids.map((uid) => cache.getUser(uid)));
+    if (!mounted) return;
+    var changed = false;
+    for (var i = 0; i < uids.length; i++) {
+      final user = results[i];
+      if (user == null) continue;
+      final uid = uids[i];
       if (user.photoUrl != null && user.photoUrl!.isNotEmpty) {
         _memberPhotos[uid] = user.photoUrl!;
+        changed = true;
       }
       if (user.avatarAsset != null && user.avatarAsset!.isNotEmpty) {
         _memberAvatarAssets[uid] = user.avatarAsset!;
+        changed = true;
       }
-      if (user.displayName.isNotEmpty) {
-        _memberNames[uid] = user.displayName;
-      } else if (user.username.isNotEmpty) {
-        _memberNames[uid] = user.username;
+      final name = user.displayName.isNotEmpty
+          ? user.displayName
+          : (user.username.isNotEmpty ? user.username : '');
+      if (name.isNotEmpty && _memberNames[uid] != name) {
+        _memberNames[uid] = name;
+        changed = true;
       }
-      setState(() {});
     }
+    if (changed) setState(() {});
   }
 
   Future<void> _loadEventPollData(ChatMessage msg) async {
     if (msg.refId == null) return;
-    if (msg.type == MessageType.event && !_events.containsKey(msg.refId)) {
+    if (msg.type == MessageType.event) {
+      if (_events.containsKey(msg.refId) ||
+          !_refLoadAttempts.add('event:${msg.refId}')) {
+        return;
+      }
       final event = await _eventService.getEvent(
         msg.refId!,
         groupId: widget.groupId,
@@ -151,7 +185,11 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       if (event != null && mounted) {
         setState(() => _events[msg.refId!] = event);
       }
-    } else if (msg.type == MessageType.poll && !_polls.containsKey(msg.refId)) {
+    } else if (msg.type == MessageType.poll) {
+      if (_polls.containsKey(msg.refId) ||
+          !_refLoadAttempts.add('poll:${msg.refId}')) {
+        return;
+      }
       final poll = await _pollService.getPoll(
         msg.refId!,
         groupId: widget.groupId,
@@ -891,15 +929,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                         }
                       }
 
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        for (final m in messages) {
-                          if ((m.type == MessageType.event ||
-                                  m.type == MessageType.poll) &&
-                              m.refId != null) {
-                            _loadEventPollData(m);
-                          }
+                      for (final m in messages) {
+                        if ((m.type == MessageType.event ||
+                                m.type == MessageType.poll) &&
+                            m.refId != null) {
+                          _loadEventPollData(m);
                         }
-                      });
+                      }
 
                       return ListView.builder(
                         reverse: true,
@@ -1009,10 +1045,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             );
 
                             if (!isMe &&
-                                !_memberPhotos.containsKey(msg.senderId)) {
-                              WidgetsBinding.instance.addPostFrameCallback(
-                                (_) => _loadMemberPhoto(msg.senderId),
-                              );
+                                !_memberPhotos.containsKey(msg.senderId) &&
+                                !_memberAvatarAssets
+                                    .containsKey(msg.senderId)) {
+                              _requestMemberProfile(msg.senderId);
                             }
 
                           if (msg.type == MessageType.image &&
@@ -1186,15 +1222,17 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                           );
                         }
 
+                        final item = wrapWithSwipe(buildMessage());
                         if (showDateSeparator) {
                           return Column(
+                            key: ValueKey(msg.id),
                             children: [
                               DateSeparator(timestamp: msg.createdAt),
-                              wrapWithSwipe(buildMessage()),
+                              item,
                             ],
                           );
                         }
-                          return wrapWithSwipe(buildMessage());
+                        return KeyedSubtree(key: ValueKey(msg.id), child: item);
                       },
                     );
                   },
