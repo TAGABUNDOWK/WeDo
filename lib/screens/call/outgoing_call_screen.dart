@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../models/call.dart';
 import '../../services/call/call_manager.dart';
+import '../../utils/safe_nav.dart';
 import '../../widgets/call_avatar.dart';
 
 class OutgoingCallScreen extends StatefulWidget {
@@ -96,11 +97,16 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
   }
 
   void _onCallManagerUpdate() {
-    if (!_callManager.hasOutgoingCall && mounted) {
+    if (_callManager.hasOutgoingCall || !mounted) return;
+    // Never navigate synchronously: this listener is registered in initState
+    // and trackOutgoingCall() notifies synchronously on the very next line.
+    // Safe-nav also re-checks, because the pop is no longer immediate.
+    safeNav(() {
+      if (_callManager.hasOutgoingCall || !mounted) return;
       _ringtonePlayer.stop();
       _disposeLocalCamera();
       Navigator.of(context).pop();
-    }
+    }, label: 'outgoing call pop');
   }
 
   void _minimizeCall() {

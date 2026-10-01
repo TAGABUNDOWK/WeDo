@@ -534,129 +534,132 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                           color: Colors.white.withValues(alpha: 0.10),
                           borderRadius: BorderRadius.circular(24),
                         ),
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Positioned(
-                              left: 0,
-                              top: 0,
-                              bottom: 0,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                            GestureDetector(
-                              onTap: () => Navigator.maybePop(context),
-                              child: Image.asset(
-                                'assets/icons/back-nav.png',
-                                width: 30,
-                                height: 30,
-                                fit: BoxFit.contain,
-                                errorBuilder:
-                                    (context, error, stackTrace) =>
-                                        const Icon(
-                                  Icons.arrow_back,
-                                  color: Colors.white,
-                                  size: 30,
-                                ),
-                              ),
-                            ),
-                            if (_newMessageCount > 0) ...[
-                              const SizedBox(width: 8),
-                              const _HeartbeatDot(),
-                              const SizedBox(width: 4),
-                              const Text(
-                                'NEW',
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                                ],
-                              ),
-                            ),
-                            GestureDetector(
-                              onTap: _openChatInfo,
-                              behavior: HitTestBehavior.opaque,
-                              child: Tooltip(
-                                message: 'Chat info',
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 80),
-                                  child: StreamBuilder<UserEntity?>(
-                                stream: _otherUserStream,
-                                builder: (context, snapshot) {
-                                  final user = snapshot.data;
-                                  final name =
-                                      _nicknames[widget.otherUid] ??
-                                          user?.displayName ??
-                                          widget.otherUid;
-                                  final photoUrl = user?.photoUrl;
-                                  final avatarAsset = user?.avatarAsset;
-                                  final hasAvatarAsset = avatarAsset != null &&
-                                      avatarAsset.isNotEmpty;
-                                  final hasPhotoUrl = photoUrl != null &&
-                                      photoUrl.isNotEmpty;
-                                  return Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      CircleAvatar(
-                                        radius: 16,
-                                        backgroundColor: Colors.white
-                                            .withValues(alpha: 0.2),
-                                        backgroundImage: hasAvatarAsset
-                                            ? AssetImage(avatarAsset)
-                                            : hasPhotoUrl
-                                                ? NetworkImage(photoUrl)
-                                                : null,
-                                        child: !hasAvatarAsset && !hasPhotoUrl
-                                            ? const Icon(
-                                                Icons.person,
-                                                color: Colors.white,
-                                                size: 18,
-                                              )
-                                            : null,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Flexible(
-                                        child: Text(
-                                          name,
-                                          style: const TextStyle(
-                                            fontFamily: 'Poppins',
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 15,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
+                        child: SizedBox(
+                          height: 44,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              GestureDetector(
+                                onTap: _openChatInfo,
+                                behavior: HitTestBehavior.opaque,
+                                child: Tooltip(
+                                  message: 'Chat info',
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 80),
+                                    child: StreamBuilder<UserEntity?>(
+                                  stream: _otherUserStream,
+                                  builder: (context, snapshot) {
+                                    final user = snapshot.data;
+                                    final name =
+                                        _nicknames[widget.otherUid] ??
+                                            user?.displayName ??
+                                            widget.otherUid;
+                                    final photoUrl = user?.photoUrl;
+                                    final avatarAsset = user?.avatarAsset;
+                                    final hasAvatarAsset = avatarAsset != null &&
+                                        avatarAsset.isNotEmpty;
+                                    final hasPhotoUrl = photoUrl != null &&
+                                        photoUrl.isNotEmpty;
+                                    return Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 16,
+                                          backgroundColor: Colors.white
+                                              .withValues(alpha: 0.2),
+                                          backgroundImage: hasAvatarAsset
+                                              ? AssetImage(avatarAsset)
+                                              : hasPhotoUrl
+                                                  ? NetworkImage(photoUrl)
+                                                  : null,
+                                          child: !hasAvatarAsset && !hasPhotoUrl
+                                              ? const Icon(
+                                                  Icons.person,
+                                                  color: Colors.white,
+                                                  size: 18,
+                                                )
+                                              : null,
                                         ),
-                                      ),
-                                    ],
-                                  );
-                                },
+                                        const SizedBox(width: 8),
+                                        Flexible(
+                                          child: Text(
+                                            name,
+                                            style: const TextStyle(
+                                              fontFamily: 'Poppins',
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 15,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
                               ),
                             ),
                           ),
+                              Positioned(
+                                right: 0,
+                                top: 0,
+                                bottom: 0,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                              CallButtons(
+                                chatId: widget.chatId,
+                                isGroup: false,
+                                onStartAudioCall: () => _startCall(CallType.audio),
+                                onStartVideoCall: () => _startCall(CallType.video),
+                                onReturnToCall: CallManager().returnToCall,
+                              ),
+                            ],
+                          ),
                         ),
-                            Positioned(
-                              right: 0,
-                              top: 0,
-                              bottom: 0,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                            CallButtons(
-                              chatId: widget.chatId,
-                              isGroup: false,
-                              onStartAudioCall: () => _startCall(CallType.audio),
-                              onStartVideoCall: () => _startCall(CallType.video),
-                              onReturnToCall: CallManager().returnToCall,
-                            ),
-                          ],
-                        ),
+                              Positioned(
+                                left: 0,
+                                top: 0,
+                                bottom: 0,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                              GestureDetector(
+                                onTap: () => Navigator.maybePop(context),
+                                child: Image.asset(
+                                  'assets/icons/back-nav.png',
+                                  width: 30,
+                                  height: 30,
+                                  fit: BoxFit.contain,
+                                  errorBuilder:
+                                      (context, error, stackTrace) =>
+                                          const Icon(
+                                    Icons.arrow_back,
+                                    color: Colors.white,
+                                    size: 30,
+                                  ),
+                                ),
+                              ),
+                              if (_newMessageCount > 0) ...[
+                                const SizedBox(width: 8),
+                                const _HeartbeatDot(),
+                                const SizedBox(width: 4),
+                                const Text(
+                                  'NEW',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                                  ],
+                                ),
+                              ),
+                        ],
                       ),
-                      ],
                     ),
                       ),
                     ),

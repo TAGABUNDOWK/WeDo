@@ -8,6 +8,7 @@ import '../../main.dart' show navigatorKey;
 import '../../models/call.dart';
 import '../../screens/call/call_screen.dart';
 import '../../screens/call/outgoing_call_screen.dart';
+import '../../utils/safe_nav.dart';
 import '../../utils/time_format.dart';
 import '../direct/direct_service.dart';
 import '../group/group_service.dart';
@@ -1158,7 +1159,12 @@ class _CallOverlayBannerState extends State<_CallOverlayBanner> {
   }
 
   void _onCallUpdate() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    // trackOutgoingCall() notifies while OutgoingCallScreen.initState is still
+    // running, i.e. inside a build pass - defer the setState.
+    safeNav(() {
+      if (mounted) setState(() {});
+    }, label: 'call banner update');
   }
 
   Widget _buildControlButton({

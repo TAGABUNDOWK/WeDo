@@ -297,44 +297,70 @@ class _AccountScreenState extends State<AccountScreen>
   }
 
   Future<void> _showPhotoSourceSheet() async {
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      backgroundColor: const Color(0xFF2A1450),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (c) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_library, color: Colors.white70),
-              title: const Text('Gallery', style: TextStyle(color: Colors.white, fontFamily: 'Poppins')),
-              onTap: () => Navigator.pop(c, ImageSource.gallery),
-            ),
-            ListTile(
-              leading: const Icon(Icons.camera_alt, color: Colors.white70),
-              title: const Text('Camera', style: TextStyle(color: Colors.white, fontFamily: 'Poppins')),
-              onTap: () => Navigator.pop(c, ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.close, color: Colors.white54),
-              title: const Text('Cancel', style: TextStyle(color: Colors.white54, fontFamily: 'Poppins')),
-              onTap: () => Navigator.pop(c),
-            ),
-          ],
+    try {
+      final source = await showModalBottomSheet<ImageSource>(
+        context: context,
+        backgroundColor: const Color(0xFF2A1450),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
         ),
-      ),
-    );
-    if (source != null) await _pickAndUploadPhoto(source);
+        builder: (c) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library, color: Colors.white70),
+                title: const Text('Gallery', style: TextStyle(color: Colors.white, fontFamily: 'Poppins')),
+                onTap: () => Navigator.pop(c, ImageSource.gallery),
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt, color: Colors.white70),
+                title: const Text('Camera', style: TextStyle(color: Colors.white, fontFamily: 'Poppins')),
+                onTap: () => Navigator.pop(c, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.close, color: Colors.white54),
+                title: const Text('Cancel', style: TextStyle(color: Colors.white54, fontFamily: 'Poppins')),
+                onTap: () => Navigator.pop(c),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (source == null) return;
+      await _pickAndUploadPhoto(source);
+    } catch (e, st) {
+      // Without this the tap just looked dead: `showModalBottomSheet` and the
+      // picker both run as un-awaited async work, so any throw vanished.
+      debugPrint('_showPhotoSourceSheet error: $e');
+      debugPrintStack(label: 'photo source sheet', stackTrace: st);
+      if (e.toString().contains('_debugLocked')) {
+        debugPrint(
+          '[nav] The Navigator lock was already held before this push. '
+          'This is a symptom - scroll UP to the FIRST Flutter error to find '
+          'the throw that poisoned it.',
+        );
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open photo options: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _pickAndUploadPhoto([ImageSource source = ImageSource.gallery]) async {
-    final picked = await _imagePicker.pickImage(source: source, imageQuality: 80);
-    if (picked == null) return;
-
-    setState(() => _loading = true);
+    // `pickImage` throws (permission denied, missing activity, user backing
+    // out on some platforms) and it used to sit outside the `try`, so those
+    // errors escaped as unhandled async errors — which show up as *nothing*
+    // happening when the avatar is tapped. Keep the whole flow guarded.
+    var started = false;
     try {
+      final picked = await _imagePicker.pickImage(source: source, imageQuality: 80);
+      if (picked == null) return;
+
+      started = true;
+      setState(() => _loading = true);
       await _profileService.uploadAvatar(uid: _uid, file: picked);
       await _loadUser();
       if (mounted) {
@@ -347,7 +373,7 @@ class _AccountScreenState extends State<AccountScreen>
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update photo: $e')));
       }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (started && mounted) setState(() => _loading = false);
     }
   }
 
