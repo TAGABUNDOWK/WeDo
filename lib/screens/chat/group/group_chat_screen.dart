@@ -17,6 +17,7 @@ import '../../../services/call/call_service.dart';
 import '../../../services/call/call_manager.dart';
 import '../../../services/user_cache.dart';
 import '../../../services/theme/chat_theme_resolver.dart';
+import '../../../utils/safe_nav.dart';
 import '../../../utils/time_format.dart';
 import '../../../widgets/message_bubble.dart';
 import '../../../widgets/call_button.dart';
@@ -213,7 +214,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   void _onCallManagerUpdate() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    // CallManager notifies synchronously from OutgoingCallScreen.initState,
+    // which runs inside a build pass - setState must be deferred.
+    safeNav(() {
+      if (mounted) setState(() {});
+    }, label: 'call update');
   }
 
   void _onScroll() {
@@ -759,123 +765,126 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                           color: Colors.white.withValues(alpha: 0.10),
                           borderRadius: BorderRadius.circular(24),
                         ),
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Positioned(
-                              left: 0,
-                              top: 0,
-                              bottom: 0,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                            GestureDetector(
-                              onTap: () => Navigator.maybePop(context),
-                              child: Image.asset(
-                                'assets/icons/back-nav.png',
-                                width: 30,
-                                height: 30,
-                                fit: BoxFit.contain,
-                                errorBuilder:
-                                    (context, error, stackTrace) =>
-                                        const Icon(
-                                  Icons.arrow_back,
-                                  color: Colors.white,
-                                  size: 30,
-                                ),
-                              ),
-                            ),
-                            if (_newMessageCount > 0) ...[
-                              const SizedBox(width: 8),
-                              const _HeartbeatDot(),
-                              const SizedBox(width: 4),
-                              const Text(
-                                'NEW',
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                                ],
-                              ),
-                            ),
-                            GestureDetector(
-                              onTap: _openGroupInfo,
-                              behavior: HitTestBehavior.opaque,
-                              child: Tooltip(
-                                message: 'Group info',
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 80),
-                                  child: StreamBuilder<GroupChat?>(
-                                stream: _groupStream,
-                                builder: (context, snapshot) {
-                                  final group = snapshot.data;
-                                  final photoUrl =
-                                      group?.photoUrl ?? _groupPhotoUrl;
-                                  return Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      CircleAvatar(
-                                        key: ValueKey(photoUrl),
-                                        radius: 16,
-                                        backgroundColor: Colors.white
-                                            .withValues(alpha: 0.2),
-                                        backgroundImage: photoUrl != null &&
-                                                photoUrl.isNotEmpty
-                                            ? NetworkImage(photoUrl)
-                                            : null,
-                                        child: photoUrl == null ||
-                                                photoUrl.isEmpty
-                                            ? const Icon(
-                                                Icons.group,
-                                                color: Colors.white,
-                                                size: 18,
-                                              )
-                                            : null,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Flexible(
-                                        child: Text(
-                                          group?.name ?? _groupName,
-                                          style: const TextStyle(
-                                            fontFamily: 'Poppins',
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 15,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
+                        child: SizedBox(
+                          height: 44,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              GestureDetector(
+                                onTap: _openGroupInfo,
+                                behavior: HitTestBehavior.opaque,
+                                child: Tooltip(
+                                  message: 'Group info',
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 80),
+                                    child: StreamBuilder<GroupChat?>(
+                                  stream: _groupStream,
+                                  builder: (context, snapshot) {
+                                    final group = snapshot.data;
+                                    final photoUrl =
+                                        group?.photoUrl ?? _groupPhotoUrl;
+                                    return Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        CircleAvatar(
+                                          key: ValueKey(photoUrl),
+                                          radius: 16,
+                                          backgroundColor: Colors.white
+                                              .withValues(alpha: 0.2),
+                                          backgroundImage: photoUrl != null &&
+                                                  photoUrl.isNotEmpty
+                                              ? NetworkImage(photoUrl)
+                                              : null,
+                                          child: photoUrl == null ||
+                                                  photoUrl.isEmpty
+                                              ? const Icon(
+                                                  Icons.group,
+                                                  color: Colors.white,
+                                                  size: 18,
+                                                )
+                                              : null,
                                         ),
-                                      ),
-                                    ],
-                                  );
-                                },
+                                        const SizedBox(width: 8),
+                                        Flexible(
+                                          child: Text(
+                                            group?.name ?? _groupName,
+                                            style: const TextStyle(
+                                              fontFamily: 'Poppins',
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 15,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
                               ),
                             ),
                           ),
+                              Positioned(
+                                right: 0,
+                                top: 0,
+                                bottom: 0,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                              CallButtons(
+                                chatId: widget.groupId,
+                                isGroup: true,
+                                onStartAudioCall: () => _startCall(CallType.audio),
+                                onStartVideoCall: () => _startCall(CallType.video),
+                                onRejoin: _rejoinCall,
+                                onReturnToCall: _returnToCall,
+                              ),
+                            ],
+                          ),
                         ),
-                            Positioned(
-                              right: 0,
-                              top: 0,
-                              bottom: 0,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                            CallButtons(
-                              chatId: widget.groupId,
-                              isGroup: true,
-                              onStartAudioCall: () => _startCall(CallType.audio),
-                              onStartVideoCall: () => _startCall(CallType.video),
-                              onRejoin: _rejoinCall,
-                              onReturnToCall: _returnToCall,
-                            ),
-                          ],
-                        ),
+                              Positioned(
+                                left: 0,
+                                top: 0,
+                                bottom: 0,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                              GestureDetector(
+                                onTap: () => Navigator.maybePop(context),
+                                child: Image.asset(
+                                  'assets/icons/back-nav.png',
+                                  width: 30,
+                                  height: 30,
+                                  fit: BoxFit.contain,
+                                  errorBuilder:
+                                      (context, error, stackTrace) =>
+                                          const Icon(
+                                    Icons.arrow_back,
+                                    color: Colors.white,
+                                    size: 30,
+                                  ),
+                                ),
+                              ),
+                              if (_newMessageCount > 0) ...[
+                                const SizedBox(width: 8),
+                                const _HeartbeatDot(),
+                                const SizedBox(width: 4),
+                                const Text(
+                                  'NEW',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                                  ],
+                                ),
+                              ),
+                        ],
                       ),
-                      ],
                     ),
                       ),
                     ),

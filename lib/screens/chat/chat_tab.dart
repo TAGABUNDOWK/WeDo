@@ -36,6 +36,13 @@ class _ChatTabState extends State<ChatTab> {
   bool _showGroups = true;
   bool _recentOnly = false;
 
+  /// Memoized per-uid lookups. `FutureBuilder` builds its future inside
+  /// `build`, so without this every parent rebuild (search keystroke, stream
+  /// emission) started a fresh fetch — rows flickered back to the raw uid or
+  /// dropped out entirely whenever `_passesSearch` ran on a half-resolved name.
+  final Map<String, Future<UserEntity?>> _userFutures =
+      <String, Future<UserEntity?>>{};
+
   @override
   void initState() {
     super.initState();
@@ -50,12 +57,22 @@ class _ChatTabState extends State<ChatTab> {
     super.dispose();
   }
 
-  Future<UserEntity?> _getCachedUser(String uid) async {
+  Future<UserEntity?> _getCachedUser(String uid) {
     final cached = _userCache.getCachedUser(uid);
-    if (cached != null) return cached;
-    final user = await _userCache.getUser(uid);
-    if (mounted && _query.isNotEmpty) setState(() {});
-    return user;
+    if (cached != null) return Future<UserEntity?>.value(cached);
+    return _userFutures.putIfAbsent(uid, () async {
+      try {
+        final user = await _userCache.getUser(uid);
+        if (mounted && _query.isNotEmpty) setState(() {});
+        return user;
+      } catch (e) {
+        // Drop the failed future so a later build can retry instead of
+        // caching the failure for the lifetime of this screen.
+        _userFutures.remove(uid);
+        debugPrint('chat row user lookup failed for $uid: $e');
+        return null;
+      }
+    });
   }
 
   void _showNewChatMenu() {
@@ -261,51 +278,91 @@ class _ChatTabState extends State<ChatTab> {
 
   void _openGroupChat(String groupId) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    Navigator.push(
-      context,
-      PageRouteBuilder(
-        settings: RouteSettings(name: 'group_chat:$groupId'),
-        transitionDuration: const Duration(milliseconds: 250),
-        reverseTransitionDuration: const Duration(milliseconds: 200),
-        pageBuilder: (_, __, ___) => GroupChatScreen(groupId: groupId),
-        transitionsBuilder: (_, animation, __, child) {
-          final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
-          return SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(0.06, 0),
-              end: Offset.zero,
-            ).animate(curved),
-            child: FadeTransition(opacity: curved, child: child),
-          );
-        },
-      ),
-    ).then((_) {
-      if (uid != null) _groupService.markMessagesAsRead(groupId, uid);
-    });
+    // A throw here used to be swallowed by the gesture recognizer: the row
+    // would just sit there with no feedback in release builds.
+    try {
+      Navigator.push(
+        context,
+        PageRouteBuilder(
+          settings: RouteSettings(name: '/group-chat/$groupId'),
+          transitionDuration: const Duration(milliseconds: 250),
+          reverseTransitionDuration: const Duration(milliseconds: 200),
+          pageBuilder: (_, __, ___) => GroupChatScreen(groupId: groupId),
+          transitionsBuilder: (_, animation, __, child) {
+            final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+            return SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0.06, 0),
+                end: Offset.zero,
+              ).animate(curved),
+              child: FadeTransition(opacity: curved, child: child),
+            );
+          },
+        ),
+      ).then((_) async {
+        if (uid != null) await _groupService.markMessagesAsRead(groupId, uid);
+      }).catchError((Object e) {
+        debugPrint('open group chat failed: $e');
+      });
+    } catch (e, st) {
+      debugPrint('open group chat failed: $e');
+      debugPrintStack(label: 'group chat push', stackTrace: st);
+      _logNavigatorLockHint(e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open chat: $e')),
+        );
+      }
+    }
+  }
+
+  /// `Navigator` only sets `_debugLocked` around its own push/pop work, so if a
+  /// tap-driven `push` sees it already held, an *earlier* navigation threw and
+  /// never released the lock. This prints a symptom, not the cause.
+  void _logNavigatorLockHint(Object error) {
+    if (!error.toString().contains('_debugLocked')) return;
+    debugPrint(
+      '[nav] The Navigator lock was already held before this push. '
+      'This is a symptom - scroll UP to the FIRST Flutter error, or the '
+      'first "... failed:" line, to find the throw that poisoned it.',
+    );
   }
 
   void _openDirectChat(String chatId, String otherUid) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    Navigator.push(
-      context,
-      PageRouteBuilder(
-        transitionDuration: const Duration(milliseconds: 250),
-        reverseTransitionDuration: const Duration(milliseconds: 200),
-        pageBuilder: (_, __, ___) => DirectChatScreen(chatId: chatId, otherUid: otherUid),
-        transitionsBuilder: (_, animation, __, child) {
-          final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
-          return SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(0.06, 0),
-              end: Offset.zero,
-            ).animate(curved),
-            child: FadeTransition(opacity: curved, child: child),
-          );
-        },
-      ),
-    ).then((_) {
-      if (uid != null) _directService.markMessagesAsRead(chatId, uid);
-    });
+    try {
+      Navigator.push(
+        context,
+        PageRouteBuilder(
+          transitionDuration: const Duration(milliseconds: 250),
+          reverseTransitionDuration: const Duration(milliseconds: 200),
+          pageBuilder: (_, __, ___) => DirectChatScreen(chatId: chatId, otherUid: otherUid),
+          transitionsBuilder: (_, animation, __, child) {
+            final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+            return SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0.06, 0),
+                end: Offset.zero,
+              ).animate(curved),
+              child: FadeTransition(opacity: curved, child: child),
+            );
+          },
+        ),
+      ).then((_) async {
+        if (uid != null) await _directService.markMessagesAsRead(chatId, uid);
+      }).catchError((Object e) {
+        debugPrint('open direct chat failed: $e');
+      });
+    } catch (e, st) {
+      debugPrint('open direct chat failed: $e');
+      debugPrintStack(label: 'direct chat push', stackTrace: st);
+      _logNavigatorLockHint(e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open chat: $e')),
+        );
+      }
+    }
   }
 
   bool _isNew(DateTime? lastAt, String? senderId, String currentUid) {

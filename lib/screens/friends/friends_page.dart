@@ -31,24 +31,43 @@ class _FriendsPageState extends State<FriendsPage> {
   final _directService = DirectService();
   UserEntity? _currentUser;
 
-  late final Stream<List<FriendEntity>> _incomingRequestsStream;
-  late final Stream<List<FriendEntity>> _outgoingRequestsStream;
-  late final Stream<List<FriendEntity>> _friendsStream;
+  late Stream<List<FriendEntity>> _incomingRequestsStream;
+  late Stream<List<FriendEntity>> _outgoingRequestsStream;
+  late Stream<List<FriendEntity>> _friendsStream;
 
   String get _uid => _auth.currentUser!.uid;
+
+  void _initStreams() {
+    _incomingRequestsStream = _friendService.getIncomingRequestsStream(_uid);
+    _outgoingRequestsStream = _friendService.getOutgoingRequestsStream(_uid);
+    _friendsStream = _friendService.getFriendsStream(_uid);
+  }
 
   @override
   void initState() {
     super.initState();
-    _incomingRequestsStream = _friendService.getIncomingRequestsStream(_uid);
-    _outgoingRequestsStream = _friendService.getOutgoingRequestsStream(_uid);
-    _friendsStream = _friendService.getFriendsStream(_uid);
+    _initStreams();
     _loadCurrentUser();
   }
 
+  /// The error state on each section literally says "Pull to refresh", but the
+  /// body had no refresh handler — so a failed stream had no recovery path.
+  /// Recreating the streams re-subscribes the `StreamBuilder`s from scratch.
+  Future<void> _onRefresh() async {
+    _initStreams();
+    await _loadCurrentUser();
+  }
+
   Future<void> _loadCurrentUser() async {
-    final user = await _userService.getUserDocument(_uid);
-    if (mounted) setState(() => _currentUser = user);
+    try {
+      final user = await _userService.getUserDocument(_uid);
+      if (mounted) setState(() => _currentUser = user);
+    } catch (e) {
+      // This runs from `initState` and after every push that returns; an
+      // unhandled throw here left `_currentUser` null forever, which is why
+      // the header avatar could stay on its placeholder.
+      debugPrint('friends: _loadCurrentUser failed: $e');
+    }
   }
 
   @override
@@ -89,66 +108,72 @@ class _FriendsPageState extends State<FriendsPage> {
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        children: [
-          const _FriendsMapSection(),
-          const SizedBox(height: 14),
-          const _NearbySection(),
-          const SizedBox(height: 14),
-          _friendSection(
-            title: 'Friend Requests',
-            stream: _incomingRequestsStream,
-            emptyMessage: 'No pending requests',
-            emptyState: _RequestEmptyState(
-              icon: Icons.mark_email_read_outlined,
-              title: 'You’re all caught up',
-              message: 'New friend requests will show up here so you can decide who to connect with.',
-              actionLabel: 'Find friends',
-              onAction: _openFriendSearch,
+      body: RefreshIndicator(
+        color: AppColors.electricViolet,
+        backgroundColor: const Color(0xFF1A0A2E),
+        onRefresh: _onRefresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          children: [
+            const _FriendsMapSection(),
+            const SizedBox(height: 14),
+            const _NearbySection(),
+            const SizedBox(height: 14),
+            _friendSection(
+              title: 'Friend Requests',
+              stream: _incomingRequestsStream,
+              emptyMessage: 'No pending requests',
+              emptyState: _RequestEmptyState(
+                icon: Icons.mark_email_read_outlined,
+                title: 'You’re all caught up',
+                message: 'New friend requests will show up here so you can decide who to connect with.',
+                actionLabel: 'Find friends',
+                onAction: _openFriendSearch,
+              ),
+              itemBuilder: (f) => _IncomingRequestTile(
+                friendship: f,
+                otherUid: f.otherUserId(_uid),
+                userService: _userService,
+                onAccept: () => _accept(f),
+                onDecline: () => _decline(f),
+              ),
             ),
-            itemBuilder: (f) => _IncomingRequestTile(
-              friendship: f,
-              otherUid: f.otherUserId(_uid),
-              userService: _userService,
-              onAccept: () => _accept(f),
-              onDecline: () => _decline(f),
+            const SizedBox(height: 14),
+            _friendSection(
+              title: 'Sent Requests',
+              stream: _outgoingRequestsStream,
+              emptyMessage: 'No sent requests',
+              emptyState: _RequestEmptyState(
+                icon: Icons.send_outlined,
+                title: 'No requests on the way',
+                message: 'When you invite someone, you can track your pending requests here.',
+                actionLabel: 'Find people',
+                onAction: _openFriendSearch,
+              ),
+              itemBuilder: (f) => _SentRequestTile(
+                friendship: f,
+                otherUid: f.otherUserId(_uid),
+                userService: _userService,
+                onCancel: () => _cancel(f),
+              ),
             ),
-          ),
-          const SizedBox(height: 14),
-          _friendSection(
-            title: 'Sent Requests',
-            stream: _outgoingRequestsStream,
-            emptyMessage: 'No sent requests',
-            emptyState: _RequestEmptyState(
-              icon: Icons.send_outlined,
-              title: 'No requests on the way',
-              message: 'When you invite someone, you can track your pending requests here.',
-              actionLabel: 'Find people',
-              onAction: _openFriendSearch,
+            const SizedBox(height: 14),
+            _friendSection(
+              title: 'Friends',
+              stream: _friendsStream,
+              emptyMessage: 'No friends yet',
+              itemBuilder: (f) => _ActiveFriendTile(
+                friendship: f,
+                otherUid: f.otherUserId(_uid),
+                userService: _userService,
+                onChat: () => _openChat(f.otherUserId(_uid)),
+                onRemove: () => _remove(f),
+              ),
             ),
-            itemBuilder: (f) => _SentRequestTile(
-              friendship: f,
-              otherUid: f.otherUserId(_uid),
-              userService: _userService,
-              onCancel: () => _cancel(f),
-            ),
-          ),
-          const SizedBox(height: 14),
-          _friendSection(
-            title: 'Friends',
-            stream: _friendsStream,
-            emptyMessage: 'No friends yet',
-            itemBuilder: (f) => _ActiveFriendTile(
-              friendship: f,
-              otherUid: f.otherUserId(_uid),
-              userService: _userService,
-              onChat: () => _openChat(f.otherUserId(_uid)),
-              onRemove: () => _remove(f),
-            ),
-          ),
-          const SizedBox(height: 100),
-        ],
+            const SizedBox(height: 100),
+          ],
+        ),
       ),
     );
   }
@@ -475,47 +500,63 @@ class _NearbySectionState extends State<_NearbySection> {
 
   Future<void> _load() async {
     setState(() => _isLoading = true);
+
+    Position? position;
     try {
-      Position? position;
-      try {
-        position = await _locationService.getCurrentPosition();
-      } catch (_) {
-        position = null;
-      }
+      position = await _locationService.getCurrentPosition();
+    } catch (e) {
+      debugPrint('nearby: location failed: $e');
+      position = null;
+    }
 
-      if (position == null) {
-        if (!mounted) return;
-        setState(() {
-          _isLoading = false;
-          _position = null;
-        });
-        return;
-      }
+    if (!mounted) return;
+    if (position == null) {
+      setState(() {
+        _isLoading = false;
+        _position = null;
+      });
+      return;
+    }
 
+    // The position is usable from here on — a later lookup failing must not
+    // throw it away and turn a working card into "Location unavailable".
+    // `_isLoading` stays true so the card keeps showing its spinner instead
+    // of flashing an empty list.
+    setState(() => _position = position);
+
+    var users = <UserEntity>[];
+    var partners = <String, String>{};
+    try {
       await _userService.updateLocationIfNeeded(
         _uid,
         position.latitude,
         position.longitude,
       );
-
-      final users = await _userService.findNearbyUsers(
+    } catch (e) {
+      debugPrint('nearby: updateLocationIfNeeded failed: $e');
+    }
+    try {
+      users = await _userService.findNearbyUsers(
         position.latitude,
         position.longitude,
         excludeUid: _uid,
       );
-      final partners = await _friendService.getPartnerStatusMap(_uid);
-
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _position = position;
-        _nearbyUsers = users;
-        _partners = partners;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
+    } catch (e) {
+      debugPrint('nearby: findNearbyUsers failed: $e');
     }
+    try {
+      partners = await _friendService.getPartnerStatusMap(_uid);
+    } catch (e) {
+      debugPrint('nearby: getPartnerStatusMap failed: $e');
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      _position = position;
+      _nearbyUsers = users;
+      _partners = partners;
+    });
   }
 
   Future<void> _scanSurroundings() async {
@@ -903,34 +944,52 @@ class _FriendsMapSectionState extends State<_FriendsMapSection> {
 
   Future<void> _load() async {
     setState(() => _isLoading = true);
+
+    Position? position;
     try {
-      Position? position;
-      try {
-        position = await _locationService.getCurrentPosition();
-      } catch (_) {
-        position = null;
-      }
+      position = await _locationService.getCurrentPosition();
+    } catch (e) {
+      debugPrint('map: location failed: $e');
+      position = null;
+    }
 
-      if (position == null) {
-        if (!mounted) return;
-        setState(() => _isLoading = false);
-        return;
-      }
+    if (!mounted) return;
+    if (position == null) {
+      setState(() => _isLoading = false);
+      return;
+    }
 
+    // A later lookup failing must not hide the map — `_position` was only
+    // assigned at the very end of the `try`, so one thrown call (notably
+    // `getPartnerStatusMap`, which needs the `friends` composite index) left
+    // `_position == null` and the card reported a bogus "Location
+    // unavailable". `_isLoading` stays true so the spinner keeps showing.
+    setState(() => _position = position);
+
+    var partners = <String, String>{};
+    var markers = <Marker>[];
+    try {
       await _userService.updateLocationIfNeeded(
         _uid,
         position.latitude,
         position.longitude,
       );
-
+    } catch (e) {
+      debugPrint('map: updateLocationIfNeeded failed: $e');
+    }
+    try {
+      partners = await _friendService.getPartnerStatusMap(_uid);
+    } catch (e) {
+      debugPrint('map: getPartnerStatusMap failed: $e');
+    }
+    try {
       final users = await _userService.findNearbyUsers(
         position.latitude,
         position.longitude,
         excludeUid: _uid,
       );
-      final partners = await _friendService.getPartnerStatusMap(_uid);
-
-      final markers = <Marker>[];
+      // `partners` must already be resolved here — the markers read it to
+      // decide whether a pinned user is a pending/active partner.
       for (final user in users) {
         if (user.latitude != null && user.longitude != null) {
           markers.add(
@@ -946,18 +1005,17 @@ class _FriendsMapSectionState extends State<_FriendsMapSection> {
           );
         }
       }
-
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _position = position;
-        _partners = partners;
-        _markers = markers;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
+    } catch (e) {
+      debugPrint('map: findNearbyUsers failed: $e');
     }
+
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      _position = position;
+      _partners = partners;
+      _markers = markers;
+    });
   }
 
   Future<void> _sendRequest(UserEntity user) async {

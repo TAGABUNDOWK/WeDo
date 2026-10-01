@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/auth/otp_service.dart';
 import '../../services/auth/user_service.dart';
+import '../../utils/safe_nav.dart';
 
 
 class OtpVerificationPage extends StatefulWidget {
@@ -38,7 +39,9 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
   @override
   void initState() {
     super.initState();
-    _sendCode();
+    // _sendCode shows snackbars from its catch paths; defer so a synchronous
+    // throw before the first await cannot hit ScaffoldMessenger mid-build.
+    safeNav(_sendCode, label: 'send otp');
   }
 
   @override

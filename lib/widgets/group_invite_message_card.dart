@@ -153,7 +153,7 @@ class _InviteCardState extends State<_InviteCard> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            settings: RouteSettings(name: 'group_chat:${widget.groupId}'),
+            settings: RouteSettings(name: '/group-chat/${widget.groupId}'),
             builder: (_) => GroupChatScreen(groupId: widget.groupId),
           ),
         );

@@ -343,7 +343,9 @@ class _BlobNavBarState extends State<BlobNavBar>
                 width: centerDiameter,
                 height: centerDiameter,
                 child: _CenterLogoButton(
-                  isActive: widget.currentIndex == 3,
+                  // `onTap` lands on index 5, so index 5 is the one that must
+                  // report as active (index 3 is unreachable from this button).
+                  isActive: widget.currentIndex == 5,
                   isMenuOpen: _isMenuOpen,
                   activeColor: widget.activeColor,
                   inactiveColor: widget.inactiveColor,
@@ -359,67 +361,73 @@ class _BlobNavBarState extends State<BlobNavBar>
                 child: AnimatedBuilder(
                   animation: _menuCtrl,
                   builder: (context, _) {
-                    return Opacity(
-                      opacity: _menuFade.value,
-                      child: SizedBox(
-                        height: 110,
-                        child: Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            Positioned(
-                              left: 36,
-                              bottom: 20 * _menuScale.value,
-                              child: Transform.translate(
-                                offset: Offset(0, 30 * (1 - _menuScale.value)),
-                                child: _PopupCircle(
-                                  icon: 'assets/icons/racing-flag.png',
-                                  onTap: () => _onChoiceTap(() {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            const TriRaceEntryScreen(),
-                                      ),
-                                    );
-                                  }),
+                    // `Opacity(0)` still absorbs pointer events, so the closed
+                    // menu used to shadow taps on whatever sits below it (the
+                    // top of the tab content / FAB). Ignore them when closed.
+                    return IgnorePointer(
+                      ignoring: !_isMenuOpen,
+                      child: Opacity(
+                        opacity: _menuFade.value,
+                        child: SizedBox(
+                          height: 110,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Positioned(
+                                left: 36,
+                                bottom: 20 * _menuScale.value,
+                                child: Transform.translate(
+                                  offset: Offset(0, 30 * (1 - _menuScale.value)),
+                                  child: _PopupCircle(
+                                    icon: 'assets/icons/racing-flag.png',
+                                    onTap: () => _onChoiceTap(() {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const TriRaceEntryScreen(),
+                                        ),
+                                      );
+                                    }),
+                                  ),
                                 ),
                               ),
-                            ),
-                            Positioned(
-                              left: 94,
-                              bottom: 40 * _menuScale.value,
-                              child: Transform.translate(
-                                offset: Offset(0, 20 * (1 - _menuScale.value)),
-                                child: _PopupCircle(
-                                  icon: 'assets/icons/punch.png',
-                                  onTap: () => _onChoiceTap(() {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            const SessionEntryScreen(),
-                                      ),
-                                    );
-                                  }),
+                              Positioned(
+                                left: 94,
+                                bottom: 40 * _menuScale.value,
+                                child: Transform.translate(
+                                  offset: Offset(0, 20 * (1 - _menuScale.value)),
+                                  child: _PopupCircle(
+                                    icon: 'assets/icons/punch.png',
+                                    onTap: () => _onChoiceTap(() {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const SessionEntryScreen(),
+                                        ),
+                                      );
+                                    }),
+                                  ),
                                 ),
                               ),
-                            ),
-                            Positioned(
-                              right: 36,
-                              bottom: 20 * _menuScale.value,
-                              child: Transform.translate(
-                                offset: Offset(0, 30 * (1 - _menuScale.value)),
-                                child: _PopupCircle(
-                                  icon: 'assets/icons/spinning-wheel.png',
-                                  onTap: () => _onChoiceTap(() {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) => const WheelScreen(),
-                                      ),
-                                    );
-                                  }),
+                              Positioned(
+                                right: 36,
+                                bottom: 20 * _menuScale.value,
+                                child: Transform.translate(
+                                  offset: Offset(0, 30 * (1 - _menuScale.value)),
+                                  child: _PopupCircle(
+                                    icon: 'assets/icons/spinning-wheel.png',
+                                    onTap: () => _onChoiceTap(() {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) => const WheelScreen(),
+                                        ),
+                                      );
+                                    }),
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     );
@@ -1090,11 +1098,15 @@ class _HomeTabState extends State<_HomeTab> {
     );
   }
 
+  /// Must be returned as a direct child of the [_HomeTab] Stack — `Positioned`
+  /// only works under a `Stack`, so the horizontal inset lives here instead of
+  /// in a wrapping `Padding` (a `Positioned` inside a `Padding` throws a
+  /// `BoxParentData is not a StackParentData` error and kills the whole tab).
   Widget _buildNotificationsPanel() {
     return Positioned(
       top: 70,
-      right: 0,
-      left: 0,
+      right: 20,
+      left: 20,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: BackdropFilter(
@@ -1222,7 +1234,7 @@ class _HomeTabState extends State<_HomeTab> {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      settings: RouteSettings(name: 'group_chat:$groupId'),
+                                      settings: RouteSettings(name: '/group-chat/$groupId'),
                                       builder: (_) => GroupChatScreen(groupId: groupId),
                                     ),
                                   );
@@ -1344,16 +1356,16 @@ class _HomeTabState extends State<_HomeTab> {
       ),
           if (_showNotifications)
             GestureDetector(
+              // `deferToChild` would depend on the colored box itself
+              // hit-testing; make the scrim explicitly opaque so tapping
+              // outside the panel reliably closes it.
+              behavior: HitTestBehavior.opaque,
               onTap: () => setState(() => _showNotifications = false),
               child: Container(
                 color: Colors.black.withValues(alpha: 0.2),
               ),
             ),
-          if (_showNotifications)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: _buildNotificationsPanel(),
-            ),
+          if (_showNotifications) _buildNotificationsPanel(),
         ],
       ),
     );

@@ -29,7 +29,7 @@ class _GroupChatsPageState extends State<GroupChatsPage> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        settings: RouteSettings(name: 'group_chat:$groupId'),
+        settings: RouteSettings(name: '/group-chat/$groupId'),
         builder: (_) => GroupChatScreen(groupId: groupId),
       ),
     );

@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/call.dart';
 import '../../services/auth/user_service.dart';
 import '../../services/call/call_manager.dart';
+import '../../utils/safe_nav.dart';
 import '../../utils/time_format.dart';
 import '../chat/group/group_chat_screen.dart';
 
@@ -77,13 +78,16 @@ class _CallScreenState extends State<CallScreen> {
 
   void _onCallUpdate() {
     if (!mounted) return;
-
-    if (_callManager.activeCall == null && !_isEndingCall) {
-      _exitToChat();
-      return;
-    }
-
-    setState(() {});
+    // CallManager can notify synchronously from another widget's initState,
+    // i.e. during a build pass. Defer so setState/navigation never run there.
+    safeNav(() {
+      if (!mounted) return;
+      if (_callManager.activeCall == null && !_isEndingCall) {
+        _exitToChat();
+        return;
+      }
+      setState(() {});
+    }, label: 'call update');
   }
 
   void _minimizeCall() {
@@ -124,7 +128,7 @@ class _CallScreenState extends State<CallScreen> {
       return;
     }
 
-    const prefix = 'group_chat:';
+    const prefix = '/group-chat/';
     var found = false;
     nav.popUntil((route) {
       final name = route.settings.name;
