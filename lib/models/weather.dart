@@ -10,7 +10,8 @@ class WeatherSnapshot {
   final int uvIndex;
   final double windSpeedKmh;
   final String windDirection;
-  final int precipitationChance;
+  final DateTime? rainWindowStart;
+  final DateTime? rainWindowEnd;
   final List<HourlyWeather> hourly;
   final List<DailyWeather> daily;
 
@@ -26,7 +27,8 @@ class WeatherSnapshot {
     required this.uvIndex,
     required this.windSpeedKmh,
     required this.windDirection,
-    required this.precipitationChance,
+    this.rainWindowStart,
+    this.rainWindowEnd,
     required this.hourly,
     required this.daily,
   });

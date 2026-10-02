@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/weather.dart';
 import '../screens/weather/weather_forecast_screen.dart';
 import '../services/weather/weather_service.dart';
+import '../utils/time_format.dart';
 import 'google_weather_icon.dart';
 import 'weather_skeleton.dart';
 
@@ -102,11 +103,19 @@ class _WeatherSummaryCardState extends State<WeatherSummaryCard> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(
-                      '${weather.precipitationChance}% rain',
-                      style: const TextStyle(
-                        color: Color(0xFF9CC5FF),
-                        fontSize: 12,
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        weather.rainWindowStart != null
+                            ? 'Rain ${formatHourAmPm(weather.rainWindowStart!)} – ${formatHourAmPm(weather.rainWindowEnd!)}'
+                            : 'No rain today',
+                        style: TextStyle(
+                          color: weather.rainWindowStart != null
+                              ? const Color(0xFF9CC5FF)
+                              : Colors.white70,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 8),

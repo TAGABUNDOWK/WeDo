@@ -5,6 +5,7 @@ import 'package:geocoding/geocoding.dart';
 import 'package:http/http.dart' as http;
 
 import '../../models/weather.dart';
+import '../../utils/time_format.dart';
 import '../location/location_service.dart';
 
 class WeatherLocation {
@@ -128,7 +129,8 @@ class WeatherService {
     final daily = responses[2];
 
     final currentCondition = _condition(current['weatherCondition']);
-    final currentPrecipitation = _precipitationChance(current['precipitation']);
+    final hourlyForecast = _parseHourly(hourly['forecastHours']);
+    final (rainWindowStart, rainWindowEnd) = _rainWindow(hourlyForecast);
 
     return WeatherSnapshot(
       locationName: locationName,
@@ -144,10 +146,72 @@ class WeatherService {
       uvIndex: _int(current['uvIndex']),
       windSpeedKmh: _windSpeed(current['wind']),
       windDirection: _windDirection(current['wind']),
-      precipitationChance: currentPrecipitation,
-      hourly: _parseHourly(hourly['forecastHours']),
+      rainWindowStart: rainWindowStart,
+      rainWindowEnd: rainWindowEnd,
+      hourly: hourlyForecast,
       daily: _parseDaily(daily['forecastDays']),
     );
+  }
+
+  (DateTime?, DateTime?) _rainWindow(List<HourlyWeather> hourly) {
+    const rainThreshold = 40;
+    const bridgeThreshold = 20;
+    final now = DateTime.now();
+
+    final runs = <List<HourlyWeather>>[];
+    var segment = <HourlyWeather>[];
+
+    void closeSegment() {
+      if (segment.isNotEmpty) {
+        var start = 0;
+        var end = segment.length;
+        while (start < end && segment[start].precipitationChance < rainThreshold) {
+          start++;
+        }
+        while (end > start && segment[end - 1].precipitationChance < rainThreshold) {
+          end--;
+        }
+        if (end > start) runs.add(segment.sublist(start, end));
+      }
+      segment = [];
+    }
+
+    for (final slot in hourly) {
+      if (slot.precipitationChance < bridgeThreshold) {
+        closeSegment();
+      } else {
+        segment.add(slot);
+      }
+    }
+    closeSegment();
+
+    final todayRuns = runs
+        .where((run) => run.any((slot) => isSameDay(slot.time, now)))
+        .toList();
+    if (todayRuns.isEmpty) return (null, null);
+
+    todayRuns.sort((a, b) {
+      final peak = b
+          .map((s) => s.precipitationChance)
+          .reduce((x, y) => x > y ? x : y)
+          .compareTo(
+            a.map((s) => s.precipitationChance).reduce((x, y) => x > y ? x : y),
+          );
+      if (peak != 0) return peak;
+      final total = b
+          .map((s) => s.precipitationChance)
+          .fold<int>(0, (sum, v) => sum + v)
+          .compareTo(
+            a
+                .map((s) => s.precipitationChance)
+                .fold<int>(0, (sum, v) => sum + v),
+          );
+      if (total != 0) return total;
+      return a.first.time.compareTo(b.first.time);
+    });
+
+    final best = todayRuns.first;
+    return (best.first.time, best.last.time.add(const Duration(hours: 1)));
   }
 
   Uri _buildUri(
