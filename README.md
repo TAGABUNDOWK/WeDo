@@ -63,6 +63,7 @@ The functions live in `api/` (see `vercel.json` for routes):
 | Route | Function | Purpose |
 | --- | --- | --- |
 | `/tmdb` | `api/tmdb.js` | Proxy TMDB movie API |
+| `/weather` | `api/weather.js` | Proxy Google Weather API |
 | `/generate-otp` | `api/generate-otp.js` | Store OTP + send email via Brevo |
 | `/verify-otp` | `api/verify-otp.js` | Validate OTP |
 | `/verify-email-change` | `api/verify-email-change.js` | Validate email-change OTP |
@@ -78,6 +79,7 @@ Then set these environment variables in the Vercel project settings (they stay o
 
 ```
 TMDB_API=
+GOOGLE_WEATHER_API_KEY=
 BREVO_API_KEY=
 BREVO_SENDER_NAME=
 BREVO_SENDER_EMAIL=
@@ -100,7 +102,9 @@ TURN_CREDENTIAL=your_turn_credential
 
 These are WebRTC/TURN credentials for voice & video calls (`lib/services/call/webrtc_service.dart`).
 
-> **Warning:** `.env` values are bundled into the app binary and can be extracted from an APK — treat them as **public**. Use restricted/short-lived TURN credentials. Secrets (TMDB, Brevo, Firebase Admin) do **not** go here; they belong in Vercel env vars (step 3).
+The Google Weather API key is **optional here**: when `GOOGLE_WEATHER_API_KEY` is absent from `.env`, the weather feature automatically calls the Vercel proxy (`https://wedo-api.vercel.app/weather`) instead, which injects the key stored in Vercel's environment variables.
+
+> **Warning:** `.env` values are bundled into the app binary and can be extracted from an APK — treat them as **public**. Use restricted/short-lived TURN credentials. Secrets (TMDB, Google Weather, Brevo, Firebase Admin) do **not** go here; they belong in Vercel env vars (step 3).
 
 ### 5. Run the app
 
