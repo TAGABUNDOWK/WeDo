@@ -76,7 +76,16 @@ class _ForecastContent extends StatelessWidget {
                 scrollDirection: Axis.horizontal,
                 itemCount: weather.hourly.length,
                 separatorBuilder: (_, __) => const SizedBox(width: 8),
-                itemBuilder: (_, index) => _HourlyTile(item: weather.hourly[index]),
+                itemBuilder: (_, index) {
+                  final item = weather.hourly[index];
+                  final start = weather.rainWindowStart;
+                  final end = weather.rainWindowEnd;
+                  final inRainWindow = start != null &&
+                      end != null &&
+                      !item.time.isBefore(start) &&
+                      item.time.isBefore(end);
+                  return _HourlyTile(item: item, inRainWindow: inRainWindow);
+                },
               ),
             ),
           ),
@@ -136,7 +145,13 @@ class _CurrentWeatherCard extends StatelessWidget {
               _Metric(icon: Icons.water_drop_outlined, label: 'Humidity', value: '${weather.humidity}%'),
               _Metric(icon: Icons.air_rounded, label: 'Wind', value: '${weather.windSpeedKmh.round()} km/h ${weather.windDirection}'),
               _Metric(icon: Icons.wb_sunny_outlined, label: 'UV Index', value: '${weather.uvIndex}'),
-              _Metric(icon: Icons.umbrella_outlined, label: 'Rain chance', value: '${weather.precipitationChance}%'),
+              _Metric(
+                icon: Icons.umbrella_outlined,
+                label: 'Rain today',
+                value: weather.rainWindowStart != null
+                    ? '${formatHourAmPm(weather.rainWindowStart!)} – ${formatHourAmPm(weather.rainWindowEnd!)}'
+                    : 'No rain',
+              ),
             ],
           ),
         ],
@@ -167,15 +182,22 @@ class _SectionCard extends StatelessWidget {
 
 class _HourlyTile extends StatelessWidget {
   final HourlyWeather item;
+  final bool inRainWindow;
 
-  const _HourlyTile({required this.item});
+  const _HourlyTile({required this.item, this.inRainWindow = false});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: 72,
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-      decoration: BoxDecoration(color: const Color(0xFF24115B), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFF743CDE))),
+      decoration: BoxDecoration(
+        color: inRainWindow ? const Color(0xFF1C2F6B) : const Color(0xFF24115B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: inRainWindow ? const Color(0xFF82B7FF) : const Color(0xFF743CDE),
+        ),
+      ),
       child: Column(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
         Text(formatHourAmPm(item.time), style: const TextStyle(color: Color(0xFFBDA7FF), fontSize: 11)),
         GoogleWeatherIcon(iconUri: item.iconUri, conditionType: item.conditionType, size: 28),
