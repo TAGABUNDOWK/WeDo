@@ -99,6 +99,13 @@ String formatMonthDay(DateTime date) {
   return '${_monthsShort[date.month - 1]} ${date.day}';
 }
 
+String formatHourAmPm(DateTime time) {
+  final hour = time.hour > 12 ? time.hour - 12 : (time.hour == 0 ? 12 : time.hour);
+  final ampm = time.hour >= 12 ? 'PM' : 'AM';
+  final min = time.minute.toString().padLeft(2, '0');
+  return '$hour:$min $ampm';
+}
+
 String formatDuration(Duration d) {
   final minutes = d.inMinutes;
   final seconds = d.inSeconds % 60;

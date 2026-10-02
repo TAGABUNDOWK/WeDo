@@ -28,6 +28,10 @@
     {
       "src": "/tmdb",
       "dest": "/api/tmdb"
+    },
+    {
+      "src": "/weather",
+      "dest": "/api/weather"
     }
   ]
 }
