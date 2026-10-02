@@ -5,6 +5,7 @@
 .env.*
 assets/env/
 lib/env.g.dart
+android/local.properties
 
 # ==========================================
 # 2. Native Credentials & Release Keys
