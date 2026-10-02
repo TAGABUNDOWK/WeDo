@@ -11,6 +11,7 @@ import '../../../models/group_chat.dart';
 import '../../../models/message.dart';
 import '../../../models/poll.dart';
 import '../../../services/group/group_service.dart';
+import '../../../services/location/live_location_service.dart';
 import '../../../services/event/event_service.dart';
 import '../../../services/poll/poll_service.dart';
 import '../../../services/call/call_service.dart';
@@ -25,10 +26,12 @@ import '../../../widgets/date_separator.dart';
 import '../../../widgets/invite_message_card.dart';
 import '../../../widgets/tri_race_invite_message_card.dart';
 import '../../../widgets/group_invite_message_card.dart';
+import '../../../widgets/location_message_card.dart';
 import '../../../widgets/composer_option.dart';
 import '../../../widgets/audio_recorder_button.dart';
 import '../../../widgets/swipe_reply_wrapper.dart';
 import '../../call/outgoing_call_screen.dart';
+import '../../location/location_picker_screen.dart';
 import '../event/create_event_screen.dart';
 import '../event/event_detail_screen.dart';
 import '../poll/create_poll_screen.dart';
@@ -207,6 +210,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   @override
   void dispose() {
+    _liveLocation.stop();
     _callManager.removeListener(_onCallManagerUpdate);
     _messageCtrl.dispose();
     _scrollCtrl.dispose();
@@ -415,6 +419,62 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       }
     } finally {
       if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
+  final _liveLocation = LiveLocationService();
+
+  Future<void> _shareLocation() async {
+    final picked = await Navigator.push<PickedLocation>(
+      context,
+      MaterialPageRoute(builder: (_) => const LocationPickerScreen()),
+    );
+    if (picked == null || !mounted || _currentUser == null) return;
+
+    try {
+      final liveUntil = picked.liveDuration == null
+          ? null
+          : DateTime.now().add(picked.liveDuration!);
+      final messageId = await _groupService.sendLocationMessage(
+        groupId: widget.groupId,
+        senderId: _currentUser.uid,
+        senderName: _getDisplayName(
+          _currentUser.uid,
+          _currentUser.displayName ?? _currentUser.email ?? 'Unknown',
+        ),
+        latitude: picked.latitude,
+        longitude: picked.longitude,
+        address: picked.address,
+        liveUntil: liveUntil,
+      );
+
+      if (liveUntil != null && mounted) {
+        _liveLocation.start(
+          duration: picked.liveDuration!,
+          onPosition: (lat, lng) =>
+              _groupService.updateLocationMessageCoords(
+            groupId: widget.groupId,
+            messageId: messageId,
+            latitude: lat,
+            longitude: lng,
+          ),
+          onExpired: () {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Live location sharing ended'),
+                ),
+              );
+            }
+          },
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to send location: $e')));
+      }
     }
   }
 
@@ -631,70 +691,116 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   void _showComposerMenu() {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) {
         return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Add to chat',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 20),
-              Wrap(
-                spacing: 24,
-                runSpacing: 24,
-                children: [
-                  ComposerOption(
-                    icon: Icons.photo_outlined,
-                    label: 'Photo',
-                    color: Colors.blue,
-                    onTap: () {
-                      Navigator.pop(context);
-                      _pickAndSendImage();
-                    },
-                  ),
-                  ComposerOption(
-                    icon: Icons.event_outlined,
-                    label: 'Event',
-                    color: Colors.teal,
-                    onTap: () async {
-                      Navigator.pop(context);
-                      final result = await Navigator.push<bool>(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              CreateEventScreen(groupId: widget.groupId),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: SafeArea(
+            top: false,
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(12, 0, 12, 20),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(28),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xE6190831),
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.14),
+                        width: 1,
+                      ),
+                    ),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 22),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.25),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
-                      );
-                      if (result == true) _loadGroupInfo();
-                    },
-                  ),
-                  ComposerOption(
-                    icon: Icons.poll_outlined,
-                    label: 'Poll',
-                    color: Colors.deepPurple,
-                    onTap: () async {
-                      Navigator.pop(context);
-                      final result = await Navigator.push<bool>(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              CreatePollScreen(groupId: widget.groupId),
+                        const SizedBox(height: 14),
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Add to chat',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
                         ),
-                      );
-                      if (result == true) _loadGroupInfo();
-                    },
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            ComposerOption(
+                              icon: Icons.photo_outlined,
+                              label: 'Photo',
+                              color: Colors.lightBlueAccent,
+                              onTap: () {
+                                Navigator.pop(context);
+                                _pickAndSendImage();
+                              },
+                            ),
+                            ComposerOption(
+                              icon: Icons.event_outlined,
+                              label: 'Event',
+                              color: Colors.tealAccent,
+                              onTap: () async {
+                                Navigator.pop(context);
+                                final result = await Navigator.push<bool>(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        CreateEventScreen(groupId: widget.groupId),
+                                  ),
+                                );
+                                if (result == true) _loadGroupInfo();
+                              },
+                            ),
+                            ComposerOption(
+                              icon: Icons.poll_outlined,
+                              label: 'Poll',
+                              color: Colors.purpleAccent,
+                              onTap: () async {
+                                Navigator.pop(context);
+                                final result = await Navigator.push<bool>(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        CreatePollScreen(groupId: widget.groupId),
+                                  ),
+                                );
+                                if (result == true) _loadGroupInfo();
+                              },
+                            ),
+                            ComposerOption(
+                              icon: Icons.location_on_outlined,
+                              label: 'Location',
+                              color: Colors.greenAccent,
+                              onTap: () {
+                                Navigator.pop(context);
+                                _shareLocation();
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ],
+                ),
               ),
-            ],
+            ),
           ),
         );
       },
@@ -1045,6 +1151,26 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                                 poll: _polls[msg.refId],
                                 currentUid: _currentUser?.uid,
                                 theme: t,
+                              );
+                            }
+
+                            if (msg.type == MessageType.location &&
+                                msg.latitude != null &&
+                                msg.longitude != null) {
+                              return LocationMessageCard(
+                                latitude: msg.latitude!,
+                                longitude: msg.longitude!,
+                                isMe: isMe,
+                                senderName: isMe
+                                    ? null
+                                    : _getDisplayName(
+                                        msg.senderId,
+                                        msg.senderName,
+                                      ),
+                                address: msg.address,
+                                liveUntil: msg.liveUntil,
+                                groupId: widget.groupId,
+                                messageId: msg.id,
                               );
                             }
 

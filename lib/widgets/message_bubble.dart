@@ -2,8 +2,8 @@ import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../models/chat_theme.dart';
+import '../utils/link_utils.dart';
 import '../utils/time_format.dart';
 import '../screens/chat/image_viewer_screen.dart';
 import '../screens/call/outgoing_call_screen.dart';
@@ -192,14 +192,8 @@ class _MessageBubbleState extends State<MessageBubble> {
   }
 
   Future<void> _openLink(String url) async {
-    try {
-      final uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
-    } catch (e) {
-      debugPrint('Error opening link: $e');
-    }
+    if (!mounted) return;
+    await confirmAndOpenLink(context, url);
   }
 
   /// Builds a span with tappable link highlights for [content], or returns

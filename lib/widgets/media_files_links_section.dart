@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../models/message.dart';
+import '../utils/link_utils.dart';
 import '../services/direct/direct_service.dart';
 import '../services/group/group_service.dart';
 import '../screens/chat/image_viewer_screen.dart';
@@ -287,14 +287,8 @@ class _MediaFilesLinksSectionState extends State<MediaFilesLinksSection>
   }
 
   Future<void> _openLink(String url) async {
-    try {
-      final uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
-    } catch (e) {
-      debugPrint('Error opening link: $e');
-    }
+    if (!mounted) return;
+    await confirmAndOpenLink(context, url);
   }
 
   Widget _buildEmptyState(IconData icon, String message) {

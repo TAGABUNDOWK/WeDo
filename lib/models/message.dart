@@ -8,7 +8,8 @@ enum MessageType {
   system,
   invite,
   event,
-  poll;
+  poll,
+  location;
 
   static MessageType fromString(String? value) {
     switch (value) {
@@ -26,6 +27,8 @@ enum MessageType {
         return MessageType.event;
       case 'poll':
         return MessageType.poll;
+      case 'location':
+        return MessageType.location;
       default:
         return MessageType.text;
     }
@@ -49,6 +52,8 @@ enum MessageType {
         return 'event';
       case MessageType.poll:
         return 'poll';
+      case MessageType.location:
+        return 'location';
     }
   }
 }
@@ -76,6 +81,11 @@ class ChatMessage {
   final String? replyTo;
   final String? replyToContent;
   final String? replyToSender;
+  final double? latitude;
+  final double? longitude;
+  final String? address;
+  final DateTime? liveUntil;
+  final DateTime? updatedAt;
 
   const ChatMessage({
     required this.id,
@@ -100,6 +110,11 @@ class ChatMessage {
     this.replyTo,
     this.replyToContent,
     this.replyToSender,
+    this.latitude,
+    this.longitude,
+    this.address,
+    this.liveUntil,
+    this.updatedAt,
   });
 
   factory ChatMessage.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -142,6 +157,11 @@ class ChatMessage {
     final replyTo = data['replyTo'] as String? ?? data['reply_to'] as String?;
     final replyToContent = data['replyToContent'] as String? ?? data['reply_to_content'] as String?;
     final replyToSender = data['replyToSender'] as String? ?? data['reply_to_sender'] as String?;
+    final latitude = (data['latitude'] as num?)?.toDouble();
+    final longitude = (data['longitude'] as num?)?.toDouble();
+    final address = data['address'] as String?;
+    final liveUntil = _parseTimestampOrNull(data['liveUntil']);
+    final updatedAt = _parseTimestampOrNull(data['updatedAt']);
 
     return ChatMessage(
       id: doc.id,
@@ -166,10 +186,17 @@ class ChatMessage {
       replyTo: replyTo,
       replyToContent: replyToContent,
       replyToSender: replyToSender,
+      latitude: latitude,
+      longitude: longitude,
+      address: address,
+      liveUntil: liveUntil,
+      updatedAt: updatedAt,
     );
   }
 
   Map<String, dynamic> toFirestore() {
+    final live = liveUntil;
+    final updated = updatedAt;
     return {
       'senderId': senderId,
       'senderName': senderName,
@@ -192,6 +219,11 @@ class ChatMessage {
       if (replyTo != null) 'replyTo': replyTo,
       if (replyToContent != null) 'replyToContent': replyToContent,
       if (replyToSender != null) 'replyToSender': replyToSender,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
+      if (address != null) 'address': address,
+      if (live != null) 'liveUntil': Timestamp.fromDate(live),
+      if (updated != null) 'updatedAt': Timestamp.fromDate(updated),
     };
   }
 
@@ -203,6 +235,20 @@ class ChatMessage {
     if (value is String) return DateTime.parse(value);
     if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
     return DateTime.now();
+  }
+
+  static DateTime? _parseTimestampOrNull(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String) {
+      try {
+        return DateTime.parse(value);
+      } catch (_) {
+        return null;
+      }
+    }
+    if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+    return null;
   }
 
   @override
