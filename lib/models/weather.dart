@@ -12,6 +12,7 @@ class WeatherSnapshot {
   final String windDirection;
   final DateTime? rainWindowStart;
   final DateTime? rainWindowEnd;
+  final int? rainWindowAvgChance;
   final List<HourlyWeather> hourly;
   final List<DailyWeather> daily;
 
@@ -29,6 +30,7 @@ class WeatherSnapshot {
     required this.windDirection,
     this.rainWindowStart,
     this.rainWindowEnd,
+    this.rainWindowAvgChance,
     required this.hourly,
     required this.daily,
   });

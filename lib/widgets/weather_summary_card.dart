@@ -61,75 +61,124 @@ class _WeatherSummaryCardState extends State<WeatherSummaryCard> {
           child: _Shell(
             child: Row(
               children: [
-                GoogleWeatherIcon(
-                  iconUri: weather.iconUri,
-                  conditionType: weather.conditionType,
-                  size: 52,
-                ),
-                const SizedBox(width: 12),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  child: Row(
                     children: [
-                      Text(
-                        weather.locationName,
-                        style: const TextStyle(
-                          color: Color(0xFFBFA6FF),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      GoogleWeatherIcon(
+                        iconUri: weather.iconUri,
+                        conditionType: weather.conditionType,
+                        size: 52,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${weather.temperature.round()}°C',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 29,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      Text(
-                        weather.condition,
-                        style: const TextStyle(
-                          color: Color(0xFFFF77E9),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              weather.locationName,
+                              style: const TextStyle(
+                                color: Color(0xFFBFA6FF),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${weather.temperature.round()}°C',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 29,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            Text(
+                              weather.condition,
+                              style: const TextStyle(
+                                color: Color(0xFFFF77E9),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        weather.rainWindowStart != null
-                            ? 'Rain ${formatHourAmPm(weather.rainWindowStart!)} – ${formatHourAmPm(weather.rainWindowEnd!)}'
-                            : 'No rain today',
-                        style: TextStyle(
-                          color: weather.rainWindowStart != null
-                              ? const Color(0xFF9CC5FF)
-                              : Colors.white70,
-                          fontSize: 12,
+                const SizedBox(width: 12),
+                const _VerticalDivider(),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (weather.rainWindowAvgChance != null)
+                        Text.rich(
+                          TextSpan(
+                            text: '${weather.rainWindowAvgChance}%',
+                            style: const TextStyle(
+                              color: Color(0xFF9CC5FF),
+                              fontSize: 21,
+                              fontWeight: FontWeight.w800,
+                            ),
+                            children: const [
+                              TextSpan(
+                                text: ' rain',
+                                style: TextStyle(
+                                  color: Color(0xFF9CC5FF),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        const Text(
+                          'No rain',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
+                      if (weather.rainWindowStart != null) ...[
+                        const SizedBox(height: 4),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            '${formatHourAmPm(weather.rainWindowStart!)} – ${formatHourAmPm(weather.rainWindowEnd!)}',
+                            style: const TextStyle(
+                              color: Color(0xFF9CC5FF),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'View forecast',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 10,
+                            ),
+                          ),
+                          SizedBox(width: 4),
+                          Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            color: Colors.white70,
+                            size: 10,
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      color: Colors.white70,
-                      size: 16,
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Forecast',
-                      style: TextStyle(color: Colors.white70, fontSize: 10),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -138,6 +187,20 @@ class _WeatherSummaryCardState extends State<WeatherSummaryCard> {
       },
     );
   }
+}
+
+class _VerticalDivider extends StatelessWidget {
+  const _VerticalDivider();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 1,
+    height: 78,
+    decoration: BoxDecoration(
+      color: Colors.white24,
+      borderRadius: BorderRadius.circular(1),
+    ),
+  );
 }
 
 class _Shell extends StatelessWidget {

@@ -131,6 +131,11 @@ class WeatherService {
     final currentCondition = _condition(current['weatherCondition']);
     final hourlyForecast = _parseHourly(hourly['forecastHours']);
     final (rainWindowStart, rainWindowEnd) = _rainWindow(hourlyForecast);
+    final rainWindowAvgChance = _rainWindowAverage(
+      hourlyForecast,
+      rainWindowStart,
+      rainWindowEnd,
+    );
 
     return WeatherSnapshot(
       locationName: locationName,
@@ -148,6 +153,7 @@ class WeatherService {
       windDirection: _windDirection(current['wind']),
       rainWindowStart: rainWindowStart,
       rainWindowEnd: rainWindowEnd,
+      rainWindowAvgChance: rainWindowAvgChance,
       hourly: hourlyForecast,
       daily: _parseDaily(daily['forecastDays']),
     );
@@ -212,6 +218,25 @@ class WeatherService {
 
     final best = todayRuns.first;
     return (best.first.time, best.last.time.add(const Duration(hours: 1)));
+  }
+
+  int? _rainWindowAverage(
+    List<HourlyWeather> hourly,
+    DateTime? start,
+    DateTime? end,
+  ) {
+    if (start == null || end == null) return null;
+
+    final slots = hourly
+        .where((slot) => !slot.time.isBefore(start) && slot.time.isBefore(end))
+        .toList();
+    if (slots.isEmpty) return null;
+
+    final total = slots.fold<int>(
+      0,
+      (sum, slot) => sum + slot.precipitationChance,
+    );
+    return (total / slots.length).round();
   }
 
   Uri _buildUri(
