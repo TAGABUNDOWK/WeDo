@@ -23,31 +23,42 @@ class WeatherSummaryCardSkeleton extends StatelessWidget {
       child: _wrap(
         const Row(
           children: [
-            _Circle(size: 52),
-            SizedBox(width: 12),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
+              child: Row(
                 children: [
-                  _Bar(width: 90, height: 10),
-                  SizedBox(height: 6),
-                  _Bar(width: 70, height: 22),
-                  SizedBox(height: 6),
-                  _Bar(width: 110, height: 10),
+                  _Circle(size: 52),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _Bar(width: 90, height: 10),
+                        SizedBox(height: 6),
+                        _Bar(width: 70, height: 22),
+                        SizedBox(height: 6),
+                        _Bar(width: 110, height: 10),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _Bar(width: 62, height: 10),
-                SizedBox(height: 8),
-                _Bar(width: 16, height: 16, radius: 8),
-                SizedBox(height: 4),
-                _Bar(width: 52, height: 8),
-              ],
+            SizedBox(width: 12),
+            _Bar(width: 1, height: 78, radius: 1),
+            SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _Bar(width: 74, height: 18),
+                  SizedBox(height: 6),
+                  _Bar(width: 90, height: 10),
+                  SizedBox(height: 8),
+                  _Bar(width: 68, height: 8),
+                ],
+              ),
             ),
           ],
         ),
