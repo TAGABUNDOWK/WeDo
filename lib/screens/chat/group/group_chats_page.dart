@@ -28,7 +28,10 @@ class _GroupChatsPageState extends State<GroupChatsPage> {
   void _openChat(BuildContext context, String groupId) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => GroupChatScreen(groupId: groupId)),
+      MaterialPageRoute(
+        settings: RouteSettings(name: '/group-chat/$groupId'),
+        builder: (_) => GroupChatScreen(groupId: groupId),
+      ),
     );
   }
 

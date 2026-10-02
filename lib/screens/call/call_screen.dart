@@ -7,7 +7,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/call.dart';
 import '../../services/auth/user_service.dart';
 import '../../services/call/call_manager.dart';
+import '../../utils/safe_nav.dart';
 import '../../utils/time_format.dart';
+import '../chat/group/group_chat_screen.dart';
 
 class CallScreen extends StatefulWidget {
   final String callId;
@@ -76,13 +78,16 @@ class _CallScreenState extends State<CallScreen> {
 
   void _onCallUpdate() {
     if (!mounted) return;
-
-    if (_callManager.activeCall == null && !_isEndingCall) {
-      Navigator.of(context).pop();
-      return;
-    }
-
-    setState(() {});
+    // CallManager can notify synchronously from another widget's initState,
+    // i.e. during a build pass. Defer so setState/navigation never run there.
+    safeNav(() {
+      if (!mounted) return;
+      if (_callManager.activeCall == null && !_isEndingCall) {
+        _exitToChat();
+        return;
+      }
+      setState(() {});
+    }, label: 'call update');
   }
 
   void _minimizeCall() {
@@ -97,7 +102,7 @@ class _CallScreenState extends State<CallScreen> {
     _isEndingCall = true;
     await _callManager.endActiveCall();
     if (mounted) {
-      Navigator.of(context).pop();
+      _exitToChat();
     }
   }
 
@@ -106,7 +111,42 @@ class _CallScreenState extends State<CallScreen> {
     _isEndingCall = true;
     await _callManager.leaveGroupCall();
     if (mounted) {
-      Navigator.of(context).pop();
+      _exitToChat();
+    }
+  }
+
+  /// Ends the call screen and lands back on the originating group chat (or
+  /// simply pops for direct calls). If the group chat is not in the stack
+  /// (e.g. the call was opened from the overlay on the home screen), a fresh
+  /// GroupChatScreen for this group is pushed instead.
+  void _exitToChat() {
+    if (!mounted) return;
+    final nav = Navigator.of(context);
+    final groupId = widget.isGroup ? widget.groupId : null;
+    if (groupId == null || groupId.isEmpty) {
+      nav.pop();
+      return;
+    }
+
+    const prefix = '/group-chat/';
+    var found = false;
+    nav.popUntil((route) {
+      final name = route.settings.name;
+      if (name != null &&
+          name.startsWith(prefix) &&
+          name.substring(prefix.length) == groupId) {
+        found = true;
+        return true;
+      }
+      return route.isFirst;
+    });
+    if (!found) {
+      nav.push(
+        MaterialPageRoute(
+          settings: RouteSettings(name: '$prefix$groupId'),
+          builder: (_) => GroupChatScreen(groupId: groupId),
+        ),
+      );
     }
   }
 
@@ -198,6 +238,10 @@ class _CallScreenState extends State<CallScreen> {
   bool _hasActiveVideo(RTCVideoRenderer renderer) {
     final stream = renderer.srcObject;
     if (stream == null) return false;
+    // No size event yet means no frame has arrived (e.g. a zombie renderer
+    // left behind by a peer who never wrote a "left" status) — treat as video
+    // off so the avatar+name fallback shows instead of a black texture.
+    if (renderer.value.width <= 0 || renderer.value.height <= 0) return false;
     final videoTracks = stream.getVideoTracks();
     if (videoTracks.isEmpty) return false;
     return videoTracks.any((track) => track.enabled);
@@ -417,34 +461,48 @@ class _CallScreenState extends State<CallScreen> {
       _Participant participant, BoxConstraints constraints) {
     final hasVideo =
         participant.renderer != null && _hasActiveVideo(participant.renderer!);
+    final label = participant.isLocal
+        ? 'You'
+        : _getParticipantName(participant.uid);
 
     return Positioned.fill(
       child: GestureDetector(
         key: ValueKey(participant.uid),
         behavior: HitTestBehavior.opaque,
         onTap: participant.isLocal ? null : () => _focusPeer(participant.uid),
-        child: hasVideo
-            ? FittedBox(
-                fit: BoxFit.cover,
-                clipBehavior: Clip.hardEdge,
-                child: SizedBox(
-                  width: 320,
-                  height: 240,
-                  child: RTCVideoView(
-                    participant.renderer!,
-                    mirror: participant.isLocal,
-                    objectFit:
-                        RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            hasVideo
+                ? FittedBox(
+                    fit: BoxFit.cover,
+                    clipBehavior: Clip.hardEdge,
+                    child: SizedBox(
+                      width: 320,
+                      height: 240,
+                      child: RTCVideoView(
+                        participant.renderer!,
+                        mirror: participant.isLocal,
+                        objectFit:
+                            RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                      ),
+                    ),
+                  )
+                : Container(
+                    color: const Color(0xFF2D1B69),
+                    child: Center(
+                      child: _buildParticipantAvatar(
+                          uid: participant.uid, radius: 60),
+                    ),
                   ),
-                ),
-              )
-            : Container(
-                color: const Color(0xFF2D1B69),
-                child: Center(
-                  child:
-                      _buildParticipantAvatar(uid: participant.uid, radius: 60),
-                ),
-              ),
+            Positioned(
+              left: 8,
+              bottom: 96,
+              child: _buildParticipantLabel(label,
+                  hasVideo: hasVideo, fontSize: 13),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -611,17 +669,6 @@ class _CallScreenState extends State<CallScreen> {
     );
     final hasVideo = _hasActiveVideo(focusedEntry.value);
 
-    final miniParticipants = <_Participant>[];
-    for (final entry in entries) {
-      if (entry.key != _focusedPeerId) {
-        miniParticipants.add(_Participant(
-          uid: entry.key,
-          renderer: entry.value,
-          isLocal: false,
-        ));
-      }
-    }
-
     return Stack(
       children: [
         Positioned.fill(
@@ -662,123 +709,61 @@ class _CallScreenState extends State<CallScreen> {
             fontSize: 13,
           ),
         ),
-        _buildMiniStripFromParticipants(miniParticipants),
       ],
-    );
-  }
-
-  Widget _buildMiniStripFromParticipants(List<_Participant> participants) {
-    if (participants.isEmpty) return const SizedBox.shrink();
-
-    return Positioned(
-      top: 0,
-      right: 8,
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.only(top: 72),
-          child: Column(
-            children: participants.map((participant) {
-              final hasVideo = participant.renderer != null &&
-                  _hasActiveVideo(participant.renderer!);
-              final label = participant.isLocal
-                  ? 'You'
-                  : _getParticipantName(participant.uid);
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: GestureDetector(
-                  key: ValueKey(participant.uid),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: participant.isLocal
-                      ? null
-                      : () => _focusPeer(participant.uid),
-                  child: Container(
-                    width: 80,
-                    height: 100,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: const Color(0xFFFE4EF0).withValues(alpha: 0.6),
-                        width: 2,
-                      ),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          if (hasVideo)
-                            RTCVideoView(
-                              participant.renderer!,
-                              mirror: participant.isLocal,
-                              objectFit: RTCVideoViewObjectFit
-                                  .RTCVideoViewObjectFitCover,
-                            )
-                          else
-                            Container(
-                              color: const Color(0xFF2D1B69),
-                              child: Center(
-                                child: _buildParticipantAvatar(
-                                  uid: participant.uid,
-                                  radius: 20,
-                                ),
-                              ),
-                            ),
-                          Positioned(
-                            left: 4,
-                            bottom: 4,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 4, vertical: 1),
-                              decoration: BoxDecoration(
-                                color: Colors.black54,
-                                borderRadius: BorderRadius.circular(3),
-                              ),
-                              child: Text(
-                                label,
-                                style: const TextStyle(
-                                    color: Colors.white, fontSize: 9),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-      ),
     );
   }
 
   Widget _buildVideoBackground() {
     final remote = _callManager.remoteRenderer;
     final local = _callManager.localRenderer;
+    final remoteUid = remote != null && _callManager.remoteRenderers.isNotEmpty
+        ? _callManager.remoteRenderers.keys.first
+        : null;
 
     Widget feed;
     if (remote != null && _hasActiveVideo(remote)) {
-      feed = _buildFullBleedVideo(remote, mirror: false);
-    } else if (local != null && _hasActiveVideo(local)) {
-      feed = _buildFullBleedVideo(local, mirror: true);
-    } else {
-      final remoteUid = remote != null && _callManager.remoteRenderers.isNotEmpty
-          ? _callManager.remoteRenderers.keys.first
-          : null;
-      feed = Positioned.fill(
-        child: Container(
-          color: const Color(0xFF2D1B69),
-          child: remoteUid != null
-              ? Center(
-                  child: _buildParticipantAvatar(uid: remoteUid, radius: 60),
-                )
-              : null,
+      feed = Stack(
+        fit: StackFit.expand,
+        children: [
+          _buildFullBleedVideo(remote, mirror: false),
+          const ColoredBox(color: Color(0x8C000000)),
+        ],
+      );
+    } else if (remoteUid != null) {
+      // Peer's camera is off (or no frame yet): show their profile picture
+      // and name. No dark scrim here — with it the avatar-only background
+      // rendered as a near-black screen.
+      feed = Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildParticipantAvatar(uid: remoteUid, radius: 72),
+            const SizedBox(height: 16),
+            Text(
+              _getParticipantName(remoteUid),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
       );
+    } else if (local != null && _hasActiveVideo(local)) {
+      // Pre-connect: only my own video is available.
+      feed = Stack(
+        fit: StackFit.expand,
+        children: [
+          _buildFullBleedVideo(local, mirror: true),
+          const ColoredBox(color: Color(0x8C000000)),
+        ],
+      );
+    } else {
+      feed = const ColoredBox(color: Color(0xFF2D1B69));
     }
 
     return Positioned.fill(
@@ -788,14 +773,7 @@ class _CallScreenState extends State<CallScreen> {
         onScaleUpdate: _onScaleUpdate,
         onScaleEnd: _onScaleEnd,
         behavior: HitTestBehavior.opaque,
-        child: Stack(
-          children: [
-            feed,
-            const Positioned.fill(
-              child: ColoredBox(color: Color(0x8C000000)),
-            ),
-          ],
-        ),
+        child: feed,
       ),
     );
   }
@@ -963,7 +941,9 @@ class _CallScreenState extends State<CallScreen> {
           if (widget.isGroup) ...[
             const SizedBox(height: 8),
             Text(
-              '${_callManager.remoteParticipantCount + 1} participants',
+              _callManager.remoteParticipantCount == 0
+                  ? 'Waiting for other participants to join...'
+                  : '${_callManager.remoteParticipantCount + 1} participants',
               textAlign: TextAlign.center,
               style:
                   const TextStyle(color: Colors.white54, fontSize: 14),

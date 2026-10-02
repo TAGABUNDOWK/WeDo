@@ -367,6 +367,75 @@ class DirectService {
     await batch.commit();
   }
 
+  Future<String> sendLocationMessage({
+    required String chatId,
+    required String senderId,
+    required String senderName,
+    required double latitude,
+    required double longitude,
+    String? address,
+    DateTime? liveUntil,
+  }) async {
+    final messageRef = _messages(chatId).doc();
+    final batch = _db.batch();
+
+    batch.set(messageRef, {
+      'sender_id': senderId,
+      'senderName': senderName,
+      'type': 'location',
+      'content': liveUntil != null ? '📍 Live location' : '📍 Location',
+      'latitude': latitude,
+      'longitude': longitude,
+      if (address != null) 'address': address,
+      if (liveUntil != null) 'liveUntil': Timestamp.fromDate(liveUntil),
+      if (liveUntil != null) 'updatedAt': FieldValue.serverTimestamp(),
+      'read_by': [senderId],
+      'created_at': FieldValue.serverTimestamp(),
+      'createdAtLocal': DateTime.now().toIso8601String(),
+      'edited': false,
+    });
+
+    final preview =
+        liveUntil != null ? '📍 Live location' : '📍 Location';
+    batch.update(_chats.doc(chatId), {
+      'last_message': {
+        'text': preview,
+        'senderId': senderId,
+        'sentAt': FieldValue.serverTimestamp(),
+      },
+      'lastMessageAt': FieldValue.serverTimestamp(),
+      'lastMessageReadBy': [senderId],
+    });
+
+    await batch.commit();
+    return messageRef.id;
+  }
+
+  /// Periodic position update for an active live-location message.
+  Future<void> updateLocationMessageCoords({
+    required String chatId,
+    required String messageId,
+    required double latitude,
+    required double longitude,
+  }) async {
+    await _messages(chatId).doc(messageId).update({
+      'latitude': latitude,
+      'longitude': longitude,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Live stream of a single message (used by live location sharing).
+  Stream<ChatMessage> watchMessage({
+    required String chatId,
+    required String messageId,
+  }) {
+    return _messages(chatId)
+        .doc(messageId)
+        .snapshots()
+        .map(ChatMessage.fromFirestore);
+  }
+
   Future<void> sendPollMessage({
     required String chatId,
     required String senderId,

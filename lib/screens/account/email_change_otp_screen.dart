@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/auth/otp_service.dart';
+import '../../utils/safe_nav.dart';
 
 const _font = 'PlusJakartaSans';
 
@@ -38,7 +39,9 @@ class _EmailChangeOtpScreenState extends State<EmailChangeOtpScreen> {
   @override
   void initState() {
     super.initState();
-    _sendCode();
+    // _sendCode shows a snackbar from its catch path; defer so a synchronous
+    // throw before the first await cannot hit ScaffoldMessenger mid-build.
+    safeNav(_sendCode, label: 'send otp');
   }
 
   @override

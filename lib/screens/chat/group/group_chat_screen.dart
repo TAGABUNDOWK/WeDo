@@ -11,12 +11,14 @@ import '../../../models/group_chat.dart';
 import '../../../models/message.dart';
 import '../../../models/poll.dart';
 import '../../../services/group/group_service.dart';
+import '../../../services/location/live_location_service.dart';
 import '../../../services/event/event_service.dart';
 import '../../../services/poll/poll_service.dart';
 import '../../../services/call/call_service.dart';
 import '../../../services/call/call_manager.dart';
 import '../../../services/user_cache.dart';
 import '../../../services/theme/chat_theme_resolver.dart';
+import '../../../utils/safe_nav.dart';
 import '../../../utils/time_format.dart';
 import '../../../widgets/message_bubble.dart';
 import '../../../widgets/call_button.dart';
@@ -24,10 +26,12 @@ import '../../../widgets/date_separator.dart';
 import '../../../widgets/invite_message_card.dart';
 import '../../../widgets/tri_race_invite_message_card.dart';
 import '../../../widgets/group_invite_message_card.dart';
+import '../../../widgets/location_message_card.dart';
 import '../../../widgets/composer_option.dart';
 import '../../../widgets/audio_recorder_button.dart';
 import '../../../widgets/swipe_reply_wrapper.dart';
 import '../../call/outgoing_call_screen.dart';
+import '../../location/location_picker_screen.dart';
 import '../event/create_event_screen.dart';
 import '../event/event_detail_screen.dart';
 import '../poll/create_poll_screen.dart';
@@ -121,29 +125,63 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _loadMemberPhoto(String uid) async {
-    if (_memberPhotos.containsKey(uid) && _memberAvatarAssets.containsKey(uid)) return;
+  final Set<String> _profileLoadAttempts = {};
+  final Set<String> _pendingProfileLoads = {};
+  bool _profileLoadScheduled = false;
+  final Set<String> _refLoadAttempts = {};
+
+  void _requestMemberProfile(String uid) {
+    if (_profileLoadAttempts.contains(uid)) return;
+    _pendingProfileLoads.add(uid);
+    if (_profileLoadScheduled) return;
+    _profileLoadScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _profileLoadScheduled = false;
+      final uids = _pendingProfileLoads.toList();
+      _pendingProfileLoads.clear();
+      if (uids.isEmpty) return;
+      for (final uid in uids) {
+        _profileLoadAttempts.add(uid);
+      }
+      _loadMemberPhotos(uids);
+    });
+  }
+
+  Future<void> _loadMemberPhotos(List<String> uids) async {
     final cache = UserCache();
-    final user = await cache.getUser(uid);
-    if (user != null && mounted) {
+    final results = await Future.wait(uids.map((uid) => cache.getUser(uid)));
+    if (!mounted) return;
+    var changed = false;
+    for (var i = 0; i < uids.length; i++) {
+      final user = results[i];
+      if (user == null) continue;
+      final uid = uids[i];
       if (user.photoUrl != null && user.photoUrl!.isNotEmpty) {
         _memberPhotos[uid] = user.photoUrl!;
+        changed = true;
       }
       if (user.avatarAsset != null && user.avatarAsset!.isNotEmpty) {
         _memberAvatarAssets[uid] = user.avatarAsset!;
+        changed = true;
       }
-      if (user.displayName.isNotEmpty) {
-        _memberNames[uid] = user.displayName;
-      } else if (user.username.isNotEmpty) {
-        _memberNames[uid] = user.username;
+      final name = user.displayName.isNotEmpty
+          ? user.displayName
+          : (user.username.isNotEmpty ? user.username : '');
+      if (name.isNotEmpty && _memberNames[uid] != name) {
+        _memberNames[uid] = name;
+        changed = true;
       }
-      setState(() {});
     }
+    if (changed) setState(() {});
   }
 
   Future<void> _loadEventPollData(ChatMessage msg) async {
     if (msg.refId == null) return;
-    if (msg.type == MessageType.event && !_events.containsKey(msg.refId)) {
+    if (msg.type == MessageType.event) {
+      if (_events.containsKey(msg.refId) ||
+          !_refLoadAttempts.add('event:${msg.refId}')) {
+        return;
+      }
       final event = await _eventService.getEvent(
         msg.refId!,
         groupId: widget.groupId,
@@ -151,7 +189,11 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       if (event != null && mounted) {
         setState(() => _events[msg.refId!] = event);
       }
-    } else if (msg.type == MessageType.poll && !_polls.containsKey(msg.refId)) {
+    } else if (msg.type == MessageType.poll) {
+      if (_polls.containsKey(msg.refId) ||
+          !_refLoadAttempts.add('poll:${msg.refId}')) {
+        return;
+      }
       final poll = await _pollService.getPoll(
         msg.refId!,
         groupId: widget.groupId,
@@ -168,6 +210,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   @override
   void dispose() {
+    _liveLocation.stop();
     _callManager.removeListener(_onCallManagerUpdate);
     _messageCtrl.dispose();
     _scrollCtrl.dispose();
@@ -175,7 +218,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   void _onCallManagerUpdate() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    // CallManager notifies synchronously from OutgoingCallScreen.initState,
+    // which runs inside a build pass - setState must be deferred.
+    safeNav(() {
+      if (mounted) setState(() {});
+    }, label: 'call update');
   }
 
   void _onScroll() {
@@ -371,6 +419,62 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       }
     } finally {
       if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
+  final _liveLocation = LiveLocationService();
+
+  Future<void> _shareLocation() async {
+    final picked = await Navigator.push<PickedLocation>(
+      context,
+      MaterialPageRoute(builder: (_) => const LocationPickerScreen()),
+    );
+    if (picked == null || !mounted || _currentUser == null) return;
+
+    try {
+      final liveUntil = picked.liveDuration == null
+          ? null
+          : DateTime.now().add(picked.liveDuration!);
+      final messageId = await _groupService.sendLocationMessage(
+        groupId: widget.groupId,
+        senderId: _currentUser.uid,
+        senderName: _getDisplayName(
+          _currentUser.uid,
+          _currentUser.displayName ?? _currentUser.email ?? 'Unknown',
+        ),
+        latitude: picked.latitude,
+        longitude: picked.longitude,
+        address: picked.address,
+        liveUntil: liveUntil,
+      );
+
+      if (liveUntil != null && mounted) {
+        _liveLocation.start(
+          duration: picked.liveDuration!,
+          onPosition: (lat, lng) =>
+              _groupService.updateLocationMessageCoords(
+            groupId: widget.groupId,
+            messageId: messageId,
+            latitude: lat,
+            longitude: lng,
+          ),
+          onExpired: () {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Live location sharing ended'),
+                ),
+              );
+            }
+          },
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to send location: $e')));
+      }
     }
   }
 
@@ -587,70 +691,116 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   void _showComposerMenu() {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) {
         return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Add to chat',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 20),
-              Wrap(
-                spacing: 24,
-                runSpacing: 24,
-                children: [
-                  ComposerOption(
-                    icon: Icons.photo_outlined,
-                    label: 'Photo',
-                    color: Colors.blue,
-                    onTap: () {
-                      Navigator.pop(context);
-                      _pickAndSendImage();
-                    },
-                  ),
-                  ComposerOption(
-                    icon: Icons.event_outlined,
-                    label: 'Event',
-                    color: Colors.teal,
-                    onTap: () async {
-                      Navigator.pop(context);
-                      final result = await Navigator.push<bool>(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              CreateEventScreen(groupId: widget.groupId),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: SafeArea(
+            top: false,
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(12, 0, 12, 20),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(28),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xE6190831),
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.14),
+                        width: 1,
+                      ),
+                    ),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 22),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.25),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
-                      );
-                      if (result == true) _loadGroupInfo();
-                    },
-                  ),
-                  ComposerOption(
-                    icon: Icons.poll_outlined,
-                    label: 'Poll',
-                    color: Colors.deepPurple,
-                    onTap: () async {
-                      Navigator.pop(context);
-                      final result = await Navigator.push<bool>(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              CreatePollScreen(groupId: widget.groupId),
+                        const SizedBox(height: 14),
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Add to chat',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
                         ),
-                      );
-                      if (result == true) _loadGroupInfo();
-                    },
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            ComposerOption(
+                              icon: Icons.photo_outlined,
+                              label: 'Photo',
+                              color: Colors.lightBlueAccent,
+                              onTap: () {
+                                Navigator.pop(context);
+                                _pickAndSendImage();
+                              },
+                            ),
+                            ComposerOption(
+                              icon: Icons.event_outlined,
+                              label: 'Event',
+                              color: Colors.tealAccent,
+                              onTap: () async {
+                                Navigator.pop(context);
+                                final result = await Navigator.push<bool>(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        CreateEventScreen(groupId: widget.groupId),
+                                  ),
+                                );
+                                if (result == true) _loadGroupInfo();
+                              },
+                            ),
+                            ComposerOption(
+                              icon: Icons.poll_outlined,
+                              label: 'Poll',
+                              color: Colors.purpleAccent,
+                              onTap: () async {
+                                Navigator.pop(context);
+                                final result = await Navigator.push<bool>(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        CreatePollScreen(groupId: widget.groupId),
+                                  ),
+                                );
+                                if (result == true) _loadGroupInfo();
+                              },
+                            ),
+                            ComposerOption(
+                              icon: Icons.location_on_outlined,
+                              label: 'Location',
+                              color: Colors.greenAccent,
+                              onTap: () {
+                                Navigator.pop(context);
+                                _shareLocation();
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ],
+                ),
               ),
-            ],
+            ),
           ),
         );
       },
@@ -721,123 +871,126 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                           color: Colors.white.withValues(alpha: 0.10),
                           borderRadius: BorderRadius.circular(24),
                         ),
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Positioned(
-                              left: 0,
-                              top: 0,
-                              bottom: 0,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                            GestureDetector(
-                              onTap: () => Navigator.maybePop(context),
-                              child: Image.asset(
-                                'assets/icons/back-nav.png',
-                                width: 30,
-                                height: 30,
-                                fit: BoxFit.contain,
-                                errorBuilder:
-                                    (context, error, stackTrace) =>
-                                        const Icon(
-                                  Icons.arrow_back,
-                                  color: Colors.white,
-                                  size: 30,
-                                ),
-                              ),
-                            ),
-                            if (_newMessageCount > 0) ...[
-                              const SizedBox(width: 8),
-                              const _HeartbeatDot(),
-                              const SizedBox(width: 4),
-                              const Text(
-                                'NEW',
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                                ],
-                              ),
-                            ),
-                            GestureDetector(
-                              onTap: _openGroupInfo,
-                              behavior: HitTestBehavior.opaque,
-                              child: Tooltip(
-                                message: 'Group info',
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 80),
-                                  child: StreamBuilder<GroupChat?>(
-                                stream: _groupStream,
-                                builder: (context, snapshot) {
-                                  final group = snapshot.data;
-                                  final photoUrl =
-                                      group?.photoUrl ?? _groupPhotoUrl;
-                                  return Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      CircleAvatar(
-                                        key: ValueKey(photoUrl),
-                                        radius: 16,
-                                        backgroundColor: Colors.white
-                                            .withValues(alpha: 0.2),
-                                        backgroundImage: photoUrl != null &&
-                                                photoUrl.isNotEmpty
-                                            ? NetworkImage(photoUrl)
-                                            : null,
-                                        child: photoUrl == null ||
-                                                photoUrl.isEmpty
-                                            ? const Icon(
-                                                Icons.group,
-                                                color: Colors.white,
-                                                size: 18,
-                                              )
-                                            : null,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Flexible(
-                                        child: Text(
-                                          group?.name ?? _groupName,
-                                          style: const TextStyle(
-                                            fontFamily: 'Poppins',
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 15,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
+                        child: SizedBox(
+                          height: 44,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              GestureDetector(
+                                onTap: _openGroupInfo,
+                                behavior: HitTestBehavior.opaque,
+                                child: Tooltip(
+                                  message: 'Group info',
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 80),
+                                    child: StreamBuilder<GroupChat?>(
+                                  stream: _groupStream,
+                                  builder: (context, snapshot) {
+                                    final group = snapshot.data;
+                                    final photoUrl =
+                                        group?.photoUrl ?? _groupPhotoUrl;
+                                    return Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        CircleAvatar(
+                                          key: ValueKey(photoUrl),
+                                          radius: 16,
+                                          backgroundColor: Colors.white
+                                              .withValues(alpha: 0.2),
+                                          backgroundImage: photoUrl != null &&
+                                                  photoUrl.isNotEmpty
+                                              ? NetworkImage(photoUrl)
+                                              : null,
+                                          child: photoUrl == null ||
+                                                  photoUrl.isEmpty
+                                              ? const Icon(
+                                                  Icons.group,
+                                                  color: Colors.white,
+                                                  size: 18,
+                                                )
+                                              : null,
                                         ),
-                                      ),
-                                    ],
-                                  );
-                                },
+                                        const SizedBox(width: 8),
+                                        Flexible(
+                                          child: Text(
+                                            group?.name ?? _groupName,
+                                            style: const TextStyle(
+                                              fontFamily: 'Poppins',
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 15,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
                               ),
                             ),
                           ),
+                              Positioned(
+                                right: 0,
+                                top: 0,
+                                bottom: 0,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                              CallButtons(
+                                chatId: widget.groupId,
+                                isGroup: true,
+                                onStartAudioCall: () => _startCall(CallType.audio),
+                                onStartVideoCall: () => _startCall(CallType.video),
+                                onRejoin: _rejoinCall,
+                                onReturnToCall: _returnToCall,
+                              ),
+                            ],
+                          ),
                         ),
-                            Positioned(
-                              right: 0,
-                              top: 0,
-                              bottom: 0,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                            CallButtons(
-                              chatId: widget.groupId,
-                              isGroup: true,
-                              onStartAudioCall: () => _startCall(CallType.audio),
-                              onStartVideoCall: () => _startCall(CallType.video),
-                              onRejoin: _rejoinCall,
-                              onReturnToCall: _returnToCall,
-                            ),
-                          ],
-                        ),
+                              Positioned(
+                                left: 0,
+                                top: 0,
+                                bottom: 0,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                              GestureDetector(
+                                onTap: () => Navigator.maybePop(context),
+                                child: Image.asset(
+                                  'assets/icons/back-nav.png',
+                                  width: 30,
+                                  height: 30,
+                                  fit: BoxFit.contain,
+                                  errorBuilder:
+                                      (context, error, stackTrace) =>
+                                          const Icon(
+                                    Icons.arrow_back,
+                                    color: Colors.white,
+                                    size: 30,
+                                  ),
+                                ),
+                              ),
+                              if (_newMessageCount > 0) ...[
+                                const SizedBox(width: 8),
+                                const _HeartbeatDot(),
+                                const SizedBox(width: 4),
+                                const Text(
+                                  'NEW',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                                  ],
+                                ),
+                              ),
+                        ],
                       ),
-                      ],
                     ),
                       ),
                     ),
@@ -891,15 +1044,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                         }
                       }
 
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        for (final m in messages) {
-                          if ((m.type == MessageType.event ||
-                                  m.type == MessageType.poll) &&
-                              m.refId != null) {
-                            _loadEventPollData(m);
-                          }
+                      for (final m in messages) {
+                        if ((m.type == MessageType.event ||
+                                m.type == MessageType.poll) &&
+                            m.refId != null) {
+                          _loadEventPollData(m);
                         }
-                      });
+                      }
 
                       return ListView.builder(
                         reverse: true,
@@ -1003,16 +1154,36 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                               );
                             }
 
+                            if (msg.type == MessageType.location &&
+                                msg.latitude != null &&
+                                msg.longitude != null) {
+                              return LocationMessageCard(
+                                latitude: msg.latitude!,
+                                longitude: msg.longitude!,
+                                isMe: isMe,
+                                senderName: isMe
+                                    ? null
+                                    : _getDisplayName(
+                                        msg.senderId,
+                                        msg.senderName,
+                                      ),
+                                address: msg.address,
+                                liveUntil: msg.liveUntil,
+                                groupId: widget.groupId,
+                                messageId: msg.id,
+                              );
+                            }
+
                             final displayName = _getDisplayName(
                               msg.senderId,
                               msg.senderName,
                             );
 
                             if (!isMe &&
-                                !_memberPhotos.containsKey(msg.senderId)) {
-                              WidgetsBinding.instance.addPostFrameCallback(
-                                (_) => _loadMemberPhoto(msg.senderId),
-                              );
+                                !_memberPhotos.containsKey(msg.senderId) &&
+                                !_memberAvatarAssets
+                                    .containsKey(msg.senderId)) {
+                              _requestMemberProfile(msg.senderId);
                             }
 
                           if (msg.type == MessageType.image &&
@@ -1186,15 +1357,17 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                           );
                         }
 
+                        final item = wrapWithSwipe(buildMessage());
                         if (showDateSeparator) {
                           return Column(
+                            key: ValueKey(msg.id),
                             children: [
                               DateSeparator(timestamp: msg.createdAt),
-                              wrapWithSwipe(buildMessage()),
+                              item,
                             ],
                           );
                         }
-                          return wrapWithSwipe(buildMessage());
+                        return KeyedSubtree(key: ValueKey(msg.id), child: item);
                       },
                     );
                   },

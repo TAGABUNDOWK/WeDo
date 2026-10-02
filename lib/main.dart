@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -12,6 +13,18 @@ import 'services/call/call_service.dart';
 import 'screens/call/incoming_call_screen.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+int _errorCount = 0;
+
+void _reportError(String tag, Object error, StackTrace stack) {
+  _errorCount += 1;
+  // stdout instead of print/debugPrint so long stacks are not linted or
+  // throttled - they have to survive intact, they are the whole point here.
+  stdout.writeln('===== [ERR#$_errorCount] $tag =====');
+  stdout.writeln(error);
+  stdout.writeln(stack);
+  stdout.writeln('===== [/ERR#$_errorCount] =====');
+}
 
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -32,8 +45,37 @@ void _handleIncomingCall(Map<String, dynamic> data) {
   );
 }
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+void main() {
+  // Everything - binding init, error hooks and runApp - must happen in the
+  // same zone, otherwise Flutter logs a "Zone mismatch" warning and
+  // zone-sensitive callbacks (e.g. pointer events) get confused.
+  runZonedGuarded(() {
+    WidgetsFlutterBinding.ensureInitialized();
+
+    FlutterError.onError = (FlutterErrorDetails details) {
+      _reportError(
+        'FRAMEWORK',
+        details.exception,
+        details.stack ?? StackTrace.current,
+      );
+      FlutterError.presentError(details);
+    };
+
+    WidgetsBinding.instance.platformDispatcher.onError = (
+      Object error,
+      StackTrace stack,
+    ) {
+      _reportError('UNCAUGHT', error, stack);
+      return true;
+    };
+
+    _appMain();
+  }, (Object error, StackTrace stack) {
+    _reportError('ZONE', error, stack);
+  });
+}
+
+Future<void> _appMain() async {
   await dotenv.load();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,

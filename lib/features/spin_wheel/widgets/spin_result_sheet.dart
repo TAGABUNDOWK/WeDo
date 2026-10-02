@@ -135,60 +135,62 @@ class _SpinResultSheetState extends State<SpinResultSheet>
               const Spacer(flex: 2),
 
               // Winner display
-              ScaleTransition(
-                scale: CurvedAnimation(
-                  parent: _scaleController,
-                  curve: Curves.elasticOut,
-                ),
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: widget.winningOption.color.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color:
-                              widget.winningOption.color.withValues(alpha: 0.4),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {},
+                child: ScaleTransition(
+                  scale: CurvedAnimation(
+                    parent: _scaleController,
+                    curve: Curves.elasticOut,
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: widget.winningOption.color.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: widget.winningOption.color.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: const Text(
+                          'WINNER',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white70,
+                            letterSpacing: 2,
+                          ),
                         ),
                       ),
-                      child: const Text(
-                        'WINNER',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white70,
-                          letterSpacing: 2,
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: widget.winningOption.color.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: widget.winningOption.color.withValues(alpha: 0.3),
+                            width: 2,
+                          ),
+                        ),
+                        child: Text(
+                          widget.winningOption.label,
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 28,
+                            fontWeight: FontWeight.w800,
+                            color: widget.winningOption.color,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: widget.winningOption.color.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color:
-                              widget.winningOption.color.withValues(alpha: 0.3),
-                          width: 2,
-                        ),
-                      ),
-                      child: Text(
-                        widget.winningOption.label,
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 28,
-                          fontWeight: FontWeight.w800,
-                          color: widget.winningOption.color,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
 

@@ -31,24 +31,43 @@ class _FriendsPageState extends State<FriendsPage> {
   final _directService = DirectService();
   UserEntity? _currentUser;
 
-  late final Stream<List<FriendEntity>> _incomingRequestsStream;
-  late final Stream<List<FriendEntity>> _outgoingRequestsStream;
-  late final Stream<List<FriendEntity>> _friendsStream;
+  late Stream<List<FriendEntity>> _incomingRequestsStream;
+  late Stream<List<FriendEntity>> _outgoingRequestsStream;
+  late Stream<List<FriendEntity>> _friendsStream;
 
   String get _uid => _auth.currentUser!.uid;
+
+  void _initStreams() {
+    _incomingRequestsStream = _friendService.getIncomingRequestsStream(_uid);
+    _outgoingRequestsStream = _friendService.getOutgoingRequestsStream(_uid);
+    _friendsStream = _friendService.getFriendsStream(_uid);
+  }
 
   @override
   void initState() {
     super.initState();
-    _incomingRequestsStream = _friendService.getIncomingRequestsStream(_uid);
-    _outgoingRequestsStream = _friendService.getOutgoingRequestsStream(_uid);
-    _friendsStream = _friendService.getFriendsStream(_uid);
+    _initStreams();
     _loadCurrentUser();
   }
 
+  /// The error state on each section literally says "Pull to refresh", but the
+  /// body had no refresh handler — so a failed stream had no recovery path.
+  /// Recreating the streams re-subscribes the `StreamBuilder`s from scratch.
+  Future<void> _onRefresh() async {
+    _initStreams();
+    await _loadCurrentUser();
+  }
+
   Future<void> _loadCurrentUser() async {
-    final user = await _userService.getUserDocument(_uid);
-    if (mounted) setState(() => _currentUser = user);
+    try {
+      final user = await _userService.getUserDocument(_uid);
+      if (mounted) setState(() => _currentUser = user);
+    } catch (e) {
+      // This runs from `initState` and after every push that returns; an
+      // unhandled throw here left `_currentUser` null forever, which is why
+      // the header avatar could stay on its placeholder.
+      debugPrint('friends: _loadCurrentUser failed: $e');
+    }
   }
 
   @override
@@ -64,7 +83,8 @@ class _FriendsPageState extends State<FriendsPage> {
             context,
             MaterialPageRoute(builder: (_) => const AddFriendPage()),
           ).then((_) => _loadCurrentUser()),
-          icon: const Icon(Icons.menu, color: Colors.white, size: 24),
+          tooltip: 'Search friends',
+          icon: const Icon(Icons.search, color: Colors.white, size: 24),
         ),
         title: const Text(
           'Friends',
@@ -88,52 +108,72 @@ class _FriendsPageState extends State<FriendsPage> {
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        children: [
-          const _FriendsMapSection(),
-          const SizedBox(height: 20),
-          const _NearbySection(),
-          const SizedBox(height: 20),
-          _friendSection(
-            title: 'Incoming Requests',
-            stream: _incomingRequestsStream,
-            emptyMessage: 'No pending requests',
-            itemBuilder: (f) => _IncomingRequestTile(
-              friendship: f,
-              otherUid: f.otherUserId(_uid),
-              userService: _userService,
-              onAccept: () => _accept(f),
-              onDecline: () => _decline(f),
+      body: RefreshIndicator(
+        color: AppColors.electricViolet,
+        backgroundColor: const Color(0xFF1A0A2E),
+        onRefresh: _onRefresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          children: [
+            const _FriendsMapSection(),
+            const SizedBox(height: 14),
+            const _NearbySection(),
+            const SizedBox(height: 14),
+            _friendSection(
+              title: 'Friend Requests',
+              stream: _incomingRequestsStream,
+              emptyMessage: 'No pending requests',
+              emptyState: _RequestEmptyState(
+                icon: Icons.mark_email_read_outlined,
+                title: 'You’re all caught up',
+                message: 'New friend requests will show up here so you can decide who to connect with.',
+                actionLabel: 'Find friends',
+                onAction: _openFriendSearch,
+              ),
+              itemBuilder: (f) => _IncomingRequestTile(
+                friendship: f,
+                otherUid: f.otherUserId(_uid),
+                userService: _userService,
+                onAccept: () => _accept(f),
+                onDecline: () => _decline(f),
+              ),
             ),
-          ),
-          const SizedBox(height: 20),
-          _friendSection(
-            title: 'Sent Requests',
-            stream: _outgoingRequestsStream,
-            emptyMessage: 'No sent requests',
-            itemBuilder: (f) => _SentRequestTile(
-              friendship: f,
-              otherUid: f.otherUserId(_uid),
-              userService: _userService,
-              onCancel: () => _cancel(f),
+            const SizedBox(height: 14),
+            _friendSection(
+              title: 'Sent Requests',
+              stream: _outgoingRequestsStream,
+              emptyMessage: 'No sent requests',
+              emptyState: _RequestEmptyState(
+                icon: Icons.send_outlined,
+                title: 'No requests on the way',
+                message: 'When you invite someone, you can track your pending requests here.',
+                actionLabel: 'Find people',
+                onAction: _openFriendSearch,
+              ),
+              itemBuilder: (f) => _SentRequestTile(
+                friendship: f,
+                otherUid: f.otherUserId(_uid),
+                userService: _userService,
+                onCancel: () => _cancel(f),
+              ),
             ),
-          ),
-          const SizedBox(height: 20),
-          _friendSection(
-            title: 'Friends',
-            stream: _friendsStream,
-            emptyMessage: 'No friends yet',
-            itemBuilder: (f) => _ActiveFriendTile(
-              friendship: f,
-              otherUid: f.otherUserId(_uid),
-              userService: _userService,
-              onChat: () => _openChat(f.otherUserId(_uid)),
-              onRemove: () => _remove(f),
+            const SizedBox(height: 14),
+            _friendSection(
+              title: 'Friends',
+              stream: _friendsStream,
+              emptyMessage: 'No friends yet',
+              itemBuilder: (f) => _ActiveFriendTile(
+                friendship: f,
+                otherUid: f.otherUserId(_uid),
+                userService: _userService,
+                onChat: () => _openChat(f.otherUserId(_uid)),
+                onRemove: () => _remove(f),
+              ),
             ),
-          ),
-          const SizedBox(height: 100),
-        ],
+            const SizedBox(height: 100),
+          ],
+        ),
       ),
     );
   }
@@ -142,6 +182,7 @@ class _FriendsPageState extends State<FriendsPage> {
     required String title,
     required Stream<List<FriendEntity>> stream,
     required String emptyMessage,
+    Widget? emptyState,
     required Widget Function(FriendEntity) itemBuilder,
   }) {
     return StreamBuilder<List<FriendEntity>>(
@@ -184,13 +225,20 @@ class _FriendsPageState extends State<FriendsPage> {
               list.isNotEmpty ? '$title (${list.length})' : title,
             ),
             if (list.isEmpty)
-              _EmptyState(emptyMessage)
+              emptyState ?? _EmptyState(emptyMessage)
             else
               ...list.map(itemBuilder),
           ],
         );
       },
     );
+  }
+
+  void _openFriendSearch() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AddFriendPage()),
+    ).then((_) => _loadCurrentUser());
   }
 
   Future<void> _openChat(String otherUid) async {
@@ -286,18 +334,48 @@ class _SectionHeader extends StatelessWidget {
   final String title;
   const _SectionHeader(this.title);
 
+  IconData get _icon {
+    if (title.startsWith('Friend Requests')) return Icons.person_add_alt_1_rounded;
+    if (title.startsWith('Sent Requests')) return Icons.send_rounded;
+    return Icons.people_alt_rounded;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final countStart = title.lastIndexOf(' (');
+    final hasCount = countStart >= 0 && title.endsWith(')');
+    final label = hasCount ? title.substring(0, countStart) : title;
+    final count = hasCount ? title.substring(countStart + 2, title.length - 1) : null;
+
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Text(
-        title,
-        style: const TextStyle(
-          fontFamily: _font,
-          fontSize: 15,
-          fontWeight: FontWeight.w700,
-          color: Colors.white,
-        ),
+      padding: const EdgeInsets.only(bottom: 9),
+      child: Row(
+        children: [
+          Icon(_icon, color: AppColors.electricViolet, size: 17),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              fontFamily: _font,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+          if (count != null) ...[
+            const SizedBox(width: 7),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppColors.electricViolet.withValues(alpha: 0.25),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(count, style: const TextStyle(fontFamily: _font, fontSize: 10, color: Color(0xFFD6B4FF), fontWeight: FontWeight.w700)),
+            ),
+          ],
+          const Spacer(),
+          Icon(Icons.chevron_right, color: Colors.white.withValues(alpha: 0.35), size: 18),
+        ],
       ),
     );
   }
@@ -320,6 +398,72 @@ class _EmptyState extends StatelessWidget {
           color: Colors.white38,
           fontSize: 13,
         ),
+      ),
+    );
+  }
+}
+
+class _RequestEmptyState extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String message;
+  final String actionLabel;
+  final VoidCallback onAction;
+
+  const _RequestEmptyState({
+    required this.icon,
+    required this.title,
+    required this.message,
+    required this.actionLabel,
+    required this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 2),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF160D27).withValues(alpha: 0.76),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: AppColors.electricViolet.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.electricViolet.withValues(alpha: 0.16),
+            ),
+            child: Icon(icon, color: const Color(0xFFD291FF), size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontFamily: _font, fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white)),
+                const SizedBox(height: 4),
+                Text(message, style: const TextStyle(fontFamily: _font, fontSize: 10, height: 1.35, color: Colors.white60)),
+                const SizedBox(height: 9),
+                GestureDetector(
+                  onTap: onAction,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.electricViolet.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Text(actionLabel, style: const TextStyle(fontFamily: _font, fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFFE0B9FF))),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -356,47 +500,63 @@ class _NearbySectionState extends State<_NearbySection> {
 
   Future<void> _load() async {
     setState(() => _isLoading = true);
+
+    Position? position;
     try {
-      Position? position;
-      try {
-        position = await _locationService.getCurrentPosition();
-      } catch (_) {
-        position = null;
-      }
+      position = await _locationService.getCurrentPosition();
+    } catch (e) {
+      debugPrint('nearby: location failed: $e');
+      position = null;
+    }
 
-      if (position == null) {
-        if (!mounted) return;
-        setState(() {
-          _isLoading = false;
-          _position = null;
-        });
-        return;
-      }
+    if (!mounted) return;
+    if (position == null) {
+      setState(() {
+        _isLoading = false;
+        _position = null;
+      });
+      return;
+    }
 
+    // The position is usable from here on — a later lookup failing must not
+    // throw it away and turn a working card into "Location unavailable".
+    // `_isLoading` stays true so the card keeps showing its spinner instead
+    // of flashing an empty list.
+    setState(() => _position = position);
+
+    var users = <UserEntity>[];
+    var partners = <String, String>{};
+    try {
       await _userService.updateLocationIfNeeded(
         _uid,
         position.latitude,
         position.longitude,
       );
-
-      final users = await _userService.findNearbyUsers(
+    } catch (e) {
+      debugPrint('nearby: updateLocationIfNeeded failed: $e');
+    }
+    try {
+      users = await _userService.findNearbyUsers(
         position.latitude,
         position.longitude,
         excludeUid: _uid,
       );
-      final partners = await _friendService.getPartnerStatusMap(_uid);
-
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _position = position;
-        _nearbyUsers = users;
-        _partners = partners;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
+    } catch (e) {
+      debugPrint('nearby: findNearbyUsers failed: $e');
     }
+    try {
+      partners = await _friendService.getPartnerStatusMap(_uid);
+    } catch (e) {
+      debugPrint('nearby: getPartnerStatusMap failed: $e');
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      _position = position;
+      _nearbyUsers = users;
+      _partners = partners;
+    });
   }
 
   Future<void> _scanSurroundings() async {
@@ -611,7 +771,7 @@ class _NearbyUserTile extends StatelessWidget {
     );
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         border: Border(
           bottom: BorderSide(
@@ -622,8 +782,8 @@ class _NearbyUserTile extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _UserAvatar(user: user, size: 40),
-          const SizedBox(width: 12),
+          _UserAvatar(user: user, size: 36),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -784,34 +944,52 @@ class _FriendsMapSectionState extends State<_FriendsMapSection> {
 
   Future<void> _load() async {
     setState(() => _isLoading = true);
+
+    Position? position;
     try {
-      Position? position;
-      try {
-        position = await _locationService.getCurrentPosition();
-      } catch (_) {
-        position = null;
-      }
+      position = await _locationService.getCurrentPosition();
+    } catch (e) {
+      debugPrint('map: location failed: $e');
+      position = null;
+    }
 
-      if (position == null) {
-        if (!mounted) return;
-        setState(() => _isLoading = false);
-        return;
-      }
+    if (!mounted) return;
+    if (position == null) {
+      setState(() => _isLoading = false);
+      return;
+    }
 
+    // A later lookup failing must not hide the map — `_position` was only
+    // assigned at the very end of the `try`, so one thrown call (notably
+    // `getPartnerStatusMap`, which needs the `friends` composite index) left
+    // `_position == null` and the card reported a bogus "Location
+    // unavailable". `_isLoading` stays true so the spinner keeps showing.
+    setState(() => _position = position);
+
+    var partners = <String, String>{};
+    var markers = <Marker>[];
+    try {
       await _userService.updateLocationIfNeeded(
         _uid,
         position.latitude,
         position.longitude,
       );
-
+    } catch (e) {
+      debugPrint('map: updateLocationIfNeeded failed: $e');
+    }
+    try {
+      partners = await _friendService.getPartnerStatusMap(_uid);
+    } catch (e) {
+      debugPrint('map: getPartnerStatusMap failed: $e');
+    }
+    try {
       final users = await _userService.findNearbyUsers(
         position.latitude,
         position.longitude,
         excludeUid: _uid,
       );
-      final partners = await _friendService.getPartnerStatusMap(_uid);
-
-      final markers = <Marker>[];
+      // `partners` must already be resolved here — the markers read it to
+      // decide whether a pinned user is a pending/active partner.
       for (final user in users) {
         if (user.latitude != null && user.longitude != null) {
           markers.add(
@@ -827,18 +1005,17 @@ class _FriendsMapSectionState extends State<_FriendsMapSection> {
           );
         }
       }
-
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _position = position;
-        _partners = partners;
-        _markers = markers;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
+    } catch (e) {
+      debugPrint('map: findNearbyUsers failed: $e');
     }
+
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      _position = position;
+      _partners = partners;
+      _markers = markers;
+    });
   }
 
   Future<void> _sendRequest(UserEntity user) async {
@@ -864,7 +1041,7 @@ class _FriendsMapSectionState extends State<_FriendsMapSection> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
-        height: _expanded ? MediaQuery.of(context).size.height * 0.7 : 300,
+        height: _expanded ? MediaQuery.of(context).size.height * 0.7 : 190,
         width: double.infinity,
         child: _isLoading
             ? Container(
@@ -982,11 +1159,34 @@ class _FriendsMapSectionState extends State<_FriendsMapSection> {
                           ),
                         ],
                       ),
-                      // Buttons
+                      Positioned(
+                        top: 10,
+                        left: 10,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: const Color(0xE6100825),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.location_on, color: Color(0xFFFF70E8), size: 13),
+                              const SizedBox(width: 5),
+                              Text(
+                                '${_markers.length} people nearby',
+                                style: const TextStyle(fontFamily: _font, fontSize: 10, color: Colors.white),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      // Map controls
                       Positioned(
                         top: 8,
                         right: 8,
-                        child: Column(
+                        child: Row(
                           children: [
                             GestureDetector(
                               onTap: () => setState(() => _expanded = !_expanded),
@@ -1003,7 +1203,7 @@ class _FriendsMapSectionState extends State<_FriendsMapSection> {
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(width: 8),
                             GestureDetector(
                               onTap: _load,
                               child: Container(
@@ -1015,7 +1215,7 @@ class _FriendsMapSectionState extends State<_FriendsMapSection> {
                                 child: const Icon(
                                   Icons.refresh,
                                   color: AppColors.electricViolet,
-                                  size: 20,
+                                  size: 18,
                                 ),
                               ),
                             ),
@@ -1378,8 +1578,8 @@ class _ActiveFriendTileState extends State<_ActiveFriendTile> {
 
             return Row(
               children: [
-                _UserAvatar(user: user, size: 40),
-                const SizedBox(width: 12),
+                _UserAvatar(user: user, size: 36),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1394,17 +1594,32 @@ class _ActiveFriendTileState extends State<_ActiveFriendTile> {
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
-                      if (user != null) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          user.latitude != null ? 'Active nearby' : 'Online',
-                          style: const TextStyle(
-                            fontFamily: _font,
-                            fontSize: 11,
-                            color: AppColors.softLavender,
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: user == null
+                                  ? Colors.white38
+                                  : user.lastActiveAt.isAfter(DateTime.now().subtract(const Duration(minutes: 5)))
+                                      ? Colors.greenAccent
+                                      : Colors.white38,
+                            ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 5),
+                          Text(
+                            user == null
+                                ? 'Loading status'
+                                : user.lastActiveAt.isAfter(DateTime.now().subtract(const Duration(minutes: 5)))
+                                    ? 'Active nearby'
+                                    : 'Offline',
+                            style: const TextStyle(fontFamily: _font, fontSize: 10, color: AppColors.softLavender),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),

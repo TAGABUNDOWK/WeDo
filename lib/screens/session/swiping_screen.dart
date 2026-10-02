@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/session/session_service.dart';
+import '../../utils/safe_nav.dart';
 import 'results_screen.dart';
 import 'round_result_screen.dart';
 
@@ -269,21 +270,26 @@ class _SwipingScreenState extends State<SwipingScreen>
 
         await _service.aggregateResults(widget.sessionId);
       } catch (e) {
-        if (mounted) {
+        final message = 'Error saving result: $e';
+        safeNav(() {
+          if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error saving result: $e')),
+            SnackBar(content: Text(message)),
           );
-        }
+        }, label: 'result snackbar');
       }
     }
 
     if (!mounted) return;
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ResultsScreen(sessionId: widget.sessionId),
-      ),
-    );
+    safeNav(() {
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ResultsScreen(sessionId: widget.sessionId),
+        ),
+      );
+    }, label: 'results push');
   }
 
   @override
@@ -702,7 +708,7 @@ class _SwipingScreenState extends State<SwipingScreen>
                           letterSpacing: 1,
                         ),
                         child: Text(
-                          isTop ? '↑ ELIMINATE' : '↓ ELIMINATE',
+                          isTop ? '↓ ELIMINATE' : '↑ ELIMINATE',
                         ),
                       ),
                     ],
@@ -786,7 +792,7 @@ class _SwipingScreenState extends State<SwipingScreen>
                           letterSpacing: 1,
                         ),
                         child: Text(
-                          isTop ? '↑ ELIMINATE' : '↓ ELIMINATE',
+                          isTop ? '↓ ELIMINATE' : '↑ ELIMINATE',
                         ),
                       ),
                     ],

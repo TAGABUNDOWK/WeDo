@@ -309,71 +309,81 @@ class _PollDetailScreenState extends State<PollDetailScreen> {
 
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  option,
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                                    color: Colors.black87,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: showResults ? null : () => _vote(option),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    option,
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: isSelected
+                                          ? FontWeight.w600
+                                          : FontWeight.w500,
+                                      color: Colors.black87,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 10),
-                                if (showResults)
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Container(
-                                          height: 8,
-                                          decoration: BoxDecoration(
-                                            color: Colors.grey[200],
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                          child: FractionallySizedBox(
-                                            alignment: Alignment.centerLeft,
-                                            widthFactor: percentage / 100,
-                                            child: Container(
-                                              decoration: BoxDecoration(
-                                                gradient: const LinearGradient(
-                                                  colors: [Color(0xFFE91E63), Color(0xFF9C27B0)],
+                                  const SizedBox(height: 10),
+                                  if (showResults)
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Container(
+                                            height: 8,
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey[200],
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                            ),
+                                            child: FractionallySizedBox(
+                                              alignment: Alignment.centerLeft,
+                                              widthFactor: percentage / 100,
+                                              child: Container(
+                                                decoration: BoxDecoration(
+                                                  gradient:
+                                                      const LinearGradient(
+                                                    colors: [
+                                                      Color(0xFFE91E63),
+                                                      Color(0xFF9C27B0),
+                                                    ],
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
                                                 ),
-                                                borderRadius: BorderRadius.circular(4),
                                               ),
                                             ),
                                           ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Text(
-                                        _poll!.type == PollType.secret
-                                            ? '$votes (${percentage.toStringAsFixed(0)}%)'
-                                            : '${percentage.toStringAsFixed(0)}%',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.grey[500],
+                                        const SizedBox(width: 12),
+                                        Text(
+                                          _poll!.type == PollType.secret
+                                              ? '$votes (${percentage.toStringAsFixed(0)}%)'
+                                              : '${percentage.toStringAsFixed(0)}%',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.grey[500],
+                                          ),
                                         ),
-                                      ),
-                                      if (_poll!.type == PollType.public && voters.isNotEmpty) ...[
-                                        const SizedBox(width: 10),
-                                        _buildVoterAvatars(voters),
+                                        if (_poll!.type == PollType.public &&
+                                            voters.isNotEmpty) ...[
+                                          const SizedBox(width: 10),
+                                          _buildVoterAvatars(voters),
+                                        ],
                                       ],
-                                    ],
-                                  )
-                                else
-                                  GestureDetector(
-                                    onTap: () => _vote(option),
-                                    child: Container(
+                                    )
+                                  else
+                                    Container(
                                       height: 8,
                                       decoration: BoxDecoration(
                                         color: Colors.grey[200],
                                         borderRadius: BorderRadius.circular(4),
                                       ),
                                     ),
-                                  ),
-                              ],
+                                ],
+                              ),
                             ),
                           );
                         }),
