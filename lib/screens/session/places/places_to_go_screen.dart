@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../services/location/overpass_service.dart';
+import '../../../models/place_category.dart';
 import 'nearby_places_screen.dart';
 import 'province_picker_screen.dart';
 
@@ -10,34 +10,76 @@ class PlacesToGoScreen extends StatelessWidget {
 
   static const _categories = [
     _CategoryData(
-      title: 'Shopping',
-      subtitle: 'Malls, clothing, electronics & more',
-      icon: Icons.store,
-      category: PlaceCategory.shopping,
+      title: 'Mall',
+      subtitle: 'Shops, outlets & department stores',
+      icon: Icons.storefront,
+      category: PlaceCategory.mall,
     ),
     _CategoryData(
-      title: 'Nature & Outdoors',
-      subtitle: 'Parks, gardens, viewpoints',
+      title: 'Nature & Outdoor',
+      subtitle: 'Parks, gardens & scenic spots',
       icon: Icons.park,
-      category: PlaceCategory.natureOutdoors,
+      category: PlaceCategory.natureOutdoor,
     ),
     _CategoryData(
-      title: 'Entertainment',
-      subtitle: 'Cinema, arcade, karaoke',
-      icon: Icons.movie,
-      category: PlaceCategory.entertainment,
+      title: 'Karaoke',
+      subtitle: 'Sing your heart out',
+      icon: Icons.mic,
+      category: PlaceCategory.karaoke,
     ),
     _CategoryData(
-      title: 'Sports & Fitness',
-      subtitle: 'Gym, sports center, skatepark',
+      title: 'FastFood',
+      subtitle: 'Burgers, fries & quick bites',
+      icon: Icons.fastfood,
+      category: PlaceCategory.fastFood,
+    ),
+    _CategoryData(
+      title: 'Restaurant',
+      subtitle: 'Sit-down dining spots',
+      icon: Icons.restaurant,
+      category: PlaceCategory.restaurant,
+    ),
+    _CategoryData(
+      title: 'Pool',
+      subtitle: 'Pools for a splash',
+      icon: Icons.pool,
+      category: PlaceCategory.pool,
+    ),
+    _CategoryData(
+      title: 'Hotel',
+      subtitle: 'Stays, inns & resorts',
+      icon: Icons.hotel,
+      category: PlaceCategory.hotel,
+    ),
+    _CategoryData(
+      title: 'Cafe',
+      subtitle: 'Coffee & chill spots',
+      icon: Icons.coffee,
+      category: PlaceCategory.cafe,
+    ),
+    _CategoryData(
+      title: 'Gym',
+      subtitle: 'Workout & fitness centers',
       icon: Icons.fitness_center,
-      category: PlaceCategory.sportsFitness,
+      category: PlaceCategory.gym,
     ),
     _CategoryData(
-      title: 'Outing',
-      subtitle: 'Resorts, beaches, pool, camp',
-      icon: Icons.beach_access,
-      category: PlaceCategory.outing,
+      title: 'Bar',
+      subtitle: 'Drinks & nightlife',
+      icon: Icons.local_bar,
+      category: PlaceCategory.bar,
+    ),
+    _CategoryData(
+      title: 'Sports',
+      subtitle: 'Courts, fields & stadiums',
+      icon: Icons.sports_soccer,
+      category: PlaceCategory.sports,
+    ),
+    _CategoryData(
+      title: 'Salon',
+      subtitle: 'Hair & beauty care',
+      icon: Icons.content_cut,
+      category: PlaceCategory.salon,
     ),
   ];
 
@@ -166,22 +208,7 @@ class _NearbyOrCityScreen extends StatelessWidget {
 
   static const _bg = Color(0xFF190831);
 
-  String get _categoryTitle {
-    switch (category) {
-      case PlaceCategory.shopping:
-        return 'Shopping';
-      case PlaceCategory.natureOutdoors:
-        return 'Nature & Outdoors';
-      case PlaceCategory.entertainment:
-        return 'Entertainment';
-      case PlaceCategory.sportsFitness:
-        return 'Sports & Fitness';
-      case PlaceCategory.outing:
-        return 'Outing';
-      case PlaceCategory.food:
-        return 'Food & Drinks';
-    }
-  }
+  String get _categoryTitle => category.label;
 
   @override
   Widget build(BuildContext context) {

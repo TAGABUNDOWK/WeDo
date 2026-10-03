@@ -1,182 +1,15 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../../models/place_category.dart';
 import '../../models/place_entity.dart';
 
-enum PlaceCategory {
-  shopping,
-  natureOutdoors,
-  entertainment,
-  sportsFitness,
-  outing,
-  food,
-}
-
+/// Free OpenStreetMap Overpass fallback for PickFight place topics.
+/// Google Places (New) is the primary source (see
+/// `PlacesSearchService`); this fetcher keeps the feature alive when the
+/// API key, quota, or billing is unavailable.
 class OverpassService {
   static const String _endpoint = 'https://overpass-api.de/api/interpreter';
   static const String _userAgent = 'WeDoApp/1.0 (contact: dev@wedo.app)';
-
-  static const String _amenityTags = 'cinema|theatre|nightclub|karaoke';
-  static const String _foodAmenityTags =
-      'cafe|restaurant|bar|pub|ice_cream|fast_food|food_court|bakery|juice_bar';
-  static const String _leisureTags =
-      'park|garden|bowling_alley|amusement_arcade|fitness_centre|sports_centre|swimming_pool|skatepark|nature_reserve';
-  static const String _tourismTags = 'art_gallery|museum|viewpoint|camp_site';
-  static const String _shopTags = 'books|marketplace|clothes|electronics|mall';
-
-  static const String _outingTourismTags = 'resort|beach_resort|camp_site';
-  static const String _outingNaturalTags = 'beach';
-  static const String _outingLeisureTags = 'swimming_pool';
-
-  static final Map<String, _CacheEntry<String?>> _labelCache = {};
-  static final Map<String, _CacheEntry<List<String>>> _poiCache = {};
-
-  Future<String?> labelArea(double lat, double lng) async {
-    final key = _roundKey(lat, lng);
-    final cached = _labelCache[key];
-    if (cached != null && !cached.isExpired()) {
-      return cached.value;
-    }
-
-    final query =
-        '[out:json][timeout:15];node["place"](around:20000,$lat,$lng);out tags 5;';
-    List<Map<String, dynamic>> result;
-    try {
-      result = await _fetch(query);
-    } catch (_) {
-      return null;
-    }
-
-    for (final element in result) {
-      final tags = element['tags'] as Map<String, dynamic>?;
-      final name = tags?['name'];
-      if (name is String && name.isNotEmpty) {
-        _labelCache[key] = _CacheEntry(name, const Duration(minutes: 60));
-        return name;
-      }
-    }
-    return null;
-  }
-
-  Future<List<String>> nearbyStudyPlaces(
-    double lat,
-    double lng, {
-    int radiusM = 10000,
-  }) async {
-    final key = _roundKey(lat, lng);
-    final cached = _poiCache[key];
-    if (cached != null && !cached.isExpired()) {
-      return cached.value;
-    }
-
-    final query =
-        '[out:json][timeout:20];node["amenity"~"^(school|library|university|college|community_centre|study)\$"](around:$radiusM,$lat,$lng);out tags 50;';
-    List<Map<String, dynamic>> result;
-    try {
-      result = await _fetch(query);
-    } catch (_) {
-      return const [];
-    }
-
-    final names = <String>{};
-    for (final element in result) {
-      final tags = element['tags'] as Map<String, dynamic>?;
-      final name = tags?['name'];
-      if (name is String && name.isNotEmpty) {
-        names.add(name);
-      }
-      if (names.length >= 8) break;
-    }
-
-    final list = names.take(8).toList();
-    _poiCache[key] = _CacheEntry(list, const Duration(minutes: 30));
-    return list;
-  }
-
-  Future<List<PlaceEntity>> getHangoutPlaces(
-    double lat,
-    double lng, {
-    int radiusM = 5000,
-  }) async {
-    final query = '''
-[out:json][timeout:30];
-(
-  node["amenity"~"^($_amenityTags)\$"](around:$radiusM,$lat,$lng);
-  way["amenity"~"^($_amenityTags)\$"](around:$radiusM,$lat,$lng);
-  node["leisure"~"^($_leisureTags)\$"](around:$radiusM,$lat,$lng);
-  way["leisure"~"^($_leisureTags)\$"](around:$radiusM,$lat,$lng);
-  node["tourism"~"^($_tourismTags)\$"](around:$radiusM,$lat,$lng);
-  way["tourism"~"^($_tourismTags)\$"](around:$radiusM,$lat,$lng);
-  node["shop"~"^($_shopTags)\$"](around:$radiusM,$lat,$lng);
-  way["shop"~"^($_shopTags)\$"](around:$radiusM,$lat,$lng);
-);
-out center tags;
-''';
-    final result = await _fetch(query);
-
-    return _parsePlaces(result, lat, lng);
-  }
-
-  Future<List<PlaceEntity>> getCityPlaces(
-    double cityLat,
-    double cityLng, {
-    double? userLat,
-    double? userLng,
-    int radiusM = 20000,
-  }) async {
-    final query = '''
-[out:json][timeout:30];
-(
-  node["amenity"~"^($_amenityTags)\$"](around:$radiusM,$cityLat,$cityLng);
-  way["amenity"~"^($_amenityTags)\$"](around:$radiusM,$cityLat,$cityLng);
-  node["leisure"~"^($_leisureTags)\$"](around:$radiusM,$cityLat,$cityLng);
-  way["leisure"~"^($_leisureTags)\$"](around:$radiusM,$cityLat,$cityLng);
-  node["tourism"~"^($_tourismTags)\$"](around:$radiusM,$cityLat,$cityLng);
-  way["tourism"~"^($_tourismTags)\$"](around:$radiusM,$cityLat,$cityLng);
-  node["shop"~"^($_shopTags)\$"](around:$radiusM,$cityLat,$cityLng);
-  way["shop"~"^($_shopTags)\$"](around:$radiusM,$cityLat,$cityLng);
-);
-out center tags;
-''';
-    final result = await _fetch(query);
-
-    return _parsePlaces(result, userLat, userLng);
-  }
-
-  Future<List<PlaceEntity>> getNearbyFoodPlaces(
-    double lat,
-    double lng, {
-    int radiusM = 5000,
-  }) async {
-    final query = '''
-[out:json][timeout:30];
-(
-  node["amenity"~"^($_foodAmenityTags)\$"](around:$radiusM,$lat,$lng);
-  way["amenity"~"^($_foodAmenityTags)\$"](around:$radiusM,$lat,$lng);
-);
-out center tags;
-''';
-    final result = await _fetch(query);
-    return _parsePlaces(result, lat, lng);
-  }
-
-  Future<List<PlaceEntity>> getCityFoodPlaces(
-    double cityLat,
-    double cityLng, {
-    double? userLat,
-    double? userLng,
-    int radiusM = 20000,
-  }) async {
-    final query = '''
-[out:json][timeout:30];
-(
-  node["amenity"~"^($_foodAmenityTags)\$"](around:$radiusM,$cityLat,$cityLng);
-  way["amenity"~"^($_foodAmenityTags)\$"](around:$radiusM,$cityLat,$cityLng);
-);
-out center tags;
-''';
-    final result = await _fetch(query);
-    return _parsePlaces(result, userLat, userLng);
-  }
 
   Future<List<PlaceEntity>> getPlacesByCategory(
     double lat,
@@ -210,38 +43,15 @@ out center tags;
   ) {
     final buffers = <String>[];
 
-    void addNodeWay(String key, String tags) {
-      buffers.add('node["$key"~"^($tags)\$"](around:$radiusM,$lat,$lng);');
-      buffers.add('way["$key"~"^($tags)\$"](around:$radiusM,$lat,$lng);');
+    for (final tag in category.osmTags) {
+      final filter = '["${tag.key}"~"^(${tag.values})\$"]'
+          '(around:$radiusM,$lat,$lng)';
+      buffers.add('node$filter;');
+      buffers.add('way$filter;');
     }
 
-    switch (category) {
-      case PlaceCategory.shopping:
-        addNodeWay('shop', _shopTags);
-        break;
-      case PlaceCategory.natureOutdoors:
-        addNodeWay('leisure', 'park|garden|nature_reserve');
-        addNodeWay('tourism', 'viewpoint');
-        break;
-      case PlaceCategory.entertainment:
-        addNodeWay('amenity', _amenityTags);
-        addNodeWay('leisure', 'bowling_alley|amusement_arcade');
-        break;
-      case PlaceCategory.sportsFitness:
-        addNodeWay('leisure', 'fitness_centre|sports_centre|skatepark');
-        break;
-      case PlaceCategory.outing:
-        addNodeWay('tourism', _outingTourismTags);
-        addNodeWay('leisure', _outingLeisureTags);
-        buffers.add('node["natural"~"^($_outingNaturalTags)\$"](around:$radiusM,$lat,$lng);');
-        buffers.add('way["natural"~"^($_outingNaturalTags)\$"](around:$radiusM,$lat,$lng);');
-        break;
-      case PlaceCategory.food:
-        addNodeWay('amenity', _foodAmenityTags);
-        break;
-    }
-
-    return '[out:json][timeout:30];\n(\n${buffers.join('\n')}\n);\nout center tags;\n';
+    return '[out:json][timeout:30];\n(\n${buffers.join('\n')}\n);\n'
+        'out center tags;\n';
   }
 
   List<PlaceEntity> _parsePlaces(
@@ -304,19 +114,4 @@ out center tags;
     final elements = body['elements'] as List? ?? [];
     return elements.cast<Map<String, dynamic>>();
   }
-
-  static String _roundKey(double lat, double lng) {
-    return '${lat.toStringAsFixed(3)},${lng.toStringAsFixed(3)}';
-  }
-}
-
-class _CacheEntry<T> {
-  final T value;
-  final DateTime _createdAt;
-  final Duration _ttl;
-
-  _CacheEntry(this.value, this._ttl) : _createdAt = DateTime.now();
-
-  bool isExpired() =>
-      DateTime.now().difference(_createdAt) > _ttl;
 }

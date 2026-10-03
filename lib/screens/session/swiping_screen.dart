@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/session/session_service.dart';
+import '../../widgets/place_detail_sheet.dart';
 import '../../utils/safe_nav.dart';
 import 'results_screen.dart';
 import 'round_result_screen.dart';
@@ -541,12 +542,13 @@ class _SwipingScreenState extends State<SwipingScreen>
         ? const Color(0xFF00E5A0)
         : const Color(0xFFFE4EF0);
     final isPlaceCard = card.containsKey('tag');
-    final isMovieCard = card.containsKey('posterUrl') &&
+    final hasPoster = card.containsKey('posterUrl') &&
         (card['posterUrl'] as String? ?? '').isNotEmpty;
     final emoji = card['emoji'] as String? ?? '';
     final title = card['title'] as String? ?? 'Card';
     final description = card['description'] as String? ?? '';
     final distance = card['distance'] as String? ?? '';
+    final rating = card['rating'] as String? ?? '';
 
     // ELIMINATE label intensification
     final eliminateIntensity = (offset.dy.abs() / _swipeThreshold).clamp(0.0, 1.0);
@@ -554,46 +556,56 @@ class _SwipingScreenState extends State<SwipingScreen>
         ? (offset.dy > 0 ? eliminateIntensity : 0.0)
         : (offset.dy < 0 ? eliminateIntensity : 0.0);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: accentColor,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: showCommitHint
-              ? accentGlow.withValues(alpha: 0.5)
-              : Colors.white.withValues(alpha: 0.08),
-          width: showCommitHint ? 2 : 1,
+    return GestureDetector(
+      onTap: isPlaceCard
+          ? () => showPlaceDetailSheet(
+                context,
+                PlaceDetailData.fromCard(card),
+              )
+          : null,
+      child: Container(
+        decoration: BoxDecoration(
+          color: accentColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: showCommitHint
+                ? accentGlow.withValues(alpha: 0.5)
+                : Colors.white.withValues(alpha: 0.08),
+            width: showCommitHint ? 2 : 1,
+          ),
+          boxShadow: showCommitHint
+              ? [
+                  BoxShadow(
+                    color: accentGlow.withValues(alpha: 0.2),
+                    blurRadius: 16,
+                    spreadRadius: 2,
+                  ),
+                ]
+              : null,
         ),
-        boxShadow: showCommitHint
-            ? [
-                BoxShadow(
-                  color: accentGlow.withValues(alpha: 0.2),
-                  blurRadius: 16,
-                  spreadRadius: 2,
-                ),
-              ]
-            : null,
+        clipBehavior: Clip.antiAlias,
+        child: hasPoster
+            ? _buildMediaCardContent(
+                card: card,
+                title: title,
+                description: description,
+                isPlaceCard: isPlaceCard,
+                isTop: isTop,
+                eliminateOpacity: eliminateOpacity,
+                accentGlow: accentGlow,
+              )
+            : _buildTextCardContent(
+                title: title,
+                description: description,
+                distance: distance,
+                rating: rating,
+                emoji: emoji,
+                isPlaceCard: isPlaceCard,
+                isTop: isTop,
+                eliminateOpacity: eliminateOpacity,
+                accentGlow: accentGlow,
+              ),
       ),
-      clipBehavior: Clip.antiAlias,
-      child: isMovieCard
-          ? _buildMovieCardContent(
-              card: card,
-              title: title,
-              description: description,
-              isTop: isTop,
-              eliminateOpacity: eliminateOpacity,
-              accentGlow: accentGlow,
-            )
-          : _buildTextCardContent(
-              title: title,
-              description: description,
-              distance: distance,
-              emoji: emoji,
-              isPlaceCard: isPlaceCard,
-              isTop: isTop,
-              eliminateOpacity: eliminateOpacity,
-              accentGlow: accentGlow,
-            ),
     );
   }
 
@@ -601,6 +613,7 @@ class _SwipingScreenState extends State<SwipingScreen>
     required String title,
     required String description,
     required String distance,
+    required String rating,
     required String emoji,
     required bool isPlaceCard,
     required bool isTop,
@@ -655,21 +668,55 @@ class _SwipingScreenState extends State<SwipingScreen>
                         ),
                       ),
                     ],
-                    if (distance.isNotEmpty) ...[
+                    if (rating.isNotEmpty || distance.isNotEmpty) ...[
                       const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          distance,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.white.withValues(alpha: 0.7),
-                          ),
-                        ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (rating.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.3),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.star_rounded,
+                                      size: 13, color: Colors.amber),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    rating,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          if (rating.isNotEmpty && distance.isNotEmpty)
+                            const SizedBox(width: 8),
+                          if (distance.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                distance,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.white.withValues(alpha: 0.7),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ],
                   ],
@@ -722,10 +769,11 @@ class _SwipingScreenState extends State<SwipingScreen>
     );
   }
 
-  Widget _buildMovieCardContent({
+  Widget _buildMediaCardContent({
     required Map<String, dynamic> card,
     required String title,
     required String description,
+    required bool isPlaceCard,
     required bool isTop,
     required double eliminateOpacity,
     required Color accentGlow,
@@ -734,7 +782,7 @@ class _SwipingScreenState extends State<SwipingScreen>
       children: [
         Expanded(
           flex: 5,
-          child: _buildMovieArt(card),
+          child: _buildMediaArt(card: card, isPlaceCard: isPlaceCard),
         ),
         Expanded(
           flex: 2,
@@ -806,10 +854,15 @@ class _SwipingScreenState extends State<SwipingScreen>
     );
   }
 
-  Widget _buildMovieArt(Map<String, dynamic> card) {
+  Widget _buildMediaArt({
+    required Map<String, dynamic> card,
+    required bool isPlaceCard,
+  }) {
     final posterUrl = card['posterUrl'] as String? ?? '';
     final rating = card['rating'] as String? ?? '';
     final year = card['year'] as String? ?? '';
+    final distance = card['distance'] as String? ?? '';
+    final fallbackIcon = isPlaceCard ? Icons.place_rounded : Icons.movie_rounded;
 
     return SizedBox(
       width: double.infinity,
@@ -822,13 +875,13 @@ class _SwipingScreenState extends State<SwipingScreen>
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) => Container(
                 color: Colors.black.withValues(alpha: 0.2),
-                child: const Icon(Icons.movie_rounded, color: Colors.white24, size: 48),
+                child: Icon(fallbackIcon, color: Colors.white24, size: 48),
               ),
             )
           else
             Container(
               color: Colors.black.withValues(alpha: 0.2),
-              child: const Icon(Icons.movie_rounded, color: Colors.white24, size: 48),
+              child: Icon(fallbackIcon, color: Colors.white24, size: 48),
             ),
           // Gradient overlay at bottom for text legibility
           Positioned(
@@ -866,6 +919,16 @@ class _SwipingScreenState extends State<SwipingScreen>
                     const SizedBox(width: 8),
                     Text(
                       year,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.white.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ],
+                  if (distance.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      distance,
                       style: TextStyle(
                         fontSize: 11,
                         color: Colors.white.withValues(alpha: 0.7),
