@@ -1,5 +1,3 @@
-import java.util.Properties
-
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -9,12 +7,19 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// Google Maps API key lives in android/local.properties (gitignored).
-val localProperties = Properties().apply {
-    val file = rootProject.file("local.properties")
-    if (file.exists()) {
-        file.inputStream().use { load(it) }
-    }
+// Google Maps API key: single source of truth = project-root .env (gitignored).
+// Read at build time so the native Maps SDK key can be injected into the
+// manifest without duplicating it in android/local.properties.
+val mapsApiKey = rootProject.file("../.env")
+    .takeIf { it.exists() }
+    ?.readLines()
+    ?.map { it.trim() }
+    ?.firstOrNull { it.startsWith("MAPS_API_KEY=") }
+    ?.substringAfter("MAPS_API_KEY=")
+    ?.trim()
+    ?: ""
+if (mapsApiKey.isEmpty()) {
+    logger.warn("MAPS_API_KEY missing from .env - native Google Maps will not load")
 }
 
 android {
@@ -36,8 +41,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        manifestPlaceholders["MAPS_API_KEY"] =
-            localProperties.getProperty("MAPS_API_KEY", "")
+        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
     }
 
     buildTypes {
