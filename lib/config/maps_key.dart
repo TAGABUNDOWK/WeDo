@@ -7,9 +7,9 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 /// gitignored `.env` file (`MAPS_API_KEY=AIza...`), which [dotenv] loads
 /// before runApp (see `_appMain` in main.dart).
 ///
-/// The native map SDK reads a separate copy from
-/// `android/local.properties` (`MAPS_API_KEY=...`, also gitignored) —
-/// keep both in sync.
+/// The native map SDK reads the same `MAPS_API_KEY` from this project-root
+/// `.env` file — Gradle injects it into the AndroidManifest at build time
+/// (see `android/app/build.gradle.kts`).
 ///
 /// Optional override for CI/iOS builds:
 /// `flutter run --dart-define=MAPS_API_KEY=AIza...`
