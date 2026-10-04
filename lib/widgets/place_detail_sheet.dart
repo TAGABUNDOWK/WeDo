@@ -261,27 +261,41 @@ class _CoverHeader extends StatelessWidget {
                   child: const Icon(Icons.place_rounded,
                       size: 56, color: Colors.white24),
                 )
-              : Image.network(
-                  url,
-                  fit: BoxFit.cover,
-                  loadingBuilder: (_, child, progress) => progress == null
-                      ? child
-                      : Container(
+              : Stack(
+                  children: [
+                    Positioned.fill(
+                      child: Image.network(
+                        url,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (_, child, progress) =>
+                            progress == null
+                                ? child
+                                : Container(
+                                    color:
+                                        Colors.white.withValues(alpha: 0.06),
+                                    child: const Center(
+                                      child: SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: _accentLoader),
+                                      ),
+                                    ),
+                                  ),
+                        errorBuilder: (_, __, ___) => Container(
                           color: Colors.white.withValues(alpha: 0.06),
-                          child: const Center(
-                            child: SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: _accentLoader),
-                            ),
-                          ),
+                          child: const Icon(Icons.place_rounded,
+                              size: 56, color: Colors.white24),
                         ),
-                  errorBuilder: (_, __, ___) => Container(
-                    color: Colors.white.withValues(alpha: 0.06),
-                    child: const Icon(Icons.place_rounded,
-                        size: 56, color: Colors.white24),
-                  ),
+                      ),
+                    ),
+                    const Positioned(
+                      right: 6,
+                      bottom: 4,
+                      child: _GoogleAttribution(),
+                    ),
+                  ],
                 ),
         ),
       ),
@@ -294,6 +308,31 @@ class _CoverHeader extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => _FullscreenPhoto(url: url)),
+    );
+  }
+}
+
+/// Maps Platform requires attribution whenever Street View / Maps imagery
+/// is displayed.
+class _GoogleAttribution extends StatelessWidget {
+  const _GoogleAttribution();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        'Imagery ©${DateTime.now().year} Google',
+        style: const TextStyle(
+          fontSize: 9,
+          color: Colors.white70,
+          decoration: TextDecoration.none,
+        ),
+      ),
     );
   }
 }
@@ -337,6 +376,11 @@ class _FullscreenPhoto extends StatelessWidget {
               ),
               icon: const Icon(Icons.close),
             ),
+          ),
+          Positioned(
+            bottom: MediaQuery.of(context).padding.bottom + 12,
+            right: 12,
+            child: const _GoogleAttribution(),
           ),
         ],
       ),

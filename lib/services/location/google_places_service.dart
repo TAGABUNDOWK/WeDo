@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../../config/maps_key.dart';
 import '../../models/place_category.dart';
 import '../../models/place_entity.dart';
+import 'street_view_service.dart';
 
 /// Google Places API (New) — Nearby Search + Place Photo URLs.
 ///
@@ -35,8 +36,8 @@ class GooglePlacesService {
   /// photo is billed at most once per run.
   static final Map<String, String> _coverUrlCache = {};
 
-  static Future<String?> resolveCoverUrl(String? photoName) async {
-    if (photoName == null || photoName.isEmpty || !mapsApiKeyIsConfigured) {
+  static Future<String?> _resolvePhotoUrl(String photoName) async {
+    if (photoName.isEmpty || !mapsApiKeyIsConfigured) {
       return null;
     }
     final cached = _coverUrlCache[photoName];
@@ -73,13 +74,31 @@ class GooglePlacesService {
     }
   }
 
-  /// Resolves cover URLs for [places] in parallel; each entity keeps its
-  /// existing cover when the new resolution fails.
+  /// Resolves cover URLs for [places] in parallel.
+  ///
+  /// Source order per place:
+  /// 1. **Street View** — a real photo of the building itself, fetched once
+  ///    ever and cached in Firebase Storage (see [StreetViewService]).
+  /// 2. **Ranked Places photo candidates** — tried best-first; only billed
+  ///    when Street View has no coverage for the location.
+  /// 3. `null` — the caller shows its numbered placeholder.
+  ///
+  /// Each entity keeps its existing cover when every source fails.
   static Future<void> resolveCoverUrls(List<PlaceEntity> places) async {
     await Future.wait(places.map((p) async {
-      final url = await resolveCoverUrl(p.photoName);
+      if (p.coverUrl != null) return;
+      final url = await StreetViewService.resolveCoverUrl(p) ??
+          await _resolveBestPhoto(p.photoCandidates);
       if (url != null) p.coverUrl = url;
     }));
+  }
+
+  static Future<String?> _resolveBestPhoto(List<String> candidates) async {
+    for (final name in candidates) {
+      final url = await _resolvePhotoUrl(name);
+      if (url != null) return url;
+    }
+    return null;
   }
 
   /// Nearby Search (New): up to 20 places matching [category]'s Google
@@ -143,12 +162,6 @@ class GooglePlacesService {
     final lng = location?['longitude'] as num?;
     if (lat == null || lng == null) return null;
 
-    final photos = raw['photos'] as List?;
-    String? photoName;
-    if (photos != null && photos.isNotEmpty) {
-      photoName = (photos.first as Map?)?['name'] as String?;
-    }
-
     return PlaceEntity(
       id: raw['id'] as String? ?? '',
       name: name,
@@ -159,9 +172,70 @@ class GooglePlacesService {
       rating: (raw['rating'] as num?)?.toDouble(),
       ratingCount: (raw['userRatingCount'] as num?)?.toInt(),
       summary: (raw['editorialSummary'] as Map?)?['text'] as String?,
-      photoName: photoName,
+      photoCandidates: _rankPhotos(raw['photos'] as List?),
       priceLevel: raw['priceLevel'] as String?,
       address: raw['shortFormattedAddress'] as String?,
     );
   }
+
+  /// Picks the best cover candidates from a place's photos using the
+  /// `widthPx`/`heightPx` metadata already returned by Nearby Search
+  /// (no extra API call).
+  ///
+  /// Junk-tier photos are dropped: tiny images (< 400px wide — logos,
+  /// screenshots) and extreme aspect ratios (outside 0.6–1.8 — panoramas,
+  /// slivers). Survivors rank by resolution, preferring landscape/square.
+  /// When nothing passes, the largest raw photo is kept as a last resort
+  /// so a place never loses its image entirely. Up to three names are kept
+  /// so the resolver can fall through on a failed photo.
+  static List<String> _rankPhotos(List? photos) {
+    if (photos == null || photos.isEmpty) return const [];
+
+    final pass = <_ScoredPhoto>[];
+    final fail = <_ScoredPhoto>[];
+    for (final raw in photos) {
+      if (raw is! Map) continue;
+      final name = raw['name'] as String?;
+      if (name == null || name.isEmpty) continue;
+
+      final w = (raw['widthPx'] as num?)?.toInt() ?? 0;
+      final h = (raw['heightPx'] as num?)?.toInt() ?? 0;
+      final hasDims = w > 0 && h > 0;
+
+      if (!hasDims) {
+        fail.add(_ScoredPhoto(name, 0, 0, 0));
+        continue;
+      }
+
+      final aspect = w / h;
+      final landscapeBonus = (aspect >= 0.9 && aspect <= 1.6) ? 1.2 : 1.0;
+      final score = w * landscapeBonus;
+      final photo = _ScoredPhoto(name, w, aspect, score);
+      if (w >= 400 && aspect >= 0.6 && aspect <= 1.8) {
+        pass.add(photo);
+      } else {
+        fail.add(photo);
+      }
+    }
+
+    pass.sort((a, b) => b.score.compareTo(a.score));
+    fail.sort((a, b) => b.width.compareTo(a.width));
+
+    final ranked = pass.isNotEmpty
+        ? [...pass, ...fail.take(1)]
+        : fail.take(1).toList();
+    return ranked
+        .take(3)
+        .map((p) => p.name)
+        .toList(growable: false);
+  }
+}
+
+class _ScoredPhoto {
+  final String name;
+  final int width;
+  final double aspect;
+  final double score;
+
+  const _ScoredPhoto(this.name, this.width, this.aspect, this.score);
 }

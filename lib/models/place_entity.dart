@@ -12,7 +12,10 @@ class PlaceEntity {
   final double? rating;
   final int? ratingCount;
   final String? summary;
-  final String? photoName;
+
+  /// Photo resource names (`places/{id}/photos/{photo}`) ranked best-first
+  /// by resolution/aspect heuristics; empty on Overpass results.
+  final List<String> photoCandidates;
   final String? priceLevel;
   final String? address;
 
@@ -30,7 +33,7 @@ class PlaceEntity {
     this.rating,
     this.ratingCount,
     this.summary,
-    this.photoName,
+    this.photoCandidates = const [],
     this.priceLevel,
     this.address,
     this.coverUrl,
@@ -47,7 +50,7 @@ class PlaceEntity {
       rating: rating,
       ratingCount: ratingCount,
       summary: summary,
-      photoName: photoName,
+      photoCandidates: photoCandidates,
       priceLevel: priceLevel,
       address: address,
       coverUrl: coverUrl ?? this.coverUrl,

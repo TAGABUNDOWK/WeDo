@@ -57,7 +57,7 @@ enum PlaceCategory {
   gym(
     'Gym',
     [OsmTagFilter('leisure', 'fitness_centre')],
-    ['gym', 'fitness_center'],
+    ['fitness_center'],
   ),
   bar(
     'Bar',
