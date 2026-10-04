@@ -137,7 +137,7 @@ class _WeatherSummaryCardState extends State<WeatherSummaryCard> {
                         )
                       else
                         const Text(
-                          'No rain',
+                          'Low Chance of Rain',
                           style: TextStyle(
                             color: Colors.white70,
                             fontSize: 14,

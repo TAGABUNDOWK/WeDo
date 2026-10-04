@@ -150,7 +150,7 @@ class _CurrentWeatherCard extends StatelessWidget {
                 label: 'Rain today',
                 value: weather.rainWindowStart != null
                     ? '${formatHourAmPm(weather.rainWindowStart!)} – ${formatHourAmPm(weather.rainWindowEnd!)}'
-                    : 'No rain',
+                    : 'Low Chance of Rain',
               ),
             ],
           ),
