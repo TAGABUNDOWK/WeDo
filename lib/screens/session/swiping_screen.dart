@@ -574,46 +574,53 @@ class _SwipingScreenState extends State<SwipingScreen>
                 PlaceDetailData.fromCard(card),
               )
           : null,
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: isTop ? topGradient : bottomGradient,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: showCommitHint
-              ? [
-                  BoxShadow(
-                    color: accentGlow.withValues(alpha: 0.2),
-                    blurRadius: 16,
-                    spreadRadius: 2,
-                  ),
-                ]
-              : null,
+      child: CustomPaint(
+        foregroundPainter: _BorderGlowPainter(
+          color: accentGlow,
+          isTop: isTop,
+          inset: showCommitHint ? 3.5 : 2.5,
         ),
-        padding: EdgeInsets.all(showCommitHint ? 3.5 : 2.5),
-        child: ClipPath(
-          clipper: _CyberBorderClipper(isTop: isTop, cutSize: 32, radius: 18),
-          child: Container(
-            color: accentColor,
-            child: hasPoster
-                ? _buildMediaCardContent(
-                    card: card,
-                    title: title,
-                    description: description,
-                    isPlaceCard: isPlaceCard,
-                    isTop: isTop,
-                    eliminateOpacity: eliminateOpacity,
-                    accentGlow: accentGlow,
-                  )
-                : _buildTextCardContent(
-                    title: title,
-                    description: description,
-                    distance: distance,
-                    rating: rating,
-                    emoji: emoji,
-                    isPlaceCard: isPlaceCard,
-                    isTop: isTop,
-                    eliminateOpacity: eliminateOpacity,
-                    accentGlow: accentGlow,
-                  ),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: isTop ? topGradient : bottomGradient,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: showCommitHint
+                ? [
+                    BoxShadow(
+                      color: accentGlow.withValues(alpha: 0.2),
+                      blurRadius: 16,
+                      spreadRadius: 2,
+                    ),
+                  ]
+                : null,
+          ),
+          padding: EdgeInsets.all(showCommitHint ? 3.5 : 2.5),
+          child: ClipPath(
+            clipper: _CyberBorderClipper(isTop: isTop, cutSize: 32, radius: 18),
+            child: Container(
+              color: accentColor,
+              child: hasPoster
+                  ? _buildMediaCardContent(
+                      card: card,
+                      title: title,
+                      description: description,
+                      isPlaceCard: isPlaceCard,
+                      isTop: isTop,
+                      eliminateOpacity: eliminateOpacity,
+                      accentGlow: accentGlow,
+                    )
+                  : _buildTextCardContent(
+                      title: title,
+                      description: description,
+                      distance: distance,
+                      rating: rating,
+                      emoji: emoji,
+                      isPlaceCard: isPlaceCard,
+                      isTop: isTop,
+                      eliminateOpacity: eliminateOpacity,
+                      accentGlow: accentGlow,
+                    ),
+            ),
           ),
         ),
       ),
@@ -1074,6 +1081,84 @@ class _SwipingScreenState extends State<SwipingScreen>
     );
   }
 }
+class _BorderGlowPainter extends CustomPainter {
+  final Color color;
+  final bool isTop;
+  final double inset;
+
+  _BorderGlowPainter({
+    required this.color,
+    required this.isTop,
+    required this.inset,
+  });
+
+  Path _cyberPath(Size size) {
+    const cutSize = 32.0;
+    const radius = 18.0;
+    final rect = Rect.fromLTWH(
+      inset,
+      inset,
+      size.width - inset * 2,
+      size.height - inset * 2,
+    );
+    final path = Path();
+    if (isTop) {
+      path.moveTo(rect.left + cutSize, rect.top);
+      path.lineTo(rect.right - radius, rect.top);
+      path.quadraticBezierTo(rect.right, rect.top, rect.right, rect.top + radius);
+      path.lineTo(rect.right, rect.bottom - cutSize);
+      path.lineTo(rect.right - cutSize, rect.bottom);
+      path.lineTo(rect.left + radius, rect.bottom);
+      path.quadraticBezierTo(rect.left, rect.bottom, rect.left, rect.bottom - radius);
+      path.lineTo(rect.left, rect.top + cutSize);
+      path.close();
+    } else {
+      path.moveTo(rect.left + radius, rect.top);
+      path.lineTo(rect.right - cutSize, rect.top);
+      path.lineTo(rect.right, rect.top + cutSize);
+      path.lineTo(rect.right, rect.bottom - radius);
+      path.quadraticBezierTo(rect.right, rect.bottom, rect.right - radius, rect.bottom);
+      path.lineTo(rect.left + cutSize, rect.bottom);
+      path.lineTo(rect.left, rect.bottom - cutSize);
+      path.lineTo(rect.left, rect.top + radius);
+      path.quadraticBezierTo(rect.left, rect.top, rect.left + radius, rect.top);
+      path.close();
+    }
+    return path;
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.clipRRect(
+      RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(20)),
+    );
+    final path = _cyberPath(size);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..color = color.withValues(alpha: 0.45)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..color = color.withValues(alpha: 0.9),
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _BorderGlowPainter oldDelegate) =>
+      oldDelegate.color != color ||
+      oldDelegate.isTop != isTop ||
+      oldDelegate.inset != inset;
+}
+
 class _CyberBorderClipper extends CustomClipper<Path> {
   final bool isTop;
   final double cutSize;
