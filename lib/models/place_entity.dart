@@ -8,16 +8,38 @@ class PlaceEntity {
   final double longitude;
   final double? distanceFromUser;
 
-  const PlaceEntity({
+  // Rich data from Google Places (New); null on Overpass results.
+  final double? rating;
+  final int? ratingCount;
+  final String? summary;
+
+  /// Photo resource names (`places/{id}/photos/{photo}`) ranked best-first
+  /// by resolution/aspect heuristics; empty on Overpass results.
+  final List<String> photoCandidates;
+  final String? priceLevel;
+  final String? address;
+
+  /// Signed, key-free CDN URL of the place's cover photo. Resolved once
+  /// via `GooglePlacesService.resolveCoverUrl`; null until resolved.
+  String? coverUrl;
+
+  PlaceEntity({
     required this.id,
     required this.name,
     required this.amenity,
     required this.latitude,
     required this.longitude,
     this.distanceFromUser,
+    this.rating,
+    this.ratingCount,
+    this.summary,
+    this.photoCandidates = const [],
+    this.priceLevel,
+    this.address,
+    this.coverUrl,
   });
- 
-  PlaceEntity copyWith({double? distanceFromUser}) {
+
+  PlaceEntity copyWith({double? distanceFromUser, String? coverUrl}) {
     return PlaceEntity(
       id: id,
       name: name,
@@ -25,6 +47,13 @@ class PlaceEntity {
       latitude: latitude,
       longitude: longitude,
       distanceFromUser: distanceFromUser ?? this.distanceFromUser,
+      rating: rating,
+      ratingCount: ratingCount,
+      summary: summary,
+      photoCandidates: photoCandidates,
+      priceLevel: priceLevel,
+      address: address,
+      coverUrl: coverUrl ?? this.coverUrl,
     );
   }
 
@@ -34,6 +63,21 @@ class PlaceEntity {
     if (meters < 1000) return '${meters.round()} m';
     final km = meters / 1000;
     return '${km.toStringAsFixed(1)} km';
+  }
+
+  /// `"4.5 (123)"`, or '' when Google returned no rating.
+  String get ratingLabel {
+    final r = rating;
+    if (r == null) return '';
+    final count = ratingCount ?? 0;
+    return count > 0 ? '${r.toStringAsFixed(1)} ($count)' : r.toStringAsFixed(1);
+  }
+
+  /// Google editorial summary when available, else the OSM amenity label.
+  String get friendlySummary {
+    final s = summary;
+    if (s != null && s.isNotEmpty) return s;
+    return friendlyAmenity(amenity);
   }
 
   static double distanceBetween(
@@ -109,6 +153,17 @@ class PlaceEntity {
         return 'Electronics';
       case 'mall':
         return 'Mall';
+      case 'department_store':
+        return 'Department Store';
+      case 'hotel':
+      case 'motel':
+      case 'hostel':
+      case 'guest_house':
+        return 'Hotel';
+      case 'hairdresser':
+        return 'Salon';
+      case 'beauty':
+        return 'Beauty Salon';
       case 'resort':
         return 'Resort';
       case 'beach_resort':

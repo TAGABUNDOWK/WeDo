@@ -2,10 +2,13 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../models/admin_division.dart';
+import '../../../models/place_category.dart';
 import '../../../models/place_entity.dart';
+import '../../../services/location/google_places_service.dart';
 import '../../../services/location/location_service.dart';
-import '../../../services/location/overpass_service.dart';
+import '../../../services/location/places_search_service.dart';
 import '../../../services/session/session_service.dart';
+import '../../../widgets/place_detail_sheet.dart';
 import '../waiting_lobby_screen.dart';
 
 class CityPlacesScreen extends StatefulWidget {
@@ -24,7 +27,7 @@ class CityPlacesScreen extends StatefulWidget {
 
 class _CityPlacesScreenState extends State<CityPlacesScreen> {
   final _locationService = LocationService();
-  final _overpassService = OverpassService();
+  final _placesSearch = PlacesSearchService();
   final _sessionService = SessionService();
   final _currentUser = FirebaseAuth.instance.currentUser;
   final _bg = const Color(0xFF190831);
@@ -50,7 +53,7 @@ class _CityPlacesScreenState extends State<CityPlacesScreen> {
     try {
       final position = await _locationService.getQuickPosition();
 
-      final allPlaces = await _overpassService.getCityPlacesByCategory(
+      final allPlaces = await _placesSearch.cityPlaces(
         widget.city.latitude,
         widget.city.longitude,
         category: widget.category,
@@ -82,6 +85,9 @@ class _CityPlacesScreenState extends State<CityPlacesScreen> {
         return;
       }
 
+      await GooglePlacesService.resolveCoverUrls(picked);
+      if (!mounted) return;
+
       setState(() {
         _places = picked;
         _isLoading = false;
@@ -101,12 +107,20 @@ class _CityPlacesScreenState extends State<CityPlacesScreen> {
     setState(() => _isCreatingSession = true);
 
     try {
-      final cardMaps = _places.map((p) => {
-        'id': p.id,
-        'title': p.name,
-        'description': PlaceEntity.friendlyAmenity(p.amenity),
-        'tag': p.amenity,
-        'distance': p.formattedDistance,
+      final cardMaps = _places.map((p) {
+        final card = <String, dynamic>{
+          'id': p.id,
+          'title': p.name,
+          'description': p.friendlySummary,
+          'tag': p.amenity,
+          'distance': p.formattedDistance,
+          'latitude': p.latitude,
+          'longitude': p.longitude,
+        };
+        if (p.address != null) card['address'] = p.address;
+        if (p.coverUrl != null) card['posterUrl'] = p.coverUrl;
+        if (p.ratingLabel.isNotEmpty) card['rating'] = p.ratingLabel;
+        return card;
       }).toList();
 
       final code = await _sessionService.createSession(
@@ -270,82 +284,142 @@ class _CityPlacesScreenState extends State<CityPlacesScreen> {
       itemCount: _places.length,
       itemBuilder: (context, index) {
         final place = _places[index];
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.35),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.10), width: 1),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.10),
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    '${index + 1}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFFFE4EF0),
-                    ),
+        return GestureDetector(
+          onTap: () =>
+              showPlaceDetailSheet(context, PlaceDetailData.fromPlace(place)),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.10), width: 1),
+            ),
+            child: Row(
+              children: [
+                _buildLeading(index, place),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        place.name,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        place.friendlySummary,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.white70,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(
-                      place.name,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white,
+                    if (place.ratingLabel.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.35),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.star_rounded,
+                                size: 12, color: Colors.amber),
+                            const SizedBox(width: 3),
+                            Text(
+                              place.ratingLabel,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      PlaceEntity.friendlyAmenity(place.amenity),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.white70,
+                    if (place.ratingLabel.isNotEmpty &&
+                        place.formattedDistance.isNotEmpty)
+                      const SizedBox(height: 6),
+                    if (place.formattedDistance.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          place.formattedDistance,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFFFE4EF0),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                ],
               ),
-              if (place.formattedDistance.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    place.formattedDistance,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFFFE4EF0),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-            ],
+              ],
+            ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildLeading(int index, PlaceEntity place) {
+    final coverUrl = place.coverUrl;
+    if (coverUrl == null) return _numberBadge(index);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: Image.network(
+        coverUrl,
+        width: 44,
+        height: 44,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _numberBadge(index),
+      ),
+    );
+  }
+
+  Widget _numberBadge(int index) {
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.10),
+        shape: BoxShape.circle,
+      ),
+      child: Center(
+        child: Text(
+          '${index + 1}',
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+            color: Color(0xFFFE4EF0),
+          ),
+        ),
+      ),
     );
   }
 }

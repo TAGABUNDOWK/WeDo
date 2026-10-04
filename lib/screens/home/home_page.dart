@@ -17,6 +17,7 @@ import '../chat/group/group_chat_screen.dart';
 import '../chat/direct/direct_chat_screen.dart';
 import '../../widgets/animated_background.dart';
 import '../../widgets/leaderboard/leaderboard_section.dart';
+import '../../widgets/weather_summary_card.dart';
 import '../../services/auth/user_service.dart';
 import '../../services/friends/friend_service.dart';
 import '../../services/notification/notification_service.dart';
@@ -797,9 +798,10 @@ class _PulsingChatBadgeState extends State<_PulsingChatBadge>
       vsync: this,
       duration: const Duration(milliseconds: 1100),
     )..repeat(reverse: true);
-    _scale = Tween<double>(begin: 1.0, end: 1.3).animate(
-      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
-    );
+    _scale = Tween<double>(
+      begin: 1.0,
+      end: 1.3,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
   }
 
   @override
@@ -818,10 +820,7 @@ class _PulsingChatBadgeState extends State<_PulsingChatBadge>
       builder: (_, __) => Stack(
         alignment: Alignment.center,
         children: [
-          Transform.scale(
-            scale: _scale.value,
-            child: _circle(_scale.value),
-          ),
+          Transform.scale(scale: _scale.value, child: _circle(_scale.value)),
           _label(),
         ],
       ),
@@ -831,10 +830,7 @@ class _PulsingChatBadgeState extends State<_PulsingChatBadge>
   Widget _badge(double scale) {
     return Stack(
       alignment: Alignment.center,
-      children: [
-        _circle(scale),
-        _label(),
-      ],
+      children: [_circle(scale), _label()],
     );
   }
 
@@ -1017,7 +1013,10 @@ class _HomeTabState extends State<_HomeTab> {
     });
   }
 
-  Future<void> _acceptRequest(String friendshipId, String notificationId) async {
+  Future<void> _acceptRequest(
+    String friendshipId,
+    String notificationId,
+  ) async {
     await _friendService.acceptRequest(
       friendshipId,
       acceptorUid: _uid,
@@ -1025,7 +1024,10 @@ class _HomeTabState extends State<_HomeTab> {
     );
   }
 
-  Future<void> _declineRequest(String friendshipId, String notificationId) async {
+  Future<void> _declineRequest(
+    String friendshipId,
+    String notificationId,
+  ) async {
     await _friendService.declineRequest(
       friendshipId,
       declinerUid: _uid,
@@ -1071,8 +1073,14 @@ class _HomeTabState extends State<_HomeTab> {
                   right: -2,
                   top: -2,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                    constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 2,
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 18,
+                      minHeight: 18,
+                    ),
                     decoration: const BoxDecoration(
                       color: Color(0xFF800DD8),
                       shape: BoxShape.circle,
@@ -1162,7 +1170,8 @@ class _HomeTabState extends State<_HomeTab> {
                           ),
                           const SizedBox(width: 12),
                           GestureDetector(
-                            onTap: () => setState(() => _showNotifications = false),
+                            onTap: () =>
+                                setState(() => _showNotifications = false),
                             child: Icon(
                               Icons.close,
                               size: 20,
@@ -1182,7 +1191,9 @@ class _HomeTabState extends State<_HomeTab> {
                       return const Padding(
                         padding: EdgeInsets.symmetric(vertical: 40),
                         child: Center(
-                          child: CircularProgressIndicator(color: Color(0xFFFE4EF0)),
+                          child: CircularProgressIndicator(
+                            color: Color(0xFFFE4EF0),
+                          ),
                         ),
                       );
                     }
@@ -1209,20 +1220,28 @@ class _HomeTabState extends State<_HomeTab> {
                           final notif = notifications[index];
                           return _NotificationItem(
                             notification: notif,
-                            onAccept: notif.type == NotificationType.friendRequest &&
+                            onAccept:
+                                notif.type == NotificationType.friendRequest &&
                                     notif.status == NotificationStatus.pending
                                 ? () => _acceptRequest(
-                                    notif.relatedId ?? '', notif.notificationId)
+                                    notif.relatedId ?? '',
+                                    notif.notificationId,
+                                  )
                                 : null,
-                            onDecline: notif.type == NotificationType.friendRequest &&
+                            onDecline:
+                                notif.type == NotificationType.friendRequest &&
                                     notif.status == NotificationStatus.pending
                                 ? () => _declineRequest(
-                                    notif.relatedId ?? '', notif.notificationId)
+                                    notif.relatedId ?? '',
+                                    notif.notificationId,
+                                  )
                                 : null,
                             onTap: () async {
                               if (!notif.isRead) {
                                 await _notificationService.markAsRead(
-                                    _uid, notif.notificationId);
+                                  _uid,
+                                  notif.notificationId,
+                                );
                               }
                               if (!context.mounted) return;
                               setState(() => _showNotifications = false);
@@ -1238,7 +1257,8 @@ class _HomeTabState extends State<_HomeTab> {
                                       builder: (_) => GroupChatScreen(groupId: groupId),
                                     ),
                                   );
-                                } else if (chatId != null && notif.otherUid != null) {
+                                } else if (chatId != null &&
+                                    notif.otherUid != null) {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
@@ -1313,47 +1333,49 @@ class _HomeTabState extends State<_HomeTab> {
                       _buildNotificationBell(),
                     ],
                   ),
-              const SizedBox(height: 5),
-              Padding(
-                padding: const EdgeInsets.only(left: 8),
-                child: RichText(
-                  text: TextSpan(
-                    children: [
-                      TextSpan(
-                        text: '${_greeting()}, ',
-                        style: const TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                        ),
+                  const SizedBox(height: 5),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: RichText(
+                      text: TextSpan(
+                        children: [
+                          TextSpan(
+                            text: '${_greeting()}, ',
+                            style: const TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                          TextSpan(
+                            text: '$_displayName!',
+                            style: const TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFFFE4EF0),
+                            ),
+                          ),
+                        ],
                       ),
-                      TextSpan(
-                        text: '$_displayName!',
-                        style: const TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFFFE4EF0),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 20),
+                  const WeatherSummaryCard(),
+                  const SizedBox(height: 16),
+                  const _FeatureCarousel(),
+                  const SizedBox(height: 24),
+                  const _NowPlayingSection(),
+                  const SizedBox(height: 28),
+                  const LeaderboardSection(),
+                  const SizedBox(height: 28),
+                  const _StackedCards(),
+                  const SizedBox(height: 120),
+                ],
               ),
-              const SizedBox(height: 20),
-              const _FeatureCarousel(),
-              const SizedBox(height: 24),
-              const _NowPlayingSection(),
-              const SizedBox(height: 28),
-              const LeaderboardSection(),
-              const SizedBox(height: 28),
-              const _StackedCards(),
-              const SizedBox(height: 120),
-            ],
+            ),
           ),
-        ),
-      ),
           if (_showNotifications)
             GestureDetector(
               // `deferToChild` would depend on the colored box itself
@@ -1361,9 +1383,7 @@ class _HomeTabState extends State<_HomeTab> {
               // outside the panel reliably closes it.
               behavior: HitTestBehavior.opaque,
               onTap: () => setState(() => _showNotifications = false),
-              child: Container(
-                color: Colors.black.withValues(alpha: 0.2),
-              ),
+              child: Container(color: Colors.black.withValues(alpha: 0.2)),
             ),
           if (_showNotifications) _buildNotificationsPanel(),
         ],
@@ -1423,7 +1443,8 @@ class _NotificationItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isPending = notification.type == NotificationType.friendRequest &&
+    final isPending =
+        notification.type == NotificationType.friendRequest &&
         notification.status == NotificationStatus.pending;
     return GestureDetector(
       onTap: onTap,
@@ -1457,7 +1478,9 @@ class _NotificationItem extends StatelessWidget {
                     notification.title,
                     style: TextStyle(
                       fontSize: 13,
-                      fontWeight: notification.isRead ? FontWeight.w500 : FontWeight.w700,
+                      fontWeight: notification.isRead
+                          ? FontWeight.w500
+                          : FontWeight.w700,
                       color: Colors.white,
                       fontFamily: 'Poppins',
                     ),
@@ -1489,7 +1512,10 @@ class _NotificationItem extends StatelessWidget {
                         GestureDetector(
                           onTap: onAccept,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
                             decoration: BoxDecoration(
                               color: const Color(0xFFFE4EF0),
                               borderRadius: BorderRadius.circular(8),
@@ -1509,11 +1535,16 @@ class _NotificationItem extends StatelessWidget {
                         GestureDetector(
                           onTap: onDecline,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.white.withValues(alpha: 0.08),
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.15),
+                              ),
                             ),
                             child: const Text(
                               'Decline',
@@ -1528,11 +1559,15 @@ class _NotificationItem extends StatelessWidget {
                         ),
                       ],
                     ),
-                  ] else if (notification.type == NotificationType.friendRequest) ...[
+                  ] else if (notification.type ==
+                      NotificationType.friendRequest) ...[
                     const SizedBox(height: 8),
                     if (notification.status == NotificationStatus.accepted)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFF4CAF50).withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(8),
@@ -1540,20 +1575,30 @@ class _NotificationItem extends StatelessWidget {
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.check_circle, size: 12, color: Color(0xFF4CAF50)),
+                            Icon(
+                              Icons.check_circle,
+                              size: 12,
+                              color: Color(0xFF4CAF50),
+                            ),
                             SizedBox(width: 4),
-                            Text('Accepted',
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF4CAF50),
-                                    fontFamily: 'Poppins')),
+                            Text(
+                              'Accepted',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF4CAF50),
+                                fontFamily: 'Poppins',
+                              ),
+                            ),
                           ],
                         ),
                       )
                     else if (notification.status == NotificationStatus.declined)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(8),
@@ -1561,14 +1606,21 @@ class _NotificationItem extends StatelessWidget {
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.cancel_outlined, size: 12, color: Colors.white54),
+                            Icon(
+                              Icons.cancel_outlined,
+                              size: 12,
+                              color: Colors.white54,
+                            ),
                             SizedBox(width: 4),
-                            Text('Declined',
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white54,
-                                    fontFamily: 'Poppins')),
+                            Text(
+                              'Declined',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white54,
+                                fontFamily: 'Poppins',
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -1649,10 +1701,13 @@ class _FeatureCarouselState extends State<_FeatureCarousel>
       switchInCurve: Curves.easeInOut,
       switchOutCurve: Curves.easeInOut,
       transitionBuilder: (child, animation) {
-        final slideOffset = Tween<Offset>(
-          begin: const Offset(0.15, 0.0),
-          end: Offset.zero,
-        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutQuint));
+        final slideOffset =
+            Tween<Offset>(
+              begin: const Offset(0.15, 0.0),
+              end: Offset.zero,
+            ).animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOutQuint),
+            );
         return SlideTransition(
           position: slideOffset,
           child: FadeTransition(opacity: animation, child: child),
@@ -1855,9 +1910,7 @@ class _NowPlayingSection extends StatelessWidget {
               GestureDetector(
                 onTap: () {
                   Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const AllGamesScreen(),
-                    ),
+                    MaterialPageRoute(builder: (_) => const AllGamesScreen()),
                   );
                 },
                 child: const Text(
@@ -1901,17 +1954,17 @@ class _NowPlayingCardWidget extends StatelessWidget {
     return GestureDetector(
       onTap: () {
         if (data.title == 'PickFight') {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const SessionEntryScreen()),
-          );
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const SessionEntryScreen()));
         } else if (data.title == 'Spin the Wheel') {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const WheelScreen()),
-          );
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const WheelScreen()));
         } else if (data.title == 'TriRace') {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const TriRaceEntryScreen()),
-          );
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const TriRaceEntryScreen()));
         }
       },
       child: SizedBox(
@@ -1920,87 +1973,87 @@ class _NowPlayingCardWidget extends StatelessWidget {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(18),
           child: DecoratedBox(
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: Colors.deepPurpleAccent.withValues(alpha: 0.3),
-              width: 1.5,
-            ),
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Image.asset(
-                data.imagePath,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    color: const Color(0xFF1A1025),
-                    child: const Icon(
-                      Icons.gamepad,
-                      color: Colors.white24,
-                      size: 40,
-                    ),
-                  );
-                },
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: Colors.deepPurpleAccent.withValues(alpha: 0.3),
+                width: 1.5,
               ),
-              const DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Colors.black87],
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.asset(
+                  data.imagePath,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: const Color(0xFF1A1025),
+                      child: const Icon(
+                        Icons.gamepad,
+                        color: Colors.white24,
+                        size: 40,
+                      ),
+                    );
+                  },
+                ),
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.transparent, Colors.black87],
+                    ),
                   ),
                 ),
-              ),
-              Positioned(
-                left: 10,
-                bottom: 10,
-                right: 10,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      data.title,
-                      style: const TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
+                Positioned(
+                  left: 10,
+                  bottom: 10,
+                  right: 10,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        data.title,
+                        style: const TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: data.statusColor,
-                            shape: BoxShape.circle,
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: data.statusColor,
+                              shape: BoxShape.circle,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 5),
-                        Text(
-                          data.statusLabel,
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 11,
-                            fontWeight: FontWeight.w400,
-                            color: Colors.white.withValues(alpha: 0.7),
+                          const SizedBox(width: 5),
+                          Text(
+                            data.statusLabel,
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 11,
+                              fontWeight: FontWeight.w400,
+                              color: Colors.white.withValues(alpha: 0.7),
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
-    ),
     );
   }
 }
@@ -2246,7 +2299,10 @@ class _StackedCardsState extends State<_StackedCards>
             ),
             Positioned.fill(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 18,
+                ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -2339,7 +2395,9 @@ class _StackedCardsState extends State<_StackedCards>
                                       fontFamily: 'Poppins',
                                       fontSize: 10,
                                       fontWeight: FontWeight.w700,
-                                      color: Colors.white.withValues(alpha: 0.9),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.9,
+                                      ),
                                       letterSpacing: 0.5,
                                     ),
                                   ),
@@ -2360,22 +2418,25 @@ class _StackedCardsState extends State<_StackedCards>
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(24),
                                 gradient: const LinearGradient(
-                                  colors: [Color(0xFFFE4EF0), Color(0xFF800DD8)],
+                                  colors: [
+                                    Color(0xFFFE4EF0),
+                                    Color(0xFF800DD8),
+                                  ],
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
                                 ),
                               ),
-                                child: const Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.favorite_border,
-                                      size: 14,
-                                      color: Colors.white,
-                                    ),
-                                    SizedBox(width: 6),
-                                    Text(
-                                      'MAYBE LATER',
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.favorite_border,
+                                    size: 14,
+                                    color: Colors.white,
+                                  ),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'MAYBE LATER',
                                     style: TextStyle(
                                       fontFamily: 'Poppins',
                                       fontSize: 10,
@@ -2465,11 +2526,7 @@ class _StackedCardsState extends State<_StackedCards>
             width: 28,
             height: 28,
             errorBuilder: (context, error, stackTrace) {
-              return const Icon(
-                Icons.casino,
-                color: Colors.white,
-                size: 24,
-              );
+              return const Icon(Icons.casino, color: Colors.white, size: 24);
             },
           ),
         ),
@@ -2502,7 +2559,8 @@ class _StackedCardsState extends State<_StackedCards>
 
   Future<void> _launchAppStore() async {
     const iosUrl = 'https://apps.apple.com/app/id000000000';
-    const androidUrl = 'https://play.google.com/store/apps/details?id=com.choosly.wedo';
+    const androidUrl =
+        'https://play.google.com/store/apps/details?id=com.choosly.wedo';
     final url = Theme.of(context).platform == TargetPlatform.iOS
         ? Uri.parse(iosUrl)
         : Uri.parse(androidUrl);
@@ -2541,8 +2599,7 @@ class _StackedCardsState extends State<_StackedCards>
           offset: Offset(rightOffset, 0),
           child: Transform(
             alignment: Alignment.bottomCenter,
-            transform: Matrix4.identity()
-              ..rotateZ(rightAng),
+            transform: Matrix4.identity()..rotateZ(rightAng),
             child: _buildRightCard(slant, cornerR, cardSize),
           ),
         );
@@ -2672,5 +2729,6 @@ class _RateUsBackgroundPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _RateUsBackgroundPainter old) => old.slant != slant;
+  bool shouldRepaint(covariant _RateUsBackgroundPainter old) =>
+      old.slant != slant;
 }
