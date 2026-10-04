@@ -556,6 +556,17 @@ class _SwipingScreenState extends State<SwipingScreen>
         ? (offset.dy > 0 ? eliminateIntensity : 0.0)
         : (offset.dy < 0 ? eliminateIntensity : 0.0);
 
+    final topGradient = const LinearGradient(
+      colors: [Color(0xFF4ADE80), Color(0xFF06B6D4)],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    );
+    final bottomGradient = const LinearGradient(
+      colors: [Color(0xFFFF9800), Color(0xFFE91E63)],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    );
+
     return GestureDetector(
       onTap: isPlaceCard
           ? () => showPlaceDetailSheet(
@@ -565,14 +576,8 @@ class _SwipingScreenState extends State<SwipingScreen>
           : null,
       child: Container(
         decoration: BoxDecoration(
-          color: accentColor,
+          gradient: isTop ? topGradient : bottomGradient,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: showCommitHint
-                ? accentGlow.withValues(alpha: 0.5)
-                : Colors.white.withValues(alpha: 0.08),
-            width: showCommitHint ? 2 : 1,
-          ),
           boxShadow: showCommitHint
               ? [
                   BoxShadow(
@@ -583,28 +588,34 @@ class _SwipingScreenState extends State<SwipingScreen>
                 ]
               : null,
         ),
-        clipBehavior: Clip.antiAlias,
-        child: hasPoster
-            ? _buildMediaCardContent(
-                card: card,
-                title: title,
-                description: description,
-                isPlaceCard: isPlaceCard,
-                isTop: isTop,
-                eliminateOpacity: eliminateOpacity,
-                accentGlow: accentGlow,
-              )
-            : _buildTextCardContent(
-                title: title,
-                description: description,
-                distance: distance,
-                rating: rating,
-                emoji: emoji,
-                isPlaceCard: isPlaceCard,
-                isTop: isTop,
-                eliminateOpacity: eliminateOpacity,
-                accentGlow: accentGlow,
-              ),
+        padding: EdgeInsets.all(showCommitHint ? 3.5 : 2.5),
+        child: ClipPath(
+          clipper: _CyberBorderClipper(isTop: isTop, cutSize: 32, radius: 18),
+          child: Container(
+            color: accentColor,
+            child: hasPoster
+                ? _buildMediaCardContent(
+                    card: card,
+                    title: title,
+                    description: description,
+                    isPlaceCard: isPlaceCard,
+                    isTop: isTop,
+                    eliminateOpacity: eliminateOpacity,
+                    accentGlow: accentGlow,
+                  )
+                : _buildTextCardContent(
+                    title: title,
+                    description: description,
+                    distance: distance,
+                    rating: rating,
+                    emoji: emoji,
+                    isPlaceCard: isPlaceCard,
+                    isTop: isTop,
+                    eliminateOpacity: eliminateOpacity,
+                    accentGlow: accentGlow,
+                  ),
+          ),
+        ),
       ),
     );
   }
@@ -946,40 +957,77 @@ class _SwipingScreenState extends State<SwipingScreen>
 
   Widget _buildVsMarker({required double stackHeight}) {
     return Positioned(
-      top: stackHeight / 2 - 17,
+      top: stackHeight / 2 - 19,
       left: 0,
       right: 0,
-      child: Center(
-        child: Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A2E),
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.15),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.4),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: const Center(
-            child: Text(
-              'VS',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 11,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0.5,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Left fading line
+          Container(
+            width: 80,
+            height: 2,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.transparent, Color(0xFF06B6D4)],
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
               ),
             ),
           ),
-        ),
+          const SizedBox(width: 12),
+          // VS Circle with gradient border
+          Container(
+            width: 38,
+            height: 38,
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const LinearGradient(
+                colors: [Color(0xFF06B6D4), Color(0xFFFE4EF0)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFE4EF0).withValues(alpha: 0.3),
+                  blurRadius: 10,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: Container(
+              decoration: const BoxDecoration(
+                color: Color(0xFF190831),
+                shape: BoxShape.circle,
+              ),
+              child: const Center(
+                child: Text(
+                  'VS',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Right fading line
+          Container(
+            width: 80,
+            height: 2,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFFFE4EF0), Colors.transparent],
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1024,5 +1072,49 @@ class _SwipingScreenState extends State<SwipingScreen>
         ),
       ),
     );
+  }
+}
+class _CyberBorderClipper extends CustomClipper<Path> {
+  final bool isTop;
+  final double cutSize;
+  final double radius;
+
+  _CyberBorderClipper({required this.isTop, this.cutSize = 36.0, this.radius = 20.0});
+
+  @override
+  Path getClip(Size size) {
+    final path = Path();
+    if (isTop) {
+      // Top-Left cut, Bottom-Right cut, Top-Right rounded, Bottom-Left rounded
+      path.moveTo(cutSize, 0);
+      path.lineTo(size.width - radius, 0);
+      path.quadraticBezierTo(size.width, 0, size.width, radius);
+      path.lineTo(size.width, size.height - cutSize);
+      path.lineTo(size.width - cutSize, size.height);
+      path.lineTo(radius, size.height);
+      path.quadraticBezierTo(0, size.height, 0, size.height - radius);
+      path.lineTo(0, cutSize);
+      path.close();
+    } else {
+      // Top-Right cut, Bottom-Left cut, Top-Left rounded, Bottom-Right rounded
+      path.moveTo(radius, 0);
+      path.lineTo(size.width - cutSize, 0);
+      path.lineTo(size.width, cutSize);
+      path.lineTo(size.width, size.height - radius);
+      path.quadraticBezierTo(size.width, size.height, size.width - radius, size.height);
+      path.lineTo(cutSize, size.height);
+      path.lineTo(0, size.height - cutSize);
+      path.lineTo(0, radius);
+      path.quadraticBezierTo(0, 0, radius, 0);
+      path.close();
+    }
+    return path;
+  }
+
+  @override
+  bool shouldReclip(covariant _CyberBorderClipper oldClipper) {
+    return oldClipper.isTop != isTop || 
+           oldClipper.cutSize != cutSize || 
+           oldClipper.radius != radius;
   }
 }
