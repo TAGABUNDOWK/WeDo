@@ -163,7 +163,7 @@ class _EventMessageCardState extends State<EventMessageCard> {
         _loadAttendeeUsers(event);
 
         final hasImage = event.imageUrl != null && event.imageUrl!.isNotEmpty;
-        final isLocked = !event.isStarted || event.isEnded;
+        final isLocked = event.isEnded;
         final myResponse = event.myResponse(widget.currentUid);
         final participants =
             event.participantCount(groupMemberCount: _groupMemberCount);

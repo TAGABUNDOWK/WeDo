@@ -138,13 +138,13 @@ class EventService {
   /// Single write path for three-option voting, shared by the chat card and
   /// the detail screen: clears the RSVP when [uid] taps their current
   /// selection again (toggle off), otherwise writes [response]. No-ops while
-  /// RSVPs are locked (event not started / ended).
+  /// RSVPs are locked (event has ended).
   Future<void> submitResponse({
     required ChatEvent event,
     required String uid,
     required EventResponse response,
   }) async {
-    if (uid.isEmpty || !event.isStarted || event.isEnded) return;
+    if (uid.isEmpty || event.isEnded) return;
     if (event.myResponse(uid) == response) {
       await clearRsvp(
         eventId: event.id,

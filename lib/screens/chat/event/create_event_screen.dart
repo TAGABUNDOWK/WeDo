@@ -628,7 +628,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'Show RSVP messages',
+                              'Show response messages',
                               style: TextStyle(
                                 color: AppColors.textPrimary,
                                 fontFamily: 'PlusJakartaSans',
@@ -638,7 +638,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Post a message when someone changes their RSVP',
+                              'Post a message when someone changes their response',
                               style: TextStyle(
                                 color: AppColors.textSecondary.withValues(alpha: 0.7),
                                 fontFamily: 'PlusJakartaSans',

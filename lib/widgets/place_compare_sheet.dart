@@ -95,18 +95,29 @@ class _PlaceCompareSheetState extends State<_PlaceCompareSheet> {
   }
 
   Uri? get _mapsUri {
-    final placeId = widget.event.placeId;
-    if (placeId != null && placeId.isNotEmpty) {
-      return Uri.parse(
-          'https://www.google.com/maps/search/?api=1&query_place_id=$placeId');
-    }
     final lat = widget.event.latitude;
     final lng = widget.event.longitude;
+    final placeId = widget.event.placeId;
+    final address = widget.event.address;
+    String? destination;
     if (lat != null && lng != null) {
-      return Uri.parse(
-          'https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+      destination = '$lat,$lng';
+    } else if (address != null && address.isNotEmpty) {
+      destination = address;
+    } else if (placeId != null && placeId.startsWith('ChIJ')) {
+      destination = 'place_id:$placeId';
     }
-    return null;
+    if (destination == null) return null;
+    final position = _position;
+    final params = <String, String>{
+      'api': '1',
+      'destination': destination,
+      'travelmode': 'driving',
+    };
+    if (position != null) {
+      params['origin'] = '${position.latitude},${position.longitude}';
+    }
+    return Uri.https('www.google.com', '/maps/dir/', params);
   }
 
   Future<void> _openMaps() async {
@@ -309,7 +320,7 @@ class _PlaceCompareSheetState extends State<_PlaceCompareSheet> {
                       ),
                       child: const Center(
                         child: Text(
-                          'Open in Maps',
+                          'Directions',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 14,
