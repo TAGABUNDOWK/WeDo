@@ -9,6 +9,7 @@ import 'screens/home/home_page.dart';
 import 'screens/chat/group/group_info_screen.dart';
 import 'screens/session/waiting_lobby_screen.dart';
 import 'screens/tri_race/waiting_lobby_screen.dart' as tri_race;
+import 'utils/constants.dart';
 import 'services/auth/user_service.dart';
 import 'services/session/lobby_return_store.dart';
 import 'services/session/session_service.dart';
@@ -115,7 +116,7 @@ class _MyAppState extends State<MyApp> {
                 if (parkedSessionId != null)
                   Positioned(
                     top: MediaQuery.of(context).padding.top + 12,
-                    right: 12,
+                    right: 0,
                     child: _ReturnToLobbyButton(
                       onPressed: () => _returnToLobby(parkedSessionId),
                     ),
@@ -156,44 +157,80 @@ class _MyAppState extends State<MyApp> {
   }
 }
 
-class _ReturnToLobbyButton extends StatelessWidget {
+class _ReturnToLobbyButton extends StatefulWidget {
   final VoidCallback onPressed;
   const _ReturnToLobbyButton({required this.onPressed});
 
   @override
+  State<_ReturnToLobbyButton> createState() => _ReturnToLobbyButtonState();
+}
+
+class _ReturnToLobbyButtonState extends State<_ReturnToLobbyButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _glow = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _glow.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onPressed,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        decoration: BoxDecoration(
-          color: const Color(0xFF66BB6A),
-          borderRadius: BorderRadius.circular(10),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF66BB6A).withValues(alpha: 0.45),
-              blurRadius: 16,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.arrow_back, size: 18, color: Colors.white),
-            SizedBox(width: 8),
-            Text(
-              'Back to Lobby',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                decoration: TextDecoration.none,
+    const violet = AppColors.electricViolet;
+    return AnimatedBuilder(
+      animation: _glow,
+      builder: (context, _) {
+        final t = Curves.easeInOut.transform(_glow.value);
+        return GestureDetector(
+          onTap: widget.onPressed,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2D1B69),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(22),
+                bottomLeft: Radius.circular(22),
               ),
+              border: Border.all(
+                color: violet.withValues(alpha: 0.65 + 0.35 * t),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: violet.withValues(alpha: 0.45 + 0.45 * t),
+                  blurRadius: 10 + 16 * t,
+                  offset: const Offset(-4, 0),
+                ),
+                BoxShadow(
+                  color: violet.withValues(alpha: 0.16 + 0.26 * t),
+                  blurRadius: 26 + 14 * t,
+                  offset: const Offset(-8, 2),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.arrow_back, size: 18, color: Colors.white),
+                SizedBox(width: 8),
+                Text(
+                  'Back to Lobby',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

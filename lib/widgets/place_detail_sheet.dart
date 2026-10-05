@@ -64,15 +64,22 @@ class PlaceDetailData {
   }
 
   Uri? get mapsUri {
-    if (placeId != null) {
-      return Uri.parse(
-          'https://www.google.com/maps/search/?api=1&query_place_id=$placeId');
-    }
+    final String? destination;
     if (latitude != null && longitude != null) {
-      return Uri.parse(
-          'https://www.google.com/maps/search/?api=1&query=$latitude,$longitude');
+      destination = '$latitude,$longitude';
+    } else if (address != null && address!.isNotEmpty) {
+      destination = address;
+    } else if (placeId != null && placeId!.startsWith('ChIJ')) {
+      destination = 'place_id:$placeId';
+    } else {
+      destination = null;
     }
-    return null;
+    if (destination == null) return null;
+    return Uri.https('www.google.com', '/maps/dir/', {
+      'api': '1',
+      'destination': destination,
+      'travelmode': 'driving',
+    });
   }
 }
 
@@ -194,7 +201,7 @@ class PlaceDetailSheet extends StatelessWidget {
                     ),
                     icon: const Icon(Icons.map_outlined, size: 18),
                     label: const Text(
-                      'Open in Google Maps',
+                      'Directions',
                       style: TextStyle(
                           fontWeight: FontWeight.w600, fontSize: 14),
                     ),
