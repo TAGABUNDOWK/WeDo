@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import '../../models/event_prefill.dart';
+import '../../models/place_entity.dart';
 import '../../models/session_entity.dart';
 import '../../services/session/session_service.dart';
 import '../../services/session/session_refresh_notifier.dart';
+import 'event_share_picker_screen.dart';
 
 class ResultsScreen extends StatefulWidget {
   final String sessionId;
@@ -123,6 +126,7 @@ class _ResultsScreenState extends State<ResultsScreen> with TickerProviderStateM
             const SizedBox(height: 12),
             _buildStandings(standings),
           ],
+          _buildShareEventSection(session),
           const SizedBox(height: 28),
           _buildBackButton(),
           const SizedBox(height: 20),
@@ -543,6 +547,245 @@ class _ResultsScreenState extends State<ResultsScreen> with TickerProviderStateM
           ),
         ],
       ),
+    );
+  }
+
+  /// The full winning card map (joined back from `winnerCardId`, since only
+  /// title/emoji survive in the aggregated payload) — null when the winner is
+  /// unknown or the card no longer exists on the session.
+  Map<String, dynamic>? _winnerCard(SessionEntity session) {
+    final results = session.aggregatedResults ?? {};
+    final winnerCardId = results['winnerCardId'] as String? ?? '';
+    if (winnerCardId.isEmpty) return null;
+    for (final card in session.cards) {
+      if (card['id'] == winnerCardId) return card;
+    }
+    return null;
+  }
+
+  /// "Chosen via PickFight …" provenance line appended to every prefill.
+  String _statsLine(SessionEntity session) {
+    final results = session.aggregatedResults ?? {};
+    final standings = results['standings'] as Map<String, dynamic>? ?? {};
+    final total = results['totalParticipants'] as int? ?? standings.length;
+
+    String fastestPart = '';
+    if (standings.isNotEmpty) {
+      final fastest = standings.values.first;
+      if (fastest is Map) {
+        final name = fastest['userName'] as String? ?? '';
+        final ms = fastest['elapsedTimeMs'] as int? ?? 0;
+        if (name.isNotEmpty) {
+          fastestPart = ' · Fastest: $name (${(ms / 1000).toStringAsFixed(1)} s)';
+        }
+      }
+    }
+
+    return 'Chosen via PickFight "${session.topic}" — '
+        '$total player${total == 1 ? '' : 's'} voted$fastestPart.';
+  }
+
+  /// Builds the event prefill from the winning card. Place cards (identified
+  /// by their `tag`, the same discriminator the swipe screen uses) carry
+  /// coordinates and become distance-comparable place events.
+  EventPrefill? _buildEventPrefill(SessionEntity session) {
+    final card = _winnerCard(session);
+    if (card == null) return null;
+
+    final title = card['title'] as String? ?? '';
+    if (title.isEmpty) return null;
+
+    final statsLine = _statsLine(session);
+    final posterUrl = card['posterUrl'] as String?;
+    final imageUrl =
+        (posterUrl == null || posterUrl.isEmpty) ? null : posterUrl;
+
+    if (card.containsKey('tag')) {
+      final id = card['id'] as String? ?? '';
+      final tag = card['tag'] as String? ?? '';
+      final friendlyTag = tag.isEmpty ? '' : PlaceEntity.friendlyAmenity(tag);
+      final rating = card['rating'] as String? ?? '';
+      final address = card['address'] as String?;
+      final distance = card['distance'] as String? ?? '';
+      final summary = card['description'] as String? ?? '';
+      final details = [
+        if (friendlyTag.isNotEmpty) friendlyTag,
+        if (rating.isNotEmpty) 'Rating $rating',
+        if (address != null && address.isNotEmpty) address,
+        if (distance.isNotEmpty) '$distance from the host at game time',
+      ].join(' · ');
+
+      return EventPrefill(
+        title: title,
+        description: [
+          if (summary.isNotEmpty) summary,
+          if (details.isNotEmpty) details,
+          statsLine,
+        ].join('\n\n'),
+        location: (address == null || address.isEmpty) ? null : address,
+        imageUrl: imageUrl,
+        cardType: 'place',
+        latitude: (card['latitude'] as num?)?.toDouble(),
+        longitude: (card['longitude'] as num?)?.toDouble(),
+        address: address,
+        placeId: id.isEmpty ? null : id,
+        tag: tag.isEmpty ? null : tag,
+        rating: rating.isEmpty ? null : rating,
+        distanceSnapshot: distance.isEmpty ? null : distance,
+        sessionId: session.sessionId,
+      );
+    }
+
+    if ((card['id'] as String? ?? '').startsWith('movie_')) {
+      final overview = card['description'] as String? ?? '';
+      final rating = card['rating'] as String? ?? '';
+      final year = card['year'] as String? ?? '';
+      final details = [
+        if (rating.isNotEmpty) 'Rating $rating',
+        if (year.isNotEmpty) year,
+      ].join(' · ');
+
+      return EventPrefill(
+        title: title,
+        description: [
+          if (overview.isNotEmpty) overview,
+          if (details.isNotEmpty) details,
+          statsLine,
+        ].join('\n\n'),
+        imageUrl: imageUrl,
+        cardType: 'movie',
+        rating: rating.isEmpty ? null : rating,
+        sessionId: session.sessionId,
+      );
+    }
+
+    return EventPrefill(
+      title: title,
+      description: statsLine,
+      imageUrl: imageUrl,
+      cardType: 'custom',
+      sessionId: session.sessionId,
+    );
+  }
+
+  /// "Share as Event" block — locked with an explanatory note until every
+  /// participant has finished (same rule the leaderboard write uses).
+  Widget _buildShareEventSection(SessionEntity session) {
+    return StreamBuilder<List<ParticipantEntity>>(
+      stream: _service.getParticipantsStream(widget.sessionId),
+      builder: (context, snapshot) {
+        final participants = snapshot.data ?? const <ParticipantEntity>[];
+        final total = participants.length;
+        final finished = participants
+            .where((p) => p.status == ParticipantStatus.finished)
+            .length;
+        final allFinished = total > 0 && finished >= total;
+
+        final EventPrefill? prefill =
+            allFinished ? _buildEventPrefill(session) : null;
+        final canShare = allFinished && prefill != null;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 28),
+            _buildSectionHeader(
+              'Share as Event',
+              'Send the winning card to a group chat as an event',
+            ),
+            const SizedBox(height: 12),
+            GestureDetector(
+              onTap: canShare
+                  ? () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              EventSharePickerScreen(prefill: prefill),
+                        ),
+                      );
+                    }
+                  : null,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                decoration: BoxDecoration(
+                  gradient: canShare
+                      ? const LinearGradient(
+                          colors: [Color(0xFFFE4EF0), Color(0xFF800DD8)])
+                      : null,
+                  color: canShare ? null : Colors.white.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(14),
+                  border: canShare
+                      ? null
+                      : Border.all(
+                          color: Colors.white.withValues(alpha: 0.08)),
+                  boxShadow: canShare
+                      ? [
+                          BoxShadow(
+                            color: const Color(0xFFFE4EF0)
+                                .withValues(alpha: 0.4),
+                            offset: const Offset(0, 4),
+                            blurRadius: 12,
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.event_available_rounded,
+                      size: 18,
+                      color: canShare
+                          ? Colors.white
+                          : Colors.white.withValues(alpha: 0.35),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Share as Event',
+                      style: TextStyle(
+                        color: canShare
+                            ? Colors.white
+                            : Colors.white.withValues(alpha: 0.35),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              canShare
+                  ? 'All players finished — share the winning card as an event'
+                  : allFinished
+                      ? 'No winning card available to share.'
+                      : 'Share as Event can only be used after all players have finished.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: canShare
+                    ? const Color(0xFF4CAF50)
+                    : Colors.white.withValues(alpha: 0.55),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (!canShare && total > 0) ...[
+              const SizedBox(height: 4),
+              Text(
+                '$finished of $total player${total == 1 ? '' : 's'} finished'
+                '${finished >= total ? '' : ' — waiting for ${total - finished} more'}',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.4),
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 

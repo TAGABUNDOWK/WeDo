@@ -1,13 +1,16 @@
 ﻿import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../models/event.dart';
 import '../../models/user_entity.dart';
 import '../../services/event/event_service.dart';
 import '../../services/group/group_service.dart';
 import '../../services/auth/user_service.dart';
+import '../../services/location/location_service.dart';
 import '../../utils/constants.dart';
 import 'event_card_widgets.dart';
+import 'place_compare_sheet.dart';
 
 const _fontFamily = 'PlusJakartaSans';
 
@@ -236,6 +239,10 @@ class _EventMessageCardState extends State<EventMessageCard> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     EventInfoChips(event: event),
+                                    if (event.isPlaceEvent) ...[
+                                      const SizedBox(height: 8),
+                                      _PlaceDistanceChip(event: event),
+                                    ],
                                     const SizedBox(height: 14),
                                     EventStatusBar(
                                       eventDate: event.date,
@@ -296,6 +303,125 @@ class _EventMessageCardState extends State<EventMessageCard> {
           ),
         );
       },
+    );
+  }
+}
+
+/// Live "X from you" chip rendered only on place-type PickFight events.
+/// Falls back to the host's snapshot distance, then to a location hint.
+/// Tapping opens the distance-compare sheet.
+class _PlaceDistanceChip extends StatefulWidget {
+  final ChatEvent event;
+
+  const _PlaceDistanceChip({required this.event});
+
+  @override
+  State<_PlaceDistanceChip> createState() => _PlaceDistanceChipState();
+}
+
+class _PlaceDistanceChipState extends State<_PlaceDistanceChip> {
+  final _locationService = LocationService();
+  String? _distanceText;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolve();
+  }
+
+  Future<void> _resolve() async {
+    setState(() => _loading = true);
+    String? text;
+    try {
+      final position = await _locationService.getQuickPosition();
+      final lat = widget.event.latitude;
+      final lng = widget.event.longitude;
+      if (position != null && lat != null && lng != null) {
+        final meters = Geolocator.distanceBetween(
+          position.latitude,
+          position.longitude,
+          lat,
+          lng,
+        );
+        text = '${_formatDistance(meters)} from you';
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _distanceText = text;
+      _loading = false;
+    });
+  }
+
+  String _formatDistance(double meters) {
+    if (meters < 1000) return '${meters.round()} m';
+    return '${(meters / 1000).toStringAsFixed(1)} km';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final snapshot = widget.event.distanceSnapshot;
+    final String label;
+    if (_loading) {
+      label = 'Measuring distance…';
+    } else if (_distanceText != null) {
+      label = '📍 $_distanceText';
+    } else if (snapshot != null && snapshot.isNotEmpty) {
+      label = '📍 $snapshot from the host — tap to compare your distance';
+    } else {
+      label = '📍 Turn on location to see distance';
+    }
+
+    return GestureDetector(
+      onTap: () => showPlaceCompareSheet(context, widget.event),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.38),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Center(
+                    child: Icon(Icons.near_me_outlined,
+                        size: 18, color: Colors.white),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontFamily: _fontFamily,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      height: 1.3,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const Icon(Icons.chevron_right, size: 18, color: Colors.white54),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

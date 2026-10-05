@@ -50,6 +50,19 @@ class ChatEvent {
   final String? groupId;
   final DateTime createdAt;
 
+  // Optional PickFight source metadata — null on events created before this
+  // feature existed, so old documents keep rendering with the standard card.
+  final String? source;
+  final String? cardType;
+  final double? latitude;
+  final double? longitude;
+  final String? address;
+  final String? placeId;
+  final String? tag;
+  final String? rating;
+  final String? distanceSnapshot;
+  final String? sessionId;
+
   const ChatEvent({
     required this.id,
     required this.createdBy,
@@ -65,10 +78,25 @@ class ChatEvent {
     this.chatId,
     this.groupId,
     required this.createdAt,
+    this.source,
+    this.cardType,
+    this.latitude,
+    this.longitude,
+    this.address,
+    this.placeId,
+    this.tag,
+    this.rating,
+    this.distanceSnapshot,
+    this.sessionId,
   });
 
   bool get isStarted => DateTime.now().isAfter(date);
   bool get isEnded => endDate != null && DateTime.now().isAfter(endDate!);
+
+  /// Place-type events carry coordinates and use the distance-compare sheet
+  /// instead of the plain event detail screen on tap.
+  bool get isPlaceEvent =>
+      cardType == 'place' && latitude != null && longitude != null;
 
   factory ChatEvent.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data()!;
@@ -87,6 +115,16 @@ class ChatEvent {
       chatId: data['chatId'] as String?,
       groupId: data['groupId'] as String?,
       createdAt: _parseTimestamp(data['createdAt']) ?? DateTime.now(),
+      source: data['source'] as String?,
+      cardType: data['cardType'] as String?,
+      latitude: (data['latitude'] as num?)?.toDouble(),
+      longitude: (data['longitude'] as num?)?.toDouble(),
+      address: data['address'] as String?,
+      placeId: data['placeId'] as String?,
+      tag: data['tag'] as String?,
+      rating: data['rating'] as String?,
+      distanceSnapshot: data['distanceSnapshot'] as String?,
+      sessionId: data['sessionId'] as String?,
     );
   }
 
@@ -105,6 +143,16 @@ class ChatEvent {
       'chatId': chatId,
       'groupId': groupId,
       'createdAt': Timestamp.fromDate(createdAt),
+      'source': source,
+      'cardType': cardType,
+      'latitude': latitude,
+      'longitude': longitude,
+      'address': address,
+      'placeId': placeId,
+      'tag': tag,
+      'rating': rating,
+      'distanceSnapshot': distanceSnapshot,
+      'sessionId': sessionId,
     };
   }
 

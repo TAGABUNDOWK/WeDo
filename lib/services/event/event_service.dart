@@ -33,6 +33,16 @@ class EventService {
     bool showRsvpMessages = false,
     String? chatId,
     String? groupId,
+    String? source,
+    String? cardType,
+    double? latitude,
+    double? longitude,
+    String? address,
+    String? placeId,
+    String? tag,
+    String? rating,
+    String? distanceSnapshot,
+    String? sessionId,
   }) async {
     final eventRef = _events(chatId, groupId: groupId).doc();
     final eventData = ChatEvent(
@@ -49,6 +59,16 @@ class EventService {
       chatId: chatId,
       groupId: groupId,
       createdAt: DateTime.now(),
+      source: source,
+      cardType: cardType,
+      latitude: latitude,
+      longitude: longitude,
+      address: address,
+      placeId: placeId,
+      tag: tag,
+      rating: rating,
+      distanceSnapshot: distanceSnapshot,
+      sessionId: sessionId,
     );
     await eventRef.set(eventData.toFirestore());
     return eventRef.id;
