@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../models/event.dart';
@@ -460,58 +461,93 @@ class EventVoteOption extends StatelessWidget {
                       horizontal: 14,
                       vertical: 13,
                     ),
-                    child: Row(
-                      children: [
-                        if (isSelected) ...[
-                          const Icon(
-                            Icons.check_circle,
-                            size: 16,
-                            color: AppColors.lavenderAccent,
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                        Flexible(
-                          child: Text(
-                            label,
-                            style: TextStyle(
-                              color: isSelected
-                                  ? AppColors.textPrimary
-                                  : AppColors.textPrimary.withValues(alpha: 0.9),
-                              fontFamily: _fontFamily,
-                              fontWeight:
-                                  isSelected ? FontWeight.w700 : FontWeight.w600,
-                              fontSize: 14,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final rowWidth = constraints.maxWidth;
+                        final gapsAndIcon =
+                            (isSelected ? 24.0 : 0.0) + 16.0;
+                        final desiredAvatarWidth =
+                            EventVoteAvatarStack.widthFor(voters.length);
+                        final pillCap = rowWidth.isFinite
+                            ? math.min(
+                                110.0,
+                                math.max(0.0, rowWidth - gapsAndIcon),
+                              )
+                            : 110.0;
+                        final avatarCap = rowWidth.isFinite
+                            ? math.min(
+                                desiredAvatarWidth,
+                                math.max(
+                                  0.0,
+                                  rowWidth - gapsAndIcon - pillCap,
+                                ),
+                              )
+                            : desiredAvatarWidth;
+
+                        return Row(
+                          children: [
+                            if (isSelected) ...[
+                              const Icon(
+                                Icons.check_circle,
+                                size: 16,
+                                color: AppColors.lavenderAccent,
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            Expanded(
+                              child: Text(
+                                label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: isSelected
+                                      ? AppColors.textPrimary
+                                      : AppColors.textPrimary
+                                          .withValues(alpha: 0.9),
+                                  fontFamily: _fontFamily,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w700
+                                      : FontWeight.w600,
+                                  fontSize: 14,
+                                ),
+                              ),
                             ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.10),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            '$count · $percent%',
-                            style: TextStyle(
-                              color: AppColors.textSecondary.withValues(alpha: 0.9),
-                              fontFamily: _fontFamily,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 10,
+                            const SizedBox(width: 8),
+                            ConstrainedBox(
+                              constraints: BoxConstraints(maxWidth: pillCap),
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 7,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.10),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    '$count · $percent%',
+                                    style: TextStyle(
+                                      color: AppColors.textSecondary
+                                          .withValues(alpha: 0.9),
+                                      fontFamily: _fontFamily,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                        const Spacer(),
-                        if (voters.isNotEmpty)
-                          EventVoteAvatarStack(
-                            voters: voters,
-                            avatarBuilder: avatarBuilder,
-                          ),
-                      ],
+                            const SizedBox(width: 8),
+                            EventVoteAvatarStack(
+                              voters: voters,
+                              avatarBuilder: avatarBuilder,
+                              maxWidth: avatarCap,
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ),
                 ],
@@ -528,54 +564,94 @@ class EventVoteAvatarStack extends StatelessWidget {
   final List<String> voters;
   final Widget Function(String uid, double size) avatarBuilder;
 
+  /// Width budget the stack must never exceed. Avatars (and finally the
+  /// "+N" chip) are dropped when they don't fit.
+  final double maxWidth;
+
+  static const int _maxVisible = 4;
+  static const double _avatarSize = 24;
+  static const double _avatarStride = 16; // 24px avatar with 8px overlap
+  static const double _chipWidth = 27; // 3px gap + 24px pill
+
   const EventVoteAvatarStack({
     super.key,
     required this.voters,
     required this.avatarBuilder,
+    this.maxWidth = double.infinity,
   });
+
+  /// Full rendered width for [count] voters (capped at 4 avatars + "+N").
+  static double widthFor(int count) {
+    final visible = math.min(count, _maxVisible);
+    final avatars = visible == 0
+        ? 0.0
+        : _avatarSize + (visible - 1) * _avatarStride;
+    final chip = count > visible ? _chipWidth : 0.0;
+    return avatars + chip;
+  }
+
+  double _widthOf(int shown, int hidden) {
+    final avatars =
+        shown == 0 ? 0.0 : _avatarSize + (shown - 1) * _avatarStride;
+    return avatars + (hidden > 0 ? _chipWidth : 0.0);
+  }
 
   @override
   Widget build(BuildContext context) {
-    const maxVisible = 4;
-    final visible = voters.take(maxVisible).toList();
-    final remaining = voters.length - visible.length;
+    if (voters.isEmpty || maxWidth <= 0) return const SizedBox.shrink();
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (int i = visible.length - 1; i >= 0; i--)
-          Padding(
-            padding: EdgeInsets.only(left: i < visible.length - 1 ? -8 : 0),
-            child: avatarBuilder(visible[i], 24),
-          ),
-        if (remaining > 0)
-          Padding(
-            padding: const EdgeInsets.only(left: 3),
-            child: Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppColors.lavenderAccent.withValues(alpha: 0.18),
-                border: Border.all(
-                  color: AppColors.lavenderAccent.withValues(alpha: 0.4),
-                  width: 1,
+    var shown = math.min(voters.length, _maxVisible);
+    while (shown > 0 && _widthOf(shown, voters.length - shown) > maxWidth) {
+      shown--;
+    }
+
+    final hidden = voters.length - shown;
+    final showChip = hidden > 0 && maxWidth >= _widthOf(shown, hidden);
+    if (shown == 0 && !showChip) return const SizedBox.shrink();
+
+    final avatarWidth =
+        shown == 0 ? 0.0 : _avatarSize + (shown - 1) * _avatarStride;
+
+    return SizedBox(
+      width: avatarWidth + (showChip ? _chipWidth : 0),
+      height: _avatarSize,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (int i = 0; i < shown; i++)
+            Positioned(
+              left: i * _avatarStride,
+              child: avatarBuilder(voters[i], _avatarSize),
+            ),
+          if (showChip)
+            Positioned(
+              left: avatarWidth + 3,
+              child: Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.lavenderAccent.withValues(alpha: 0.18),
+                  border: Border.all(
+                    color: AppColors.lavenderAccent.withValues(alpha: 0.4),
+                    width: 1,
+                  ),
                 ),
-              ),
-              child: Center(
-                child: Text(
-                  '+$remaining',
-                  style: const TextStyle(
-                    color: AppColors.lavenderAccent,
-                    fontFamily: _fontFamily,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 9,
+                child: Center(
+                  child: Text(
+                    '+$hidden',
+                    style: const TextStyle(
+                      color: AppColors.lavenderAccent,
+                      fontFamily: _fontFamily,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 9,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -600,12 +676,16 @@ class EventRsvpLockRow extends StatelessWidget {
             color: AppColors.textSecondary.withValues(alpha: 0.5),
           ),
           const SizedBox(width: 6),
-          Text(
-            'Responses closed — event has ${ended ? "ended" : "not started"}',
-            style: TextStyle(
-              fontSize: 12,
-              color: AppColors.textSecondary.withValues(alpha: 0.5),
-              fontFamily: _fontFamily,
+          Flexible(
+            child: Text(
+              'Responses closed — event has ${ended ? "ended" : "not started"}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary.withValues(alpha: 0.5),
+                fontFamily: _fontFamily,
+              ),
             ),
           ),
         ],
