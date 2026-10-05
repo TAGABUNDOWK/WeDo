@@ -7,7 +7,6 @@ import '../../widgets/animated_background.dart';
 import '../../widgets/topic_card.dart';
 import 'waiting_lobby_screen.dart';
 import 'places/places_to_go_screen.dart';
-import 'places/where_to_eat_screen.dart';
 import 'movie/movie_category_screen.dart';
 import 'create_own_topic_screen.dart';
 
@@ -36,12 +35,6 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
       iconAsset: 'assets/icons/bolt.png',
       description: 'Get a surprise challenge and see what you get!',
       buttonText: 'START CHALLENGE',
-    ),
-    _HardcodedTopic(
-      title: 'Where should we eat?',
-      iconAsset: 'assets/icons/location.png',
-      description: "Can't decide on dinner? Pick the best spot to satisfy your cravings!",
-      buttonText: 'FIND FOOD',
     ),
     _HardcodedTopic(
       title: 'Nearby Go to Places',
@@ -195,9 +188,6 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
 
   String _topicIconAsset(String title) {
     final lower = title.toLowerCase();
-    if (lower.contains('eat') || lower.contains('food') || lower.contains('restaurant')) {
-      return 'assets/icons/location.png';
-    }
     if (lower.contains('place') || lower.contains('go') || lower.contains('visit')) {
       return 'assets/icons/nearby.png';
     }
@@ -213,8 +203,6 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
   void _navigateHardcoded(String title) {
     if (title == 'Random Challenge') {
       _handleRandomChallenge();
-    } else if (title == 'Where should we eat?') {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => const WhereToEatScreen()));
     } else if (title == 'Nearby Go to Places') {
       Navigator.push(context, MaterialPageRoute(builder: (_) => const PlacesToGoScreen()));
     } else if (title == 'Movies to watch') {
@@ -227,7 +215,7 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
       final randomTopic = (List<TopicEntity>.from(_topics)..shuffle()).first;
       await _createSession(randomTopic);
     } else {
-      final options = ['Where should we eat?', 'Nearby Go to Places', 'Movies to watch']..shuffle();
+      final options = ['Nearby Go to Places', 'Movies to watch']..shuffle();
       _navigateHardcoded(options.first);
     }
   }

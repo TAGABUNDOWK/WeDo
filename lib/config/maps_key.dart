@@ -7,9 +7,9 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 /// gitignored `.env` file (`MAPS_API_KEY=AIza...`), which [dotenv] loads
 /// before runApp (see `_appMain` in main.dart).
 ///
-/// The native map SDK reads a separate copy from
-/// `android/local.properties` (`MAPS_API_KEY=...`, also gitignored) —
-/// keep both in sync.
+/// The native map SDK reads the same `MAPS_API_KEY` from this project-root
+/// `.env` file — Gradle injects it into the AndroidManifest at build time
+/// (see `android/app/build.gradle.kts`).
 ///
 /// Optional override for CI/iOS builds:
 /// `flutter run --dart-define=MAPS_API_KEY=AIza...`
@@ -35,7 +35,7 @@ bool get mapsApiKeyIsConfigured =>
 /// Android-restricted keys validate REST calls via these headers
 /// (package name + debug/release certificate SHA-1, colons stripped).
 const String mapsAndroidPackage = 'com.example.choosly';
-const String mapsAndroidCert = 'A050F7C820309C0D08B0C7EF90BF5417F96ECD20';
+const String mapsAndroidCert = '8CC772132B8AFD5C2A3F74E2C74B4D1F122A756B';
 
 /// Headers every Google REST request must carry when the key carries an
 /// Android application restriction.

@@ -7,6 +7,7 @@ import '../../services/tri_race/tri_race_service.dart';
 import '../../services/tri_race/tri_race_refresh_notifier.dart';
 import '../../utils/constants.dart';
 import '../../widgets/animated_background.dart';
+import '../../widgets/recent_races_skeleton.dart';
 import 'create_tri_race_screen.dart';
 import 'waiting_lobby_screen.dart';
 import 'tri_race_results_screen.dart';
@@ -28,6 +29,7 @@ class _TriRaceEntryScreenState extends State<TriRaceEntryScreen> {
   final _codeFocusNode = FocusNode();
 
   bool _isJoining = false;
+  bool _isLoadingRaces = true;
   String? _error;
   List<TriRace> _recentRaces = const [];
   late final StreamSubscription<void> _refreshSub;
@@ -43,17 +45,23 @@ class _TriRaceEntryScreenState extends State<TriRaceEntryScreen> {
 
   Future<void> _loadSessions() async {
     final user = _currentUser;
-    if (user == null) return;
+    if (user == null) {
+      if (mounted) setState(() => _isLoadingRaces = false);
+      return;
+    }
+    setState(() => _isLoadingRaces = true);
     try {
       final races = await _service.getUserCompletedTriRaces(user.uid, limit: 3);
       if (!mounted) return;
       setState(() {
         _recentRaces = races;
+        _isLoadingRaces = false;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _recentRaces = const [];
+        _isLoadingRaces = false;
       });
     }
   }
@@ -332,7 +340,11 @@ class _TriRaceEntryScreenState extends State<TriRaceEntryScreen> {
                 const SizedBox(height: 24),
 
                 // ── Recent Races ──
-                if (_recentRaces.isNotEmpty) ...[
+                if (_currentUser != null &&
+                    _isLoadingRaces &&
+                    _recentRaces.isEmpty) ...[
+                  const RecentRacesSkeleton(),
+                ] else if (_recentRaces.isNotEmpty) ...[
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [

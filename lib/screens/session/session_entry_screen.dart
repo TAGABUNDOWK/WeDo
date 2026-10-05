@@ -6,6 +6,7 @@ import '../../models/session_entity.dart';
 import '../../services/session/session_service.dart';
 import '../../services/session/session_refresh_notifier.dart';
 import '../../widgets/animated_background.dart';
+import '../../widgets/recent_sessions_skeleton.dart';
 import 'all_sessions_screen.dart';
 import 'create_session_screen.dart';
 import 'results_screen.dart';
@@ -461,11 +462,8 @@ class _SessionEntryScreenState extends State<SessionEntryScreen> {
   Widget _buildRecentSessionsSection() {
     if (_currentUser == null) return const SizedBox.shrink();
 
-    if (_isLoadingSessions) {
-      return const SizedBox(
-        height: 120,
-        child: Center(child: CircularProgressIndicator()),
-      );
+    if (_isLoadingSessions && _recentSessions.isEmpty) {
+      return const RecentSessionsSkeleton();
     }
 
     if (_recentSessions.isEmpty) return const SizedBox.shrink();

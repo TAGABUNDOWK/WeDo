@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../models/admin_division.dart';
-import '../../../services/location/overpass_service.dart';
+import '../../../models/place_category.dart';
 import '../../../utils/location_data.dart';
 import 'city_places_screen.dart';
 

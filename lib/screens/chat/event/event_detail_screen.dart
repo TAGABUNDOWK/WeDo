@@ -565,18 +565,12 @@ class _RsvpActionRow extends StatefulWidget {
 class _RsvpActionRowState extends State<_RsvpActionRow> {
   final _eventService = EventService();
 
-  Future<void> _rsvp(String response) async {
-    final event = widget.event;
-    final now = DateTime.now();
-    final isStarted = now.isAfter(event.date);
-    final isEnded = event.endDate != null && now.isAfter(event.endDate!);
-    if (!isStarted || isEnded) return;
-    await _eventService.rsvpEvent(
-      eventId: widget.event.id,
+  Future<void> _rsvp(EventResponse response) async {
+    if (widget.event.isEnded) return;
+    await _eventService.submitResponse(
+      event: widget.event,
       uid: widget.currentUid,
       response: response,
-      chatId: widget.event.chatId,
-      groupId: widget.event.groupId,
     );
     widget.onRsvpChanged();
   }
@@ -584,38 +578,48 @@ class _RsvpActionRowState extends State<_RsvpActionRow> {
   @override
   Widget build(BuildContext context) {
     final event = widget.event;
-    final now = DateTime.now();
-    final isStarted = now.isAfter(event.date);
-    final isEnded = event.endDate != null && now.isAfter(event.endDate!);
-    final isLocked = !isStarted || isEnded;
-    final myRsvp = event.myRsvp(widget.currentUid);
+    final isLocked = event.isEnded;
+    final myResponse = event.myResponse(widget.currentUid);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-          Row(
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
               child: _RsvpButton(
-                label: 'Interested',
+                label: EventResponse.interested.label,
                 count: event.interestedCount,
-                isSelected: myRsvp == 'yes',
+                isSelected: myResponse == EventResponse.interested,
                 isActive: true,
                 isLocked: isLocked,
                 icon: Icons.check,
-                onTap: () => _rsvp('yes'),
+                onTap: () => _rsvp(EventResponse.interested),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: _RsvpButton(
-                label: 'Not Interested',
+                label: EventResponse.notSure.label,
+                count: event.notSureCount,
+                isSelected: myResponse == EventResponse.notSure,
+                isActive: false,
+                isLocked: isLocked,
+                icon: Icons.question_mark,
+                onTap: () => _rsvp(EventResponse.notSure),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _RsvpButton(
+                label: EventResponse.notInterested.label,
                 count: event.notInterestedCount,
-                isSelected: myRsvp == 'no',
+                isSelected: myResponse == EventResponse.notInterested,
                 isActive: false,
                 isLocked: isLocked,
                 icon: Icons.close,
-                onTap: () => _rsvp('no'),
+                onTap: () => _rsvp(EventResponse.notInterested),
               ),
             ),
           ],
@@ -628,7 +632,7 @@ class _RsvpActionRowState extends State<_RsvpActionRow> {
               Icon(Icons.lock, size: 12, color: AppColors.textSecondary.withValues(alpha: 0.5)),
               const SizedBox(width: 6),
               Text(
-                'RSVPs locked \u2014 event has ${isEnded ? "ended" : "not started"}',
+                'Responses closed \u2014 event has ended',
                 style: TextStyle(
                   fontSize: 12,
                   color: AppColors.textSecondary.withValues(alpha: 0.5),
@@ -711,6 +715,7 @@ class _RsvpButton extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               label,
+              textAlign: TextAlign.center,
               style: TextStyle(
                 color: textColor,
                 fontFamily: 'PlusJakartaSans',
