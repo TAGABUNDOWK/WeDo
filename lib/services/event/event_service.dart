@@ -33,6 +33,16 @@ class EventService {
     bool showRsvpMessages = false,
     String? chatId,
     String? groupId,
+    String? source,
+    String? cardType,
+    double? latitude,
+    double? longitude,
+    String? address,
+    String? placeId,
+    String? tag,
+    String? rating,
+    String? distanceSnapshot,
+    String? sessionId,
   }) async {
     final eventRef = _events(chatId, groupId: groupId).doc();
     final eventData = ChatEvent(
@@ -49,6 +59,16 @@ class EventService {
       chatId: chatId,
       groupId: groupId,
       createdAt: DateTime.now(),
+      source: source,
+      cardType: cardType,
+      latitude: latitude,
+      longitude: longitude,
+      address: address,
+      placeId: placeId,
+      tag: tag,
+      rating: rating,
+      distanceSnapshot: distanceSnapshot,
+      sessionId: sessionId,
     );
     await eventRef.set(eventData.toFirestore());
     return eventRef.id;
@@ -118,13 +138,13 @@ class EventService {
   /// Single write path for three-option voting, shared by the chat card and
   /// the detail screen: clears the RSVP when [uid] taps their current
   /// selection again (toggle off), otherwise writes [response]. No-ops while
-  /// RSVPs are locked (event not started / ended).
+  /// RSVPs are locked (event has ended).
   Future<void> submitResponse({
     required ChatEvent event,
     required String uid,
     required EventResponse response,
   }) async {
-    if (uid.isEmpty || !event.isStarted || event.isEnded) return;
+    if (uid.isEmpty || event.isEnded) return;
     if (event.myResponse(uid) == response) {
       await clearRsvp(
         eventId: event.id,

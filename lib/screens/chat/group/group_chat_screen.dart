@@ -27,6 +27,7 @@ import '../../../widgets/invite_message_card.dart';
 import '../../../widgets/tri_race_invite_message_card.dart';
 import '../../../widgets/group_invite_message_card.dart';
 import '../../../widgets/location_message_card.dart';
+import '../../../widgets/place_compare_sheet.dart';
 import '../../../widgets/composer_option.dart';
 import '../../../widgets/audio_recorder_button.dart';
 import '../../../widgets/swipe_reply_wrapper.dart';
@@ -1122,6 +1123,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                                 theme: t,
                                 onEventTap: evt != null
                                     ? () {
+                                        if (evt.isPlaceEvent) {
+                                          showPlaceCompareSheet(context, evt);
+                                          return;
+                                        }
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(

@@ -601,7 +601,7 @@ class EventRsvpLockRow extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            'RSVPs locked — event has ${ended ? "ended" : "not started"}',
+            'Responses closed — event has ${ended ? "ended" : "not started"}',
             style: TextStyle(
               fontSize: 12,
               color: AppColors.textSecondary.withValues(alpha: 0.5),

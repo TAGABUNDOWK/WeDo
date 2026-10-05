@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
+import 'package:http/http.dart' as http;
+import '../../../models/event_prefill.dart';
 import '../../../utils/constants.dart';
 import '../../../services/event/event_service.dart';
 import '../../../services/group/group_service.dart';
@@ -14,11 +16,13 @@ import '../../../widgets/chat_default_background.dart';
 class CreateEventScreen extends StatefulWidget {
   final String? groupId;
   final String? chatId;
+  final EventPrefill? prefill;
 
   const CreateEventScreen({
     super.key,
     this.groupId,
     this.chatId,
+    this.prefill,
   });
 
   @override
@@ -43,6 +47,45 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   bool _showRsvpMessages = false;
   bool _isCreating = false;
   File? _eventImage;
+
+  // Populated only when a PickFight prefill's cover image could not be
+  // downloaded — used as the event's imageUrl directly instead of an upload.
+  String? _prefillImageUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _applyPrefill();
+  }
+
+  /// Fills the existing form from a PickFight [EventPrefill]. All controls
+  /// and the whole creation path below stay exactly as they were — this only
+  /// seeds the fields.
+  Future<void> _applyPrefill() async {
+    final p = widget.prefill;
+    if (p == null) return;
+
+    _titleCtrl.text = p.title;
+    _descCtrl.text = p.description;
+    if (p.location != null && p.location!.isNotEmpty) {
+      _locationCtrl.text = p.location!;
+    }
+    _startDuration = const Duration(hours: 1);
+
+    final url = p.imageUrl;
+    if (url == null || url.isEmpty) return;
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
+        final dir = await Directory.systemTemp.createTemp('wedo_event_');
+        final file = File('${dir.path}/cover.jpg');
+        await file.writeAsBytes(response.bodyBytes, flush: true);
+        if (mounted) setState(() => _eventImage = file);
+        return;
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _prefillImageUrl = url);
+  }
 
   static const _startOptions = <MapEntry<String, Duration>>[
     MapEntry('In 5 minutes', Duration(minutes: 5)),
@@ -323,10 +366,20 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         dressCode: _dressCodeCtrl.text.trim().isEmpty
             ? null
             : _dressCodeCtrl.text.trim(),
-        imageUrl: imageUrl,
+        imageUrl: imageUrl ?? _prefillImageUrl,
         showRsvpMessages: _showRsvpMessages,
         chatId: widget.chatId,
         groupId: widget.groupId,
+        source: widget.prefill != null ? 'pickfight' : null,
+        cardType: widget.prefill?.cardType,
+        latitude: widget.prefill?.latitude,
+        longitude: widget.prefill?.longitude,
+        address: widget.prefill?.address,
+        placeId: widget.prefill?.placeId,
+        tag: widget.prefill?.tag,
+        rating: widget.prefill?.rating,
+        distanceSnapshot: widget.prefill?.distanceSnapshot,
+        sessionId: widget.prefill?.sessionId,
       );
 
       if (widget.groupId != null) {
@@ -575,7 +628,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'Show RSVP messages',
+                              'Show response messages',
                               style: TextStyle(
                                 color: AppColors.textPrimary,
                                 fontFamily: 'PlusJakartaSans',
@@ -585,7 +638,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Post a message when someone changes their RSVP',
+                              'Post a message when someone changes their response',
                               style: TextStyle(
                                 color: AppColors.textSecondary.withValues(alpha: 0.7),
                                 fontFamily: 'PlusJakartaSans',
