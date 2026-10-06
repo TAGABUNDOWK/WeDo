@@ -57,6 +57,7 @@ class CallManager extends ChangeNotifier {
   StreamSubscription? _webrtcRemoteStreamSub;
   Timer? _groupCallDebounce;
   Timer? _callTimer;
+  Timer? _heartbeatTimer;
   Timer? _outgoingRingTimeout;
   int _callDuration = 0;
   final ValueNotifier<int> _durationNotifier = ValueNotifier<int>(0);
@@ -75,6 +76,7 @@ class CallManager extends ChangeNotifier {
   bool _isRejoining = false;
   bool _outgoingScreenVisible = false;
   int _participantCount = 0;
+  final Map<String, bool> _peerVideoOff = {};
   ActiveCallData? _leftCall;
   StreamSubscription? _leftWatchCallSub;
   StreamSubscription? _leftWatchParticipantsSub;
@@ -100,6 +102,12 @@ class CallManager extends ChangeNotifier {
       _remoteRenderers.isNotEmpty ? _remoteRenderers.values.first : null;
   int get remoteParticipantCount => _remoteRenderers.length;
 
+  /// True when [uid]'s camera is off - peers publish this on their
+  /// participant doc, because a receiver cannot detect the sender muting
+  /// its video track (the local `track.enabled` check would keep showing
+  /// the black texture instead of the profile picture).
+  bool isPeerVideoOff(String uid) => _peerVideoOff[uid] ?? false;
+
   /// Participants Firestore currently reports as `active` in the call this
   /// device is in (or is waiting to rejoin). 0 when there is no such call.
   int get participantCount => _participantCount;
@@ -119,6 +127,25 @@ class CallManager extends ChangeNotifier {
 
   void setOutgoingLocalStream(MediaStream? stream) {
     _outgoingLocalStream = stream;
+  }
+
+  void _startHeartbeat(String callId, String uid) {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer =
+        Timer.periodic(const Duration(seconds: 20), (_) async {
+      try {
+        await _callService
+            .touchParticipant(callId, uid)
+            .timeout(const Duration(seconds: 5));
+      } catch (e) {
+        debugPrint('Call heartbeat failed: $e');
+      }
+    });
+  }
+
+  void _stopHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
   }
 
   void trackOutgoingCall({
@@ -385,6 +412,7 @@ class CallManager extends ChangeNotifier {
   void _abortCallStart() {
     _callTimer?.cancel();
     _callTimer = null;
+    _stopHeartbeat();
     _callSub?.cancel();
     _callSub = null;
     _signalsSub?.cancel();
@@ -408,6 +436,7 @@ class CallManager extends ChangeNotifier {
     _processedSignals.clear();
     _activeCall = null;
     _participantCount = 0;
+    _peerVideoOff.clear();
     _callDuration = 0;
     _durationNotifier.value = 0;
     WakelockPlus.disable();
@@ -467,6 +496,7 @@ class CallManager extends ChangeNotifier {
     _leftCall = null;
     _stopLeftCallWatch();
     _participantCount = 0;
+    _peerVideoOff.clear();
 
     _webrtcService = webrtc.WebRTCService();
     _localStreamController = StreamController<MediaStream>.broadcast();
@@ -618,6 +648,12 @@ class CallManager extends ChangeNotifier {
     };
 
     await _callService.joinCall(callData.callId, user.uid);
+    _startHeartbeat(callData.callId, user.uid);
+    if (audioOnly) {
+      // No camera track at all on an audio call - tell peers right away so
+      // they never wait for video that cannot arrive.
+      unawaited(_publishVideoState(callData.callId, user.uid, videoOff: true));
+    }
 
     _callSub = _callService.getCallStream(callData.callId).listen((call) {
       if (call == null ||
@@ -684,42 +720,43 @@ class CallManager extends ChangeNotifier {
       }
     });
 
-    if (callData.isGroup) {
-      _participantsSub =
-          _callService.getParticipantsStream(callData.callId).listen((snapshot) {
-        _updateParticipantCount(snapshot.docs
-            .map((doc) => doc.data())
-            .toList());
-        for (final doc in snapshot.docs) {
-          final data = doc.data();
-          final uid = data['uid'] as String?;
-          final status = data['status'] as String?;
-          if (uid == null || uid == user.uid) continue;
-          if (status == 'active') {
-            _departedPeers.remove(uid);
-            if (!_pendingOfferPeers.contains(uid) &&
-                !_reconnectingPeers.contains(uid)) {
-              _createGroupOfferTo(uid);
-            }
-          } else {
-            _departedPeers.add(uid);
-            _purgeSignalsForPeer(uid);
-            _reconnectTimers[uid]?.cancel();
-            _reconnectTimers.remove(uid);
-            _reconnectTimers['offer_$uid']?.cancel();
-            _reconnectTimers.remove('offer_$uid');
-            _reconnectingPeers.remove(uid);
-            _pendingOfferPeers.remove(uid);
-            _outgoingOfferPeers.remove(uid);
-            _noPcSince.remove(uid);
-            final key = webrtc.WebRTCService.pcKeyForTest(user.uid, uid);
-            _webrtcService?.peerConnections.remove(key)?.close();
-            _disposeRemoteRenderer(uid);
-            notifyListeners();
+    _participantsSub =
+        _callService.getParticipantsStream(callData.callId).listen((snapshot) {
+      final docs = snapshot.docs.map((doc) => doc.data()).toList();
+      _updateParticipantCount(docs);
+      _applyVideoOffStates(docs, user.uid);
+
+      if (!callData.isGroup) return;
+      for (final data in docs) {
+        final uid = data['uid'] as String?;
+        if (uid == null || uid == user.uid) continue;
+        // Stale heartbeats count as gone: a peer whose app crashed leaves an
+        // 'active' doc behind, and offering to it (or keeping its zombie
+        // renderer) would strand the call in a black screen forever.
+        if (CallService.isLiveParticipant(data)) {
+          _departedPeers.remove(uid);
+          if (!_pendingOfferPeers.contains(uid) &&
+              !_reconnectingPeers.contains(uid)) {
+            _createGroupOfferTo(uid);
           }
+        } else {
+          _departedPeers.add(uid);
+          _purgeSignalsForPeer(uid);
+          _reconnectTimers[uid]?.cancel();
+          _reconnectTimers.remove(uid);
+          _reconnectTimers['offer_$uid']?.cancel();
+          _reconnectTimers.remove('offer_$uid');
+          _reconnectingPeers.remove(uid);
+          _pendingOfferPeers.remove(uid);
+          _outgoingOfferPeers.remove(uid);
+          _noPcSince.remove(uid);
+          final key = webrtc.WebRTCService.pcKeyForTest(user.uid, uid);
+          _webrtcService?.peerConnections.remove(key)?.close();
+          _disposeRemoteRenderer(uid);
+          notifyListeners();
         }
-      });
-    }
+      }
+    });
 
     if (callData.createdBy == user.uid && !callData.isGroup) {
       for (final memberUid in callData.members) {
@@ -752,15 +789,46 @@ class CallManager extends ChangeNotifier {
   }
 
   /// Recomputes the number of participants Firestore reports as active and
-  /// notifies only when it actually changed.
+  /// notifies only when it actually changed. Stale heartbeats don't count -
+  /// otherwise a zombie doc would make an empty call look occupied.
   void _updateParticipantCount(List<Map<String, dynamic>> docs) {
     var count = 0;
     for (final data in docs) {
-      if (data['status'] == 'active') count++;
+      if (CallService.isLiveParticipant(data)) count++;
     }
     if (count == _participantCount) return;
     _participantCount = count;
     notifyListeners();
+  }
+
+  /// Mirrors each live peer's `videoOff` flag into [_peerVideoOff], pruning
+  /// entries for peers that have left, so the UI can swap the black video
+  /// texture for the peer's profile picture.
+  void _applyVideoOffStates(List<Map<String, dynamic>> docs, String myUid) {
+    var changed = false;
+    final liveUids = <String>{};
+    for (final data in docs) {
+      final uid = data['uid'] as String?;
+      if (uid == null || uid == myUid) continue;
+      if (!CallService.isLiveParticipant(data)) continue;
+      liveUids.add(uid);
+      final off = data['videoOff'] == true;
+      if ((_peerVideoOff[uid] ?? false) != off) {
+        changed = true;
+        if (off) {
+          _peerVideoOff[uid] = true;
+        } else {
+          _peerVideoOff.remove(uid);
+        }
+      }
+    }
+    for (final uid in _peerVideoOff.keys.toList()) {
+      if (!liveUids.contains(uid)) {
+        _peerVideoOff.remove(uid);
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
   }
 
   String _signalSignature(Map<String, dynamic> data) {
@@ -862,34 +930,107 @@ class CallManager extends ChangeNotifier {
     }
   }
 
-  Future<void> _sendCallMessage({String callStatus = 'active'}) async {
+  Future<void> _sendCallMessageFor(
+    ActiveCallData? call,
+    int duration,
+    String callStatus,
+  ) async {
+    if (call == null) return;
+
     final user = _currentUser;
-    if (user == null || _activeCall == null) return;
+    if (user == null) return;
 
     final uid = user.uid;
     final userName = user.displayName ?? user.email ?? 'Unknown';
-    final callTypeStr =
-        _activeCall!.callType == CallType.video ? 'video' : 'audio';
-    final duration = _callDuration;
+    final callTypeStr = call.callType == CallType.video ? 'video' : 'audio';
 
-    if (_activeCall!.isGroup && _activeCall!.groupId != null) {
+    if (call.isGroup && call.groupId != null) {
       await GroupService().sendCallMessage(
-        groupId: _activeCall!.groupId!,
+        groupId: call.groupId!,
         senderId: uid,
         senderName: userName,
         callType: callTypeStr,
         callStatus: callStatus,
         durationSeconds: duration,
       );
-    } else if (_activeCall!.chatId != null) {
+    } else if (call.chatId != null) {
       await DirectService().sendCallMessage(
-        chatId: _activeCall!.chatId!,
+        chatId: call.chatId!,
         senderId: uid,
         senderName: userName,
         callType: callTypeStr,
         callStatus: callStatus,
         durationSeconds: duration,
       );
+    }
+  }
+
+  /// Remote bookkeeping after the call has been torn down locally: the chat
+  /// message, the participant's leave and (once nobody is left) the data
+  /// cleanup. Runs detached with a hard timeout per step, because a Firestore
+  /// write on a dead connection used to hang forever and leave the user
+  /// stuck on a black call screen with no working end button.
+  ///
+  /// Returns when everything best-effort has been attempted; failures are
+  /// logged, never surfaced, since the call is already over locally.
+  Future<void> _finishRemoteHangup({
+    required String callId,
+    required String? uid,
+    required ActiveCallData? callContext,
+    required int duration,
+    required String callMessageStatus,
+    required bool isLeave,
+  }) async {
+    const budget = Duration(seconds: 5);
+
+    try {
+      await _sendCallMessageFor(callContext, duration, callMessageStatus)
+          .timeout(budget);
+    } catch (e) {
+      debugPrint('Error sending call message: $e');
+    }
+
+    var callFinished = false;
+    if (uid != null && uid.isNotEmpty) {
+      try {
+        callFinished =
+            await _callService.leaveCall(callId, uid).timeout(budget);
+      } catch (e) {
+        debugPrint('Error leaving call: $e');
+      }
+      if (isLeave || !callFinished) {
+        try {
+          await _callService
+              .deleteUserSignals(callId, uid)
+              .timeout(budget);
+        } catch (e) {
+          debugPrint('Error deleting user call signals: $e');
+        }
+      }
+    } else {
+      try {
+        await _callService.endCall(callId).timeout(budget);
+        callFinished = true;
+      } catch (e) {
+        debugPrint('Error ending call: $e');
+      }
+    }
+
+    if (callFinished) {
+      // Only wipe the call's signals/participants once nobody is in it any
+      // more - doing this while others are still talking silently destroys
+      // their signaling and makes rejoin impossible for everyone.
+      await Future.delayed(const Duration(seconds: 2));
+      try {
+        await _callService.cleanupCallData(callId, uid).timeout(budget);
+      } catch (e) {
+        debugPrint('Error cleaning up call data: $e');
+      }
+      // We optimistically offered a rejoin while leaving; drop it now that
+      // the call is confirmed dead.
+      if (isLeave && _leftCall?.callId == callId) {
+        _clearLeftCall();
+      }
     }
   }
 
@@ -909,8 +1050,16 @@ class CallManager extends ChangeNotifier {
     removeCallOverlay();
 
     final callId = _activeCall!.callId;
+    final uid = _currentUser?.uid;
+    final callContext = _activeCall;
+    final duration = _callDuration;
+    final callMessageStatus = duration > 0 ? 'active' : 'ended';
 
+    // Local teardown first: every subscription, timer and reference is torn
+    // down before we touch Firestore, so a hanging remote write can never
+    // freeze the UI on a call the user already left.
     _callTimer?.cancel();
+    _stopHeartbeat();
     _callSub?.cancel();
     _signalsSub?.cancel();
     _participantsSub?.cancel();
@@ -925,37 +1074,11 @@ class CallManager extends ChangeNotifier {
     _reconnectTimers.clear();
     _reconnectingPeers.clear();
 
-    final callMessageStatus = _callDuration > 0 ? 'active' : 'ended';
-    try {
-      await _sendCallMessage(callStatus: callMessageStatus);
-    } catch (e) {
-      // A failed chat message must never block hanging up.
-      debugPrint('Error sending end-call message: $e');
-    }
-
-    // Whether the call itself is now over for everybody (as opposed to just
-    // us having stepped out of a call other people are still in).
-    var callFinished = false;
-    final uid = _currentUser?.uid;
-    if (uid != null && uid.isNotEmpty) {
-      try {
-        callFinished = await _callService.leaveCall(callId, uid);
-      } catch (e) {
-        debugPrint('Error leaving call: $e');
-      }
-    } else {
-      try {
-        await _callService.endCall(callId);
-        callFinished = true;
-      } catch (e) {
-        debugPrint('Error ending call: $e');
-      }
-    }
-
     _activeCall = null;
     _callDuration = 0;
     _durationNotifier.value = 0;
     _participantCount = 0;
+    _peerVideoOff.clear();
     _processedSignals.clear();
     _pendingOfferPeers.clear();
     _outgoingOfferPeers.clear();
@@ -981,6 +1104,15 @@ class CallManager extends ChangeNotifier {
 
     notifyListeners();
 
+    unawaited(_finishRemoteHangup(
+      callId: callId,
+      uid: uid,
+      callContext: callContext,
+      duration: duration,
+      callMessageStatus: callMessageStatus,
+      isLeave: false,
+    ));
+
     Future.microtask(() async {
       if (oldWebrtc != null) {
         await oldWebrtc.dispose();
@@ -995,25 +1127,6 @@ class CallManager extends ChangeNotifier {
       for (final renderer in oldRemoteRenderers.values) {
         renderer.srcObject = null;
         renderer.dispose();
-      }
-
-      if (callFinished) {
-        // Only wipe the call's signals/participants once nobody is in it any
-        // more - doing this while others are still talking silently destroys
-        // their signaling and makes rejoin impossible for everyone.
-        Future.delayed(const Duration(seconds: 2), () async {
-          try {
-            await _callService.cleanupCallData(callId);
-          } catch (e) {
-            debugPrint('Error cleaning up call data: $e');
-          }
-        });
-      } else if (uid != null && uid.isNotEmpty) {
-        try {
-          await _callService.deleteUserSignals(callId, uid);
-        } catch (e) {
-          debugPrint('Error deleting user call signals: $e');
-        }
       }
     });
   }
@@ -1030,10 +1143,15 @@ class CallManager extends ChangeNotifier {
 
   Future<void> _leaveGroupCallInternal() async {
     final callId = _activeCall!.callId;
+    final uid = _currentUser?.uid;
+    final callContext = _activeCall;
+    final duration = _callDuration;
+    final callMessageStatus = duration > 0 ? 'active' : 'ended';
 
     removeCallOverlay();
 
     _callTimer?.cancel();
+    _stopHeartbeat();
     _callSub?.cancel();
     _signalsSub?.cancel();
     _participantsSub?.cancel();
@@ -1052,45 +1170,18 @@ class CallManager extends ChangeNotifier {
     _noPcSince.clear();
     _processedSignals.clear();
     _departedPeers.clear();
-
-    final callMessageStatus = _callDuration > 0 ? 'active' : 'ended';
-    try {
-      await _sendCallMessage(callStatus: callMessageStatus);
-    } catch (e) {
-      // A failed chat message must never block leaving the call.
-      debugPrint('Error sending leave-call message: $e');
-    }
-
-    // true when we were the last one out and the call ended with us.
-    var callFinished = false;
-    final uid = _currentUser?.uid;
-    if (uid != null && uid.isNotEmpty) {
-      try {
-        callFinished = await _callService.leaveCall(callId, uid);
-      } catch (e) {
-        debugPrint('Error leaving call: $e');
-      }
-      try {
-        await _callService.deleteUserSignals(callId, uid);
-      } catch (e) {
-        debugPrint('Error deleting user call signals: $e');
-      }
-    }
-
-    // Nothing left to rejoin when the call died with us, so don't offer it.
-    final leftCall = callFinished ? null : _activeCall;
+    _peerVideoOff.clear();
 
     _activeCall = null;
     _callDuration = 0;
     _durationNotifier.value = 0;
+    _participantCount = 0;
     WakelockPlus.disable();
-    _leftCall = leftCall;
-    if (leftCall == null) {
-      _participantCount = 0;
-      _stopLeftCallWatch();
-    }
 
-    if (leftCall != null) _startLeftCallWatch(callId);
+    // Optimistically keep offering a rejoin until the detached leaveCall
+    // (or the watch on the call/participants docs) proves nobody is left.
+    _leftCall = callContext;
+    _startLeftCallWatch(callId);
 
     final oldWebrtc = _webrtcService;
     final oldLocalCtrl = _localStreamController;
@@ -1108,6 +1199,15 @@ class CallManager extends ChangeNotifier {
 
     notifyListeners();
 
+    unawaited(_finishRemoteHangup(
+      callId: callId,
+      uid: uid,
+      callContext: callContext,
+      duration: duration,
+      callMessageStatus: callMessageStatus,
+      isLeave: true,
+    ));
+
     Future.microtask(() async {
       if (oldWebrtc != null) {
         await oldWebrtc.dispose();
@@ -1122,16 +1222,6 @@ class CallManager extends ChangeNotifier {
       for (final renderer in oldRemoteRenderers.values) {
         renderer.srcObject = null;
         renderer.dispose();
-      }
-
-      if (callFinished) {
-        Future.delayed(const Duration(seconds: 2), () async {
-          try {
-            await _callService.cleanupCallData(callId);
-          } catch (e) {
-            debugPrint('Error cleaning up call data: $e');
-          }
-        });
       }
     });
   }
@@ -1177,9 +1267,8 @@ class CallManager extends ChangeNotifier {
         _updateParticipantCount(snapshot.docs.map((doc) => doc.data()).toList());
         final hasOtherActive = snapshot.docs.any((doc) {
           final data = doc.data();
-          final status = data['status'] as String?;
           final uid = data['uid'] as String? ?? doc.id;
-          return status == 'active' && uid != myUid;
+          return CallService.isLiveParticipant(data) && uid != myUid;
         });
         if (!hasOtherActive) {
           _clearLeftCall();
@@ -1198,9 +1287,8 @@ class CallManager extends ChangeNotifier {
           .timeout(const Duration(seconds: 10));
       return snapshot.docs.any((doc) {
         final data = doc.data();
-        final status = data['status'] as String?;
         final uid = data['uid'] as String? ?? doc.id;
-        return status == 'active' && uid != myUid;
+        return CallService.isLiveParticipant(data) && uid != myUid;
       });
     } catch (_) {
       // Can't verify; assume someone is still there so rejoin stays available.
@@ -1385,6 +1473,28 @@ class CallManager extends ChangeNotifier {
     _isVideoOff = !_isVideoOff;
     _webrtcService?.setVideoEnabled(!_isVideoOff);
     notifyListeners();
+
+    final call = _activeCall;
+    final uid = _currentUser?.uid;
+    if (call == null || uid == null) return;
+    unawaited(_publishVideoState(call.callId, uid, videoOff: _isVideoOff));
+  }
+
+  /// Publishes the camera state on our participant doc. Peers can't detect a
+  /// remote mute (their track just renders black), so without this flag the
+  /// other side would stare at a black rectangle instead of our photo.
+  Future<void> _publishVideoState(
+    String callId,
+    String uid, {
+    required bool videoOff,
+  }) async {
+    try {
+      await _callService
+          .setVideoState(callId, uid, videoOff: videoOff)
+          .timeout(const Duration(seconds: 5));
+    } catch (e) {
+      debugPrint('Error publishing video state: $e');
+    }
   }
 
   void toggleSpeaker() {

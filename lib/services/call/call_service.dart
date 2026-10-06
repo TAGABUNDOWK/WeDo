@@ -61,8 +61,61 @@ class CallService {
     await _participants(callId).doc(uid).set({
       'uid': uid,
       'joinedAt': FieldValue.serverTimestamp(),
+      'lastSeen': FieldValue.serverTimestamp(),
       'status': 'active',
+      'videoOff': false,
     });
+  }
+
+  /// Refreshes this member's liveness marker. A heartbeat is written every
+  /// 20s while a call is active, so everyone else (and the scheduled reaper)
+  /// can tell a live participant from a doc left behind by a crashed or
+  /// force-closed app - without it a call could never be ended by anyone.
+  Future<void> touchParticipant(String callId, String uid) async {
+    await _participants(callId).doc(uid).update({
+      'lastSeen': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Publishes whether this member's camera is off so peers can show their
+  /// profile picture instead of a black video texture (a receiver cannot
+  /// detect the sender muting its track).
+  Future<void> setVideoState(
+    String callId,
+    String uid, {
+    required bool videoOff,
+  }) async {
+    await _participants(callId).doc(uid).update({'videoOff': videoOff});
+  }
+
+  /// A participant counts as being in the call only while their status is
+  /// 'active' AND their heartbeat is fresh. Docs written before the
+  /// heartbeat existed (no `lastSeen` field) keep the old status-only
+  /// behaviour, so mixed app versions never end a live call early.
+  static bool isLiveParticipant(
+    Map<String, dynamic> data, {
+    DateTime? now,
+  }) {
+    if (data['status'] != 'active') return false;
+    final lastSeen = data['lastSeen'];
+    if (lastSeen is! Timestamp) return true;
+    // abs(): tolerate modest client/server clock skew in either direction.
+    final age = (now ?? DateTime.now()).difference(lastSeen.toDate()).abs();
+    return age <= const Duration(seconds: 90);
+  }
+
+  /// An already-active call in [chatId] that [uid] is a member of - used to
+  /// stop the direct-chat button from firing a second, parallel call.
+  Future<Call?> findActiveDirectCall(String chatId, String uid) async {
+    // Status-only query: served by the automatic single-field index, so no
+    // composite index is required for this lookup.
+    final snap =
+        await _calls.where('status', isEqualTo: CallStatus.active.value).get();
+    for (final doc in snap.docs) {
+      final call = Call.fromFirestore(doc);
+      if (call.chatId == chatId && call.members.contains(uid)) return call;
+    }
+    return null;
   }
 
   Future<void> endCall(String callId) async {
@@ -116,7 +169,12 @@ class CallService {
 
     // The call is over as soon as the last participant walks out, whoever
     // that happens to be - not just when the creator is the one leaving.
-    if (activeParticipants.docs.isEmpty) {
+    // Docs whose heartbeat went stale (crashed/killed apps) don't count as
+    // being here any more, otherwise a zombie participant could keep a call
+    // alive that nobody can end.
+    final anyoneLive =
+        activeParticipants.docs.any((doc) => isLiveParticipant(doc.data()));
+    if (!anyoneLive) {
       await endCall(callId);
       return true;
     }
@@ -311,14 +369,18 @@ class CallService {
     await batch.commit();
   }
 
-  Future<void> cleanupCallData(String callId) async {
+  /// Best-effort cleanup after a call is over. Clients may only delete their
+  /// OWN participant doc (see firestore.rules), so everything else is left to
+  /// the scheduled reaper - a batch that touched other members' docs would be
+  /// denied and fail atomically, deleting nothing at all.
+  Future<void> cleanupCallData(String callId, String? uid) async {
     await deleteCallSignals(callId);
-    final participants = await _participants(callId).get();
-    final batch = _db.batch();
-    for (final doc in participants.docs) {
-      batch.delete(doc.reference);
+    if (uid == null || uid.isEmpty) return;
+    try {
+      await _participants(callId).doc(uid).delete();
+    } catch (e) {
+      debugPrint('Error deleting own participant doc: $e');
     }
-    await batch.commit();
   }
 
   void dispose() {

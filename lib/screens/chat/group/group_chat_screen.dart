@@ -134,8 +134,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     _callParticipantsSub =
         _callService.getParticipantsStream(callId).listen((snapshot) {
       if (!mounted) return;
-      final count =
-          snapshot.docs.where((d) => d.data()['status'] == 'active').length;
+      // Live participants only: a crashed peer's leftover 'active' doc
+      // would otherwise keep the "join call" banner up on a call nobody
+      // is in any more.
+      final count = snapshot.docs
+          .where((d) => CallService.isLiveParticipant(d.data()))
+          .length;
       if (count == _discoveredActiveCount) return;
       _discoveredActiveCount = count;
       _callUiSignature = _computeCallUiSignature();
