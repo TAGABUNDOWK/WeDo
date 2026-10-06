@@ -125,7 +125,11 @@ class _CallScreenState extends State<CallScreen> {
       buffer.write('|L${_hasActiveVideo(mgr.localRenderer!)}');
     }
     for (final entry in mgr.remoteRenderers.entries) {
-      buffer.write('|${entry.key}:${_hasActiveVideo(entry.value)}');
+      // Video-off is part of the signature: a peer toggling their camera
+      // must repaint the tile from video back to avatar (or vice versa)
+      // even when no frame event ever fires.
+      buffer.write(
+          '|${entry.key}:${_hasActiveVideo(entry.value)}:${mgr.isPeerVideoOff(entry.key)}');
     }
     return buffer.toString();
   }
@@ -158,18 +162,32 @@ class _CallScreenState extends State<CallScreen> {
   Future<void> _endCall() async {
     if (_isEndingCall) return;
     _isEndingCall = true;
-    await _callManager.endActiveCall();
-    if (mounted) {
-      _exitToChat();
-    }
+    await _hangUp(_callManager.endActiveCall);
   }
 
   Future<void> _leaveGroupCall() async {
     if (_isEndingCall) return;
     _isEndingCall = true;
-    await _callManager.leaveGroupCall();
-    if (mounted) {
+    await _hangUp(_callManager.leaveGroupCall);
+  }
+
+  /// Runs a teardown with a hard deadline. CallManager has already cleared
+  /// its local state synchronously, so if the remote Firestore writes stall
+  /// (offline, dead network) we still leave the screen - an end button that
+  /// hangs forever used to trap people on a black call they couldn't exit.
+  Future<void> _hangUp(Future<void> Function() teardown) async {
+    try {
+      await teardown().timeout(const Duration(seconds: 8));
+    } catch (e) {
+      debugPrint('Call teardown did not finish cleanly: $e');
+    }
+    if (!mounted) return;
+    try {
       _exitToChat();
+    } catch (e) {
+      debugPrint('Error leaving call screen: $e');
+      // Navigation failed, so the latch must open again or the button dies.
+      _isEndingCall = false;
     }
   }
 
@@ -306,10 +324,30 @@ class _CallScreenState extends State<CallScreen> {
     return videoTracks.any((track) => track.enabled);
   }
 
+  /// Whether the tile for remote peer [uid] should show live video. A peer
+  /// muting their camera doesn't change anything on our side (their track
+  /// keeps sending black frames), so their `videoOff` flag on the
+  /// participant doc is what turns the black rectangle into their photo.
+  bool _peerHasVideo(String uid) {
+    if (_callManager.isPeerVideoOff(uid)) return false;
+    final renderer = _callManager.remoteRenderers[uid];
+    return renderer != null && _hasActiveVideo(renderer);
+  }
+
   bool get _hasRemoteStream =>
       _callManager.remoteRenderers.values.any((r) => r.srcObject != null);
 
   bool get _hasLocalStream => _callManager.localRenderer?.srcObject != null;
+
+  /// Whether the tile for [participant] shows video: local frames directly,
+  /// remote frames only when their camera is actually on.
+  bool _hasVideoFor(_Participant participant) {
+    if (participant.isLocal) {
+      final renderer = participant.renderer;
+      return renderer != null && _hasActiveVideo(renderer);
+    }
+    return _peerHasVideo(participant.uid);
+  }
 
   Widget _buildParticipantAvatar({
     required String uid,
@@ -405,7 +443,12 @@ class _CallScreenState extends State<CallScreen> {
                       onDoubleTap: _focusedPeerId != null ? _flipCamera : null,
                       child: _buildGroupView(constraints),
                     ),
-                    if (_hasLocalStream) _buildDraggablePip(constraints),
+                    // With nobody else's video on screen the PiP would just
+                    // duplicate the full-bleed self view - hide it until a
+                    // remote renderer exists.
+                    if (_hasLocalStream &&
+                        _callManager.remoteRenderers.isNotEmpty)
+                      _buildDraggablePip(constraints),
                   ] else ...[
                     _buildVideoBackground(),
                     if (_hasRemoteStream && _hasLocalStream)
@@ -468,8 +511,11 @@ class _CallScreenState extends State<CallScreen> {
 
     switch (participants.length) {
       case 0:
-        // The shared waiting overlay is rendered on top by build().
-        return const SizedBox.shrink();
+        // Nobody's video is in yet (waiting to connect, or we're the last
+        // one left). Show our own feed full screen instead of the bare
+        // near-black scaffold, which read as a frozen/black screen; the
+        // shared waiting overlay is rendered on top by build().
+        return _buildAloneInCallView();
       case 1:
         return Stack(children: [
           _buildParticipantTile(participants[0], constraints),
@@ -484,6 +530,21 @@ class _CallScreenState extends State<CallScreen> {
         return _buildGridParticipantView(participants, constraints);
     }
   }
+
+  /// Background while no remote video exists: our own mirrored camera when
+  /// it is running, otherwise the call's background colour - never an empty
+  /// (near-black) scaffold.
+  Widget _buildAloneInCallView() {
+    final local = _callManager.localRenderer;
+    if (local != null && _hasActiveVideo(local)) {
+      return Stack(children: [_buildFullBleedVideo(local, mirror: true)]);
+    }
+    return const ColoredBox(color: Color(0xFF2D1B69));
+  }
+
+  /// True when a group call has no one but us still in it.
+  bool get _isAloneInGroupCall =>
+      widget.isGroup && _callManager.participantCount <= 1;
 
   Widget _buildParticipantLabel(
     String text, {
@@ -518,8 +579,7 @@ class _CallScreenState extends State<CallScreen> {
 
   Widget _buildParticipantTile(
       _Participant participant, BoxConstraints constraints) {
-    final hasVideo =
-        participant.renderer != null && _hasActiveVideo(participant.renderer!);
+    final hasVideo = _hasVideoFor(participant);
     final label = participant.isLocal
         ? 'You'
         : _getParticipantName(participant.uid);
@@ -660,8 +720,7 @@ class _CallScreenState extends State<CallScreen> {
   }
 
   Widget _buildParticipantTileInContainer(_Participant participant) {
-    final hasVideo =
-        participant.renderer != null && _hasActiveVideo(participant.renderer!);
+    final hasVideo = _hasVideoFor(participant);
     final label = participant.isLocal
         ? 'You'
         : _getParticipantName(participant.uid);
@@ -726,7 +785,7 @@ class _CallScreenState extends State<CallScreen> {
       (e) => e.key == _focusedPeerId,
       orElse: () => entries.first,
     );
-    final hasVideo = _hasActiveVideo(focusedEntry.value);
+    final hasVideo = _peerHasVideo(focusedEntry.key);
 
     return Stack(
       children: [
@@ -780,7 +839,7 @@ class _CallScreenState extends State<CallScreen> {
         : null;
 
     Widget feed;
-    if (remote != null && _hasActiveVideo(remote)) {
+    if (remoteUid != null && _peerHasVideo(remoteUid) && remote != null) {
       feed = Stack(
         fit: StackFit.expand,
         children: [
@@ -838,6 +897,9 @@ class _CallScreenState extends State<CallScreen> {
   }
 
   Widget _buildWaitingOverlay() {
+    final local = _callManager.localRenderer;
+    final localShowsVideo = local != null && _hasActiveVideo(local);
+
     return Positioned.fill(
       child: IgnorePointer(
         child: Center(
@@ -845,12 +907,18 @@ class _CallScreenState extends State<CallScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              _buildWaitingAvatar(radius: 38),
-              const SizedBox(height: 16),
-              const Text(
-                'Waiting for participants to connect...',
+              // Our own face is already full screen - don't stamp an avatar
+              // on top of it.
+              if (!localShowsVideo) ...[
+                _buildWaitingAvatar(radius: 38),
+                const SizedBox(height: 16),
+              ],
+              Text(
+                _isAloneInGroupCall
+                    ? 'You\u2019re the only one in this call'
+                    : 'Waiting for participants to connect...',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70, fontSize: 13),
+                style: const TextStyle(color: Colors.white70, fontSize: 13),
               ),
             ],
           ),
@@ -861,18 +929,21 @@ class _CallScreenState extends State<CallScreen> {
 
   Widget _buildWaitingAvatar({required double radius}) {
     final myUid = FirebaseAuth.instance.currentUser?.uid;
-    String? peerUid;
+    String? shownUid;
     if (!widget.isGroup) {
       for (final uid in widget.members) {
         if (uid != myUid) {
-          peerUid = uid;
+          shownUid = uid;
           break;
         }
       }
+    } else if (_isAloneInGroupCall) {
+      // Alone in a group call: nobody else's picture to show but our own.
+      shownUid = myUid;
     }
 
-    if (peerUid != null && _participantPhotos.containsKey(peerUid)) {
-      return _buildParticipantAvatar(uid: peerUid, radius: radius);
+    if (shownUid != null && _participantPhotos.containsKey(shownUid)) {
+      return _buildParticipantAvatar(uid: shownUid, radius: radius);
     }
 
     return CircleAvatar(

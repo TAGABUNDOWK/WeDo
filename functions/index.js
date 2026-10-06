@@ -243,6 +243,19 @@ async function timeoutUnansweredCalls() {
 // Safety net: a call must never outlive its last participant. Clients end it
 // themselves on leave, but a crash or a lost write would otherwise leave a
 // zombie "active" call that members can see (and try to join) forever.
+//
+// Participants heartbeat `lastSeen` every 20s while in a call, so "active"
+// alone no longer proves anyone is there - a killed app leaves its doc
+// saying 'active' forever. Docs from app versions that predate the
+// heartbeat (no lastSeen field) keep the old status-only meaning so a mixed
+// fleet never ends a call that is actually running.
+function isLiveParticipant(data, now) {
+  if (data.status !== 'active') return false;
+  const lastSeen = data.lastSeen?.toDate?.() || null;
+  if (!lastSeen) return true;
+  return now.getTime() - lastSeen.getTime() <= 120 * 1000;
+}
+
 async function endEmptyActiveCalls() {
   const now = new Date();
   const oneMinuteAgo = new Date(now.getTime() - 60 * 1000);
@@ -264,10 +277,12 @@ async function endEmptyActiveCalls() {
     const activeParticipants = await doc.ref
       .collection('participants')
       .where('status', '==', 'active')
-      .limit(1)
+      .limit(10)
       .get();
 
-    if (activeParticipants.empty) ended.push(doc.ref);
+    const anyoneLive = activeParticipants.docs.some((p) =>
+      isLiveParticipant(p.data(), now));
+    if (!anyoneLive) ended.push(doc.ref);
   }
 
   if (ended.length === 0) return;

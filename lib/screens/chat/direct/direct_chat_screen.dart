@@ -435,6 +435,22 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   Future<void> _startCall(CallType type) async {
     if (_currentUser == null) return;
 
+    // An active call in this chat may already exist (started from the
+    // banner, a notification or a double tap). Starting a second one gives
+    // two parallel call docs that ring the peer twice and leave one of them
+    // impossible to end cleanly - refuse instead.
+    final existing =
+        await _callService.findActiveDirectCall(widget.chatId, _currentUser.uid);
+    if (existing != null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('There\u2019s already a call running in this chat'),
+        ),
+      );
+      return;
+    }
+
     final callId = await _callService.startCall(
       chatId: widget.chatId,
       createdBy: _currentUser.uid,
