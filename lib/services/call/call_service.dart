@@ -79,7 +79,17 @@ class CallService {
     });
   }
 
-  Future<void> leaveCall(String callId, String uid) async {
+  static const Set<String> _terminalStatuses = {
+    'ended',
+    'missed',
+    'declined',
+    'cancelled',
+  };
+
+  /// Marks [uid] as having left the call and returns `true` when the call
+  /// itself is now finished (it was already terminal, it is a 1:1 call, or
+  /// nobody is left in it any more).
+  Future<bool> leaveCall(String callId, String uid) async {
     await _participants(callId).doc(uid).update({
       'status': 'left',
     });
@@ -87,24 +97,40 @@ class CallService {
     final callDoc = await _calls.doc(callId).get();
     final callData = callDoc.data();
     final groupId = callData?['groupId'] as String?;
-    final createdBy = callData?['createdBy'] as String?;
+    final status = callData?['status'] as String?;
+
+    // Someone else already ended it - we are just cleaning ourself up, but
+    // the call data still needs tearing down by whichever client sees this.
+    if (status != null && _terminalStatuses.contains(status)) return true;
 
     final isGroupCall = groupId != null && groupId.isNotEmpty;
 
     if (!isGroupCall) {
       await endCall(callId);
-      return;
+      return true;
     }
 
     final activeParticipants = await _participants(callId)
         .where('status', isEqualTo: 'active')
         .get();
 
+    // The call is over as soon as the last participant walks out, whoever
+    // that happens to be - not just when the creator is the one leaving.
     if (activeParticipants.docs.isEmpty) {
-      if (createdBy == uid) {
-        await endCall(callId);
-      }
+      await endCall(callId);
+      return true;
     }
+
+    return false;
+  }
+
+  /// Every call belonging to [groupId]. Filtering happens on the client so
+  /// the query stays a single-field equality filter (no composite index).
+  Stream<List<Call>> getGroupCallsStream(String groupId) {
+    return _calls
+        .where('groupId', isEqualTo: groupId)
+        .snapshots()
+        .map((snap) => snap.docs.map(Call.fromFirestore).toList());
   }
 
   Future<void> deleteUserSignals(String callId, String uid) async {

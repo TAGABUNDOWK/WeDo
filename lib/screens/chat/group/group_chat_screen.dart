@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../models/call.dart';
 import '../../../models/event.dart';
@@ -73,6 +74,14 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   late Stream<List<ChatMessage>> _messagesStream;
   ChatMessage? _replyingTo;
 
+  // A group call this member is not part of (yet) - discovered from Firestore
+  // so late joiners get a Join option even if they never got the ring push.
+  StreamSubscription<List<Call>>? _groupCallsSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _callParticipantsSub;
+  Call? _discoveredCall;
+  int _discoveredActiveCount = 0;
+  String _callUiSignature = '';
+
   @override
   void initState() {
     super.initState();
@@ -84,6 +93,53 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     }
     _scrollCtrl.addListener(_onScroll);
     _callManager.addListener(_onCallManagerUpdate);
+    _callUiSignature = _computeCallUiSignature();
+    _watchGroupCalls();
+  }
+
+  /// Follows the group's calls so an active call is visible even when this
+  /// device has no local CallManager state for it (missed ring, restart...).
+  void _watchGroupCalls() {
+    _groupCallsSub = _callService.getGroupCallsStream(widget.groupId).listen(
+      (calls) {
+        if (!mounted) return;
+        final active = calls.where((c) => c.status == CallStatus.active).toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        final call = active.isEmpty ? null : active.first;
+        final changed = call?.id != _discoveredCall?.id;
+        _discoveredCall = call;
+        if (changed) _discoveredActiveCount = 0;
+        _watchCallParticipants(call?.id);
+        if (changed) {
+          _callUiSignature = _computeCallUiSignature();
+          setState(() {});
+        }
+      },
+      onError: (Object _) {},
+    );
+  }
+
+  void _watchCallParticipants(String? callId) {
+    _callParticipantsSub?.cancel();
+    _callParticipantsSub = null;
+    if (callId == null) {
+      if (_discoveredActiveCount != 0) {
+        _discoveredActiveCount = 0;
+        _callUiSignature = _computeCallUiSignature();
+        if (mounted) setState(() {});
+      }
+      return;
+    }
+    _callParticipantsSub =
+        _callService.getParticipantsStream(callId).listen((snapshot) {
+      if (!mounted) return;
+      final count =
+          snapshot.docs.where((d) => d.data()['status'] == 'active').length;
+      if (count == _discoveredActiveCount) return;
+      _discoveredActiveCount = count;
+      _callUiSignature = _computeCallUiSignature();
+      setState(() {});
+    }, onError: (Object _) {});
   }
 
   Future<void> _loadGroupInfo() async {
@@ -212,14 +268,37 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   @override
   void dispose() {
     _liveLocation.stop();
+    _groupCallsSub?.cancel();
+    _callParticipantsSub?.cancel();
     _callManager.removeListener(_onCallManagerUpdate);
     _messageCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
   }
 
+  /// Cheap description of everything the call banner renders - used so the
+  /// whole chat does not rebuild on every CallManager notification
+  /// (mute toggles, remote stream events, ICE, renderer churn...).
+  String _computeCallUiSignature() {
+    final active = _callManager.activeCall;
+    final outgoing = _callManager.outgoingCall;
+    final left = _callManager.leftCall;
+    bool mine(String? groupId) => groupId == widget.groupId;
+    return [
+      mine(active?.groupId) ? active!.callId : '',
+      mine(outgoing?.groupId) ? outgoing!.callId : '',
+      mine(left?.groupId) ? left!.callId : '',
+      '${_callManager.participantCount}',
+      _discoveredCall?.id ?? '',
+      '$_discoveredActiveCount',
+    ].join('|');
+  }
+
   void _onCallManagerUpdate() {
     if (!mounted) return;
+    final signature = _computeCallUiSignature();
+    if (signature == _callUiSignature) return;
+    _callUiSignature = signature;
     // CallManager notifies synchronously from OutgoingCallScreen.initState,
     // which runs inside a build pass - setState must be deferred.
     safeNav(() {
@@ -518,6 +597,14 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   Future<void> _startCall(CallType type) async {
     if (_currentUser == null) return;
 
+    // A call is already running in this group - join it instead of firing a
+    // second, parallel call at everyone.
+    final existing = _discoveredCall;
+    if (existing != null && existing.status == CallStatus.active) {
+      await _callManager.joinExistingCall(existing, _groupName);
+      return;
+    }
+
     final group = await _groupService.getGroup(widget.groupId);
     if (group == null) return;
 
@@ -550,30 +637,70 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   void _returnToCall() {
-    _callManager.returnToCall();
+    final mgr = _callManager;
+    final active = mgr.activeCall;
+    final outgoing = mgr.outgoingCall;
+    final inThisCall = (active != null && active.groupId == widget.groupId) ||
+        (outgoing != null && outgoing.groupId == widget.groupId);
+    if (inThisCall) {
+      mgr.returnToCall();
+      return;
+    }
+    // Not part of any local call - but there is one running in the group:
+    // this is the late-join path.
+    final discovered = _discoveredCall;
+    if (discovered != null) {
+      mgr.joinExistingCall(discovered, _groupName);
+    }
   }
 
   Widget _buildActiveCallBanner() {
     final active = _callManager.activeCall;
     final outgoing = _callManager.outgoingCall;
     final left = _callManager.leftCall;
-    final call = (active != null && active.groupId == widget.groupId
+    final localCall = (active != null && active.groupId == widget.groupId
             ? active
             : null) ??
         (outgoing != null && outgoing.groupId == widget.groupId
             ? outgoing
             : null) ??
         (left != null && left.groupId == widget.groupId ? left : null);
-    if (call == null) return const SizedBox.shrink();
+    // Fall back to a call discovered in Firestore - this is what gives a
+    // member who never got the ring a Join button.
+    final discovered = _discoveredCall;
+    final callId = localCall?.callId ?? discovered?.id;
+    final callType = localCall?.callType ?? discovered?.type;
+    if (callId == null || callType == null) return const SizedBox.shrink();
 
     final isActive = active != null && active.groupId == widget.groupId;
     final isOutgoing =
         outgoing != null && outgoing.groupId == widget.groupId;
     final hasLeft = !isActive &&
         !isOutgoing &&
-        left != null &&
-        left.groupId == widget.groupId;
-    final isVideo = call.callType == CallType.video;
+        localCall != null &&
+        identical(localCall, left);
+    final isVideo = callType == CallType.video;
+    final isDiscoveredOnly = !isActive && !isOutgoing && !hasLeft;
+
+    // How many people are actually in the call right now (the group roster
+    // count used to be shown here, which was always wrong).
+    final inCallCount = discovered != null && discovered.id == callId
+        ? _discoveredActiveCount
+        : _callManager.participantCount;
+
+    final title = isActive
+        ? 'Group Call in Progress'
+        : hasLeft
+            ? 'You left the call'
+            : isOutgoing
+                ? 'Outgoing Call...'
+                : 'Group Call in Progress';
+
+    final pill = hasLeft
+        ? 'Rejoin'
+        : isOutgoing || isActive
+            ? 'Return'
+            : 'Join';
 
     return GestureDetector(
       onTap: hasLeft ? _rejoinCall : _returnToCall,
@@ -620,51 +747,51 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                      Text(
-                        isActive
-                            ? 'Group Call in Progress'
-                            : hasLeft
-                                ? 'You left the call'
-                                : 'Outgoing Call...',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: isActive
+                              ? Colors.green
+                              : hasLeft
+                                  ? Colors.redAccent
+                                  : Colors.orange,
+                          shape: BoxShape.circle,
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: isActive
-                                  ? Colors.green
-                                  : hasLeft
-                                      ? Colors.redAccent
-                                      : Colors.orange,
-                              shape: BoxShape.circle,
-                            ),
+                      const SizedBox(width: 5),
+                      ValueListenableBuilder<int>(
+                        valueListenable:
+                            _callManager.callDurationListenable,
+                        builder: (context, value, _) => Text(
+                          isActive
+                              ? '$inCallCount in call \u2022 ${formatSeconds(value)}'
+                              : hasLeft
+                                  ? '$inCallCount in call \u2022 Tap to rejoin'
+                                  : isOutgoing
+                                      ? 'Ringing...'
+                                      : isDiscoveredOnly
+                                          ? '$inCallCount in call \u2022 Tap to join'
+                                          : '',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.7),
+                            fontSize: 11,
                           ),
-                          const SizedBox(width: 5),
-                          ValueListenableBuilder<int>(
-                            valueListenable:
-                                _callManager.callDurationListenable,
-                            builder: (context, value, _) => Text(
-                              isActive
-                                  ? '${call.members.length} participants \u2022 ${formatSeconds(value)}'
-                                  : hasLeft
-                                      ? '${call.members.length} participants \u2022 Tap to rejoin'
-                                      : 'Ringing...',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.7),
-                                fontSize: 11,
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -675,7 +802,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                hasLeft ? 'Rejoin' : 'Join',
+                pill,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 12,
@@ -946,6 +1073,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                                 onStartVideoCall: () => _startCall(CallType.video),
                                 onRejoin: _rejoinCall,
                                 onReturnToCall: _returnToCall,
+                                callAvailable: _discoveredCall != null,
+                                availableCallType: _discoveredCall?.type,
                               ),
                             ],
                           ),
@@ -998,10 +1127,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                   ),
                 ),
               ),
-              if (_callManager.activeCall?.groupId == widget.groupId ||
-                  _callManager.outgoingCall?.groupId == widget.groupId ||
-                  _callManager.leftCall?.groupId == widget.groupId)
-                _buildActiveCallBanner(),
+              _buildActiveCallBanner(),
               if (_isUploading)
                 const LinearProgressIndicator(
                     backgroundColor: Colors.transparent),

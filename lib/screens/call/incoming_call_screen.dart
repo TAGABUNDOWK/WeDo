@@ -8,6 +8,7 @@ import '../../services/call/call_service.dart';
 import '../../services/direct/direct_service.dart';
 import '../../services/group/group_service.dart';
 import '../../widgets/call_avatar.dart';
+import '../../main.dart' show incomingCallFlowActive;
 import 'call_screen.dart';
 
 class IncomingCallScreen extends StatefulWidget {
@@ -28,6 +29,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
     with SingleTickerProviderStateMixin {
   final AudioPlayer _ringtonePlayer = AudioPlayer();
   final CallManager _callManager = CallManager();
+  final CallService _callService = CallService();
   StreamSubscription? _callSub;
 
   late AnimationController _pulseController;
@@ -58,8 +60,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
   }
 
   void _listenForCallEnd() {
-    final callService = CallService();
-    _callSub = callService.getCallStream(widget.call.id).listen((call) {
+    _callSub = _callService.getCallStream(widget.call.id).listen((call) {
       if (call == null ||
           call.status == CallStatus.ended ||
           call.status == CallStatus.declined ||
@@ -73,8 +74,10 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
 
   @override
   void dispose() {
+    incomingCallFlowActive = false;
     _pulseController.dispose();
     _callSub?.cancel();
+    _callService.dispose();
     _ringtonePlayer.dispose();
     super.dispose();
   }
@@ -129,9 +132,15 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
   void _declineCall() {
     _ringtonePlayer.stop();
     _sendMissedCallMessage();
-    final callService = CallService();
-    callService.declineCall(widget.call.id);
-    Navigator.of(context).pop();
+    final groupId = widget.call.groupId;
+    final isGroupCall = groupId != null && groupId.isNotEmpty;
+    if (!isGroupCall) {
+      // A 1:1 decline ends the call for the caller. A group decline only
+      // backs this member out - flipping the whole call document to
+      // "declined" would hang up on everyone else still ringing.
+      _callService.declineCall(widget.call.id);
+    }
+    if (mounted) Navigator.of(context).pop();
   }
 
   void _sendMissedCallMessage() {

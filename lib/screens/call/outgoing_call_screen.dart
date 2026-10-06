@@ -44,6 +44,7 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
     );
     _playRingtone();
     _callManager.addListener(_onCallManagerUpdate);
+    _callManager.setOutgoingScreenVisible(true);
     _initLocalCamera();
     _callManager.trackOutgoingCall(
       callId: widget.call.id,
@@ -103,6 +104,9 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
     // Safe-nav also re-checks, because the pop is no longer immediate.
     safeNav(() {
       if (_callManager.hasOutgoingCall || !mounted) return;
+      // CallManager is swapping us for the call screen itself - popping here
+      // first would leave the chat route on top and it would get replaced.
+      if (_callManager.isTransitioningToActive) return;
       _ringtonePlayer.stop();
       _disposeLocalCamera();
       Navigator.of(context).pop();
@@ -142,6 +146,7 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
 
   @override
   void dispose() {
+    _callManager.setOutgoingScreenVisible(false);
     _pulseController.dispose();
     _callManager.removeListener(_onCallManagerUpdate);
     _disposeLocalCamera();
