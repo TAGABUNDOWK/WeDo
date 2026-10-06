@@ -33,6 +33,7 @@ import '../../call/outgoing_call_screen.dart';
 import '../../location/location_picker_screen.dart';
 import '../event/create_event_screen.dart';
 import '../event/event_detail_screen.dart';
+import '../event/event_calendar_screen.dart';
 import '../poll/create_poll_screen.dart';
 import 'direct_chat_info_screen.dart';
 
@@ -743,6 +744,31 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                                     Icons.arrow_back,
                                     color: Colors.white,
                                     size: 30,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              GestureDetector(
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => EventCalendarScreen(
+                                      chatId: widget.chatId,
+                                    ),
+                                  ),
+                                ),
+                                child: Image.asset(
+                                  'assets/icons/calendar1.png',
+                                  width: 26,
+                                  height: 26,
+                                  fit: BoxFit.contain,
+                                  excludeFromSemantics: true,
+                                  errorBuilder:
+                                      (context, error, stackTrace) =>
+                                          const Icon(
+                                    Icons.calendar_month,
+                                    color: Colors.white,
+                                    size: 26,
                                   ),
                                 ),
                               ),
