@@ -1,14 +1,22 @@
-import 'dart:ui';
 import 'dart:async';
-import 'package:flutter/material.dart';
+
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../../utils/constants.dart';
+import 'package:flutter/material.dart';
+
 import '../../../models/event.dart';
 import '../../../models/user_entity.dart';
+import '../../../services/auth/user_service.dart';
 import '../../../services/event/event_service.dart';
 import '../../../services/group/group_service.dart';
-import '../../../services/auth/user_service.dart';
+import '../../../utils/constants.dart';
 
+/// Full-screen event details.
+///
+/// Data comes from a Firestore stream ([EventService.getEventStream]) — the
+/// same source the chat card uses — so the screen can never wedge in a
+/// half-loaded state: every stream snapshot maps to an explicit UI state
+/// (loading / error + retry / not found / content), and RSVP changes made on
+/// this screen reflect automatically.
 class EventDetailScreen extends StatefulWidget {
   final String eventId;
   final String? groupId;
@@ -30,67 +38,87 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   final _groupService = GroupService();
   final _userService = UserService();
   final _currentUser = FirebaseAuth.instance.currentUser;
-  ChatEvent? _event;
-  Map<String, String> _memberNames = {};
+
+  late Stream<ChatEvent?> _eventStream;
+  final Map<String, String> _memberNames = {};
   final Map<String, UserEntity> _userCache = {};
-  bool _isLoading = true;
-  Timer? _expiryTimer;
+  final Set<String> _attendeeFetchAttempts = {};
 
   @override
   void initState() {
     super.initState();
-    _loadData();
-    _expiryTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+    _eventStream = _newEventStream();
+    _loadMemberNames();
+  }
+
+  Stream<ChatEvent?> _newEventStream() => _eventService.getEventStream(
+        widget.eventId,
+        chatId: widget.chatId,
+        groupId: widget.groupId,
+      );
+
+  void _retryStream() {
+    setState(() => _eventStream = _newEventStream());
+  }
+
+  /// Loads group display names for the creator/responses list. Failures are
+  /// swallowed — the screen degrades to showing user ids/initials instead of
+  /// blocking on this fetch.
+  Future<void> _loadMemberNames() async {
+    final groupId = widget.groupId;
+    if (groupId == null) return;
+    try {
+      final members = await _groupService.getGroupMembersWithNames(groupId);
+      final names = <String, String>{};
+      for (final m in members) {
+        final uid = m['uid'];
+        final name = m['displayName'];
+        if (uid is String && name is String && name.isNotEmpty) {
+          names[uid] = name;
+        }
+      }
+      if (names.isNotEmpty && mounted) {
+        setState(() => _memberNames.addAll(names));
+      }
+    } catch (_) {
+      // Degrade silently — names are cosmetic.
+    }
+  }
+
+  /// Fetches user profiles (photo/display name) for respondents in the
+  /// background. Content renders immediately; profiles hydrate when ready.
+  /// Each uid is attempted at most once and individual failures are ignored.
+  void _ensureAttendeesLoaded(ChatEvent event) {
+    final missing = event.rsvps.keys
+        .where((uid) => !_attendeeFetchAttempts.contains(uid))
+        .toList();
+    if (missing.isEmpty) return;
+    _attendeeFetchAttempts.addAll(missing);
+
+    Future.wait(missing.map((uid) async {
+      try {
+        final user = await _userService.getUserDocument(uid);
+        if (user != null) _userCache[uid] = user;
+      } catch (_) {
+        // Degrade to initials for this user.
+      }
+    })).whenComplete(() {
       if (mounted) setState(() {});
     });
   }
 
-  @override
-  void dispose() {
-    _expiryTimer?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _loadData() async {
-    final event = await _eventService.getEvent(
-      widget.eventId,
-      chatId: widget.chatId,
-      groupId: widget.groupId,
-    );
-
-    if (event == null) {
-      if (mounted) setState(() => _isLoading = false);
-      return;
-    }
-
-    Map<String, String> names = {};
-    if (widget.groupId != null) {
-      final members = await _groupService.getGroupMembersWithNames(widget.groupId!);
-      for (final m in members) {
-        names[m['uid'] as String] = m['displayName'] as String;
-      }
-    }
-
-    final cache = <String, UserEntity>{};
-    for (final uid in event.rsvps.keys) {
-      final user = await _userService.getUserDocument(uid);
-      if (user != null) cache[uid] = user;
-    }
-
-    if (mounted) {
-      setState(() {
-        _event = event;
-        _memberNames = names;
-        _userCache.addAll(cache);
-        _isLoading = false;
-      });
-    }
+  String _displayNameFor(String uid) {
+    final memberName = _memberNames[uid];
+    if (memberName != null && memberName.isNotEmpty) return memberName;
+    final cachedName = _userCache[uid]?.displayName;
+    if (cachedName != null && cachedName.isNotEmpty) return cachedName;
+    return uid;
   }
 
   String _formatDate(DateTime date) {
-    final months = [
+    const months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
@@ -103,70 +131,8 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     return '$displayHour:$minute $period';
   }
 
-  String _formatFullDateTime(DateTime dt) => '${_formatDate(dt)} at ${_formatTime(dt)}';
-
-  String _getCreatorName() {
-    return _memberNames[_event!.createdBy] ?? 'Unknown';
-  }
-
-  List<String> _getAttendeeUids({int limit = 3}) {
-    final keys = _event!.rsvps.keys.toList();
-    return keys.take(limit).toList();
-  }
-
-  Widget _buildAvatar(String uid, double size) {
-    final user = _userCache[uid];
-    final photoUrl = user?.photoUrl;
-    final avatarAsset = user?.avatarAsset;
-    final hasAvatarAsset = avatarAsset != null && avatarAsset.isNotEmpty;
-    final hasAvatarUrl = photoUrl != null && photoUrl.isNotEmpty;
-    final initials = uid.isNotEmpty ? uid.substring(0, 1).toUpperCase() : '?';
-
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: const Color(0xFF211635),
-        border: Border.all(
-          color: AppColors.midnightBg,
-          width: 2,
-        ),
-      ),
-      child: ClipOval(
-        child: hasAvatarAsset
-            ? Image.asset(
-                avatarAsset,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _buildAvatarFallback(initials, size),
-              )
-            : hasAvatarUrl
-                ? Image.network(
-                    photoUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => _buildAvatarFallback(initials, size),
-                  )
-                : _buildAvatarFallback(initials, size),
-      ),
-    );
-  }
-
-  Widget _buildAvatarFallback(String initials, double size) {
-    return Container(
-      color: const Color(0xFF211635),
-      child: Center(
-        child: Text(
-          initials,
-          style: TextStyle(
-            color: AppColors.lavenderAccent,
-            fontFamily: 'PlusJakartaSans',
-            fontWeight: FontWeight.w700,
-            fontSize: size * 0.33,
-          ),
-        ),
-      ),
-    );
-  }
+  String _formatFullDateTime(DateTime dt) =>
+      '${_formatDate(dt)} at ${_formatTime(dt)}';
 
   @override
   Widget build(BuildContext context) {
@@ -189,154 +155,186 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
           ),
         ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.lavenderAccent))
-          : _event == null
-              ? const Center(
-                  child: Text(
-                    'Event not found',
-                    style: TextStyle(color: AppColors.textSecondary, fontFamily: 'PlusJakartaSans'),
-                  ),
-                )
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: _GlassCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Card Header
-                        Text(
-                          'EVENT DETAILS',
-                          style: TextStyle(
-                            color: AppColors.textSecondary.withValues(alpha: 0.7),
-                            fontFamily: 'PlusJakartaSans',
-                            fontWeight: FontWeight.w600,
-                            fontSize: 11,
-                            letterSpacing: 1.5,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _event!.title,
-                          style: const TextStyle(
-                            color: AppColors.textPrimary,
-                            fontFamily: 'PlusJakartaSans',
-                            fontWeight: FontWeight.w800,
-                            fontSize: 26,
-                            height: 1.2,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'WITH ${_getCreatorName().toUpperCase()}',
-                          style: TextStyle(
-                            color: AppColors.textSecondary.withValues(alpha: 0.8),
-                            fontFamily: 'PlusJakartaSans',
-                            fontWeight: FontWeight.w500,
-                            fontSize: 13,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
+      body: StreamBuilder<ChatEvent?>(
+        stream: _eventStream,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return _StatusMessage(
+              icon: Icons.error_outline,
+              title: 'Something went wrong',
+              subtitle: 'The event could not be loaded.',
+              actionLabel: 'Retry',
+              onAction: _retryStream,
+            );
+          }
 
-                        // Social Proof - Overlapping Avatars
-                        if (_event!.rsvps.isNotEmpty) ...[
-                          const SizedBox(height: 20),
-                          _buildSocialProof(),
-                        ],
+          final event = snapshot.data;
+          if (event != null) {
+            return _buildContent(event);
+          }
 
-                        // Metadata
-                        const SizedBox(height: 24),
-                        const _GlassThinDivider(),
-                        _buildMetadataRow(
-                          icon: Icons.calendar_today_outlined,
-                          text: _formatFullDateTime(_event!.date),
-                        ),
-                        if (_event!.endDate != null) ...[
-                          const _GlassThinDivider(),
-                          _buildMetadataRow(
-                            icon: Icons.schedule_outlined,
-                            text: 'Ends at ${_formatTime(_event!.endDate!)}',
-                          ),
-                        ],
-                        if (_event!.location != null && _event!.location!.isNotEmpty) ...[
-                          const _GlassThinDivider(),
-                          _buildMetadataRow(
-                            icon: Icons.location_on_outlined,
-                            text: _event!.location!,
-                          ),
-                        ],
-                        if (_event!.dressCode != null && _event!.dressCode!.isNotEmpty) ...[
-                          const _GlassThinDivider(),
-                          _buildMetadataRow(
-                            icon: Icons.checkroom_outlined,
-                            text: _event!.dressCode!,
-                          ),
-                        ],
-                        const _GlassThinDivider(),
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(
+                color: AppColors.lavenderAccent,
+              ),
+            );
+          }
 
-                        // Status Indicator
-                        const SizedBox(height: 20),
-                        _StatusBadge(eventDate: _event!.date, endDate: _event!.endDate),
-
-                        // RSVP Action Row
-                        const SizedBox(height: 20),
-                        _RsvpActionRow(
-                          event: _event!,
-                          currentUid: _currentUser?.uid ?? '',
-                          memberNames: _memberNames,
-                          onRsvpChanged: () => _loadData(),
-                        ),
-
-                        // Responses List
-                        if (_event!.rsvps.isNotEmpty) ...[
-                          const SizedBox(height: 24),
-                          const Text(
-                            'Responses',
-                            style: TextStyle(
-                              color: AppColors.textPrimary,
-                              fontFamily: 'PlusJakartaSans',
-                              fontWeight: FontWeight.w600,
-                              fontSize: 16,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          ..._event!.rsvps.entries.map((entry) {
-                            return _ResponseTile(
-                              name: _memberNames[entry.key] ?? entry.key,
-                              response: entry.value,
-                            );
-                          }),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
+          return const _StatusMessage(
+            icon: Icons.event_busy,
+            title: 'Event not found',
+            subtitle: 'It may have been deleted.',
+          );
+        },
+      ),
     );
   }
 
-  Widget _buildSocialProof() {
-    final uids = _getAttendeeUids(limit: 3);
-    final totalRsvps = _event!.rsvps.length;
-    final extra = totalRsvps - uids.length;
+  Widget _buildContent(ChatEvent event) {
+    _ensureAttendeesLoaded(event);
+
+    final currentUid = _currentUser?.uid ?? '';
+    final creatorName =
+        _memberNames[event.createdBy] ?? 'Unknown';
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: AppColors.glassBg,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: AppColors.glassBorder, width: 1),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'EVENT DETAILS',
+              style: TextStyle(
+                color: AppColors.textSecondary.withValues(alpha: 0.7),
+                fontFamily: 'PlusJakartaSans',
+                fontWeight: FontWeight.w600,
+                fontSize: 11,
+                letterSpacing: 1.5,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              event.title,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontFamily: 'PlusJakartaSans',
+                fontWeight: FontWeight.w800,
+                fontSize: 26,
+                height: 1.2,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'WITH ${creatorName.toUpperCase()}',
+              style: TextStyle(
+                color: AppColors.textSecondary.withValues(alpha: 0.8),
+                fontFamily: 'PlusJakartaSans',
+                fontWeight: FontWeight.w500,
+                fontSize: 13,
+                letterSpacing: 0.5,
+              ),
+            ),
+            if (event.rsvps.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              _buildSocialProof(event),
+            ],
+
+            const SizedBox(height: 24),
+            const _ThinDivider(),
+            _MetadataRow(
+              icon: Icons.calendar_today_outlined,
+              text: _formatFullDateTime(event.date),
+            ),
+            if (event.endDate != null) ...[
+              const _ThinDivider(),
+              _MetadataRow(
+                icon: Icons.schedule_outlined,
+                text: 'Ends at ${_formatTime(event.endDate!)}',
+              ),
+            ],
+            if (event.location != null && event.location!.isNotEmpty) ...[
+              const _ThinDivider(),
+              _MetadataRow(
+                icon: Icons.location_on_outlined,
+                text: event.location!,
+              ),
+            ],
+            if (event.dressCode != null && event.dressCode!.isNotEmpty) ...[
+              const _ThinDivider(),
+              _MetadataRow(
+                icon: Icons.checkroom_outlined,
+                text: event.dressCode!,
+              ),
+            ],
+            const _ThinDivider(),
+
+            const SizedBox(height: 20),
+            _StatusPill(eventDate: event.date, endDate: event.endDate),
+
+            const SizedBox(height: 20),
+            _RsvpRow(event: event, currentUid: currentUid),
+
+            if (event.rsvps.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              const Text(
+                'Responses',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontFamily: 'PlusJakartaSans',
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 12),
+              for (final entry in event.rsvps.entries)
+                _ResponseTile(
+                  name: _displayNameFor(entry.key),
+                  uid: entry.key,
+                  response: entry.value,
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSocialProof(ChatEvent event) {
+    final uids = event.rsvps.keys.take(3).toList();
+    final total = event.rsvps.length;
+    final extra = total - uids.length;
+    final stackWidth =
+        uids.isEmpty ? 0.0 : 36.0 + (uids.length - 1) * 28.0;
 
     return Row(
       children: [
-        SizedBox(
-          width: 36 * uids.length.toDouble() - 8 * (uids.length - 1).clamp(0, uids.length),
-          height: 36,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              for (int i = 0; i < uids.length; i++)
-                Positioned(
-                  left: i * 28.0,
-                  child: _buildAvatar(uids[i], 36),
-                ),
-            ],
+        if (uids.isNotEmpty) ...[
+          SizedBox(
+            width: stackWidth,
+            height: 36,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                for (int i = 0; i < uids.length; i++)
+                  Positioned(
+                    left: i * 28.0,
+                    child: _buildAvatar(uids[i], 36),
+                  ),
+              ],
+            ),
           ),
-        ),
+          const SizedBox(width: 8),
+        ],
         if (extra > 0) ...[
-          const SizedBox(width: 4),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
@@ -357,77 +355,167 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
               ),
             ),
           ),
+          const SizedBox(width: 8),
         ],
-        const SizedBox(width: 8),
-        Text(
-          '$totalRsvps ${totalRsvps == 1 ? 'person' : 'people'} going',
-          style: TextStyle(
-            color: AppColors.textSecondary.withValues(alpha: 0.7),
-            fontFamily: 'PlusJakartaSans',
-            fontSize: 13,
+        Flexible(
+          child: Text(
+            '$total ${total == 1 ? 'person' : 'people'} going',
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: AppColors.textSecondary.withValues(alpha: 0.7),
+              fontFamily: 'PlusJakartaSans',
+              fontSize: 13,
+            ),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildMetadataRow({required IconData icon, required String text}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 14),
-      child: Row(
-        children: [
-          Icon(icon, color: AppColors.lavenderAccent, size: 20),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontFamily: 'PlusJakartaSans',
-                fontWeight: FontWeight.w400,
-                fontSize: 15,
-              ),
-            ),
-          ),
-        ],
+  Widget _buildAvatar(String uid, double size) {
+    final user = _userCache[uid];
+    final photoUrl = user?.photoUrl;
+    final avatarAsset = user?.avatarAsset;
+    final hasAvatarAsset = avatarAsset != null && avatarAsset.isNotEmpty;
+    final hasAvatarUrl = photoUrl != null && photoUrl.isNotEmpty;
+    final initial =
+        uid.isNotEmpty ? uid.substring(0, 1).toUpperCase() : '?';
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: const Color(0xFF211635),
+        border: Border.all(
+          color: AppColors.midnightBg,
+          width: 2,
+        ),
+      ),
+      child: ClipOval(
+        child: hasAvatarAsset
+            ? Image.asset(
+                avatarAsset,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) =>
+                    _avatarFallback(initial, size),
+              )
+            : hasAvatarUrl
+                ? Image.network(
+                    photoUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) =>
+                        _avatarFallback(initial, size),
+                  )
+                : _avatarFallback(initial, size),
       ),
     );
   }
-}
 
-// Glass Card Widget
-class _GlassCard extends StatelessWidget {
-  final Widget child;
-
-  const _GlassCard({required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: AppColors.glassBg,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: AppColors.glassBorder,
-              width: 1,
-            ),
-          ),
-          child: child,
+  Widget _avatarFallback(String initial, double size) {
+    return Container(
+      color: const Color(0xFF211635),
+      alignment: Alignment.center,
+      child: Text(
+        initial,
+        style: TextStyle(
+          color: AppColors.lavenderAccent,
+          fontFamily: 'PlusJakartaSans',
+          fontWeight: FontWeight.w700,
+          fontSize: size * 0.33,
         ),
       ),
     );
   }
 }
 
-// Thin Divider
-class _GlassThinDivider extends StatelessWidget {
-  const _GlassThinDivider();
+// ---------------------------------------------------------------------------
+// Shared, self-contained pieces
+// ---------------------------------------------------------------------------
+
+/// Full-body placeholder for the error / not-found states so the screen can
+/// never render as a blank page.
+class _StatusMessage extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  const _StatusMessage({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 48, color: AppColors.textSecondary),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontFamily: 'PlusJakartaSans',
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontFamily: 'PlusJakartaSans',
+                fontSize: 13,
+              ),
+            ),
+            if (actionLabel != null && onAction != null) ...[
+              const SizedBox(height: 20),
+              GestureDetector(
+                onTap: onAction,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.lavenderAccent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(50),
+                    border: Border.all(
+                      color: AppColors.lavenderAccent.withValues(alpha: 0.4),
+                      width: 1,
+                    ),
+                  ),
+                  child: Text(
+                    actionLabel!,
+                    style: const TextStyle(
+                      color: AppColors.lavenderAccent,
+                      fontFamily: 'PlusJakartaSans',
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ThinDivider extends StatelessWidget {
+  const _ThinDivider();
 
   @override
   Widget build(BuildContext context) {
@@ -438,18 +526,73 @@ class _GlassThinDivider extends StatelessWidget {
   }
 }
 
-// Status Badge
-class _StatusBadge extends StatelessWidget {
+class _MetadataRow extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _MetadataRow({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: AppColors.lavenderAccent, size: 20),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontFamily: 'PlusJakartaSans',
+                fontWeight: FontWeight.w500,
+                fontSize: 14,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Live status pill (starts-in / happening-now / ended). Owns its own 1-second
+/// timer so only this small widget rebuilds, not the whole screen.
+class _StatusPill extends StatefulWidget {
   final DateTime eventDate;
   final DateTime? endDate;
 
-  const _StatusBadge({required this.eventDate, this.endDate});
+  const _StatusPill({required this.eventDate, this.endDate});
+
+  @override
+  State<_StatusPill> createState() => _StatusPillState();
+}
+
+class _StatusPillState extends State<_StatusPill> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final isStarted = now.isAfter(eventDate);
-    final isEnded = endDate != null && now.isAfter(endDate!);
+    final isStarted = now.isAfter(widget.eventDate);
+    final isEnded = widget.endDate != null && now.isAfter(widget.endDate!);
 
     String text;
     IconData icon;
@@ -461,9 +604,10 @@ class _StatusBadge extends StatelessWidget {
       icon = Icons.check_circle;
       bgColor = AppColors.glassBg;
       glow = null;
-    } else if (isStarted && endDate != null) {
-      final remaining = endDate!.difference(now);
-      text = 'Happening now \u2014 Ends in ${remaining.inMinutes}m ${remaining.inSeconds % 60}s';
+    } else if (isStarted && widget.endDate != null) {
+      final remaining = widget.endDate!.difference(now);
+      text =
+          'Happening now \u2014 Ends in ${remaining.inMinutes}m ${remaining.inSeconds % 60}s';
       icon = Icons.play_circle_filled;
       bgColor = AppColors.neonMagenta;
       glow = [
@@ -487,7 +631,7 @@ class _StatusBadge extends StatelessWidget {
         ),
       ];
     } else {
-      final diff = eventDate.difference(now);
+      final diff = widget.eventDate.difference(now);
       if (diff.inMinutes < 60) {
         text = 'Starts in ${diff.inMinutes}m ${diff.inSeconds % 60}s';
       } else if (diff.inHours < 24) {
@@ -516,26 +660,26 @@ class _StatusBadge extends StatelessWidget {
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
             icon,
             size: 18,
-            color: isEnded
+            color: isEnded || !isStarted
                 ? AppColors.textSecondary
-                : isStarted
-                    ? AppColors.textPrimary
-                    : AppColors.textSecondary,
+                : AppColors.textPrimary,
           ),
           const SizedBox(width: 10),
-          Text(
-            text,
-            style: TextStyle(
-              color: isEnded
-                  ? AppColors.textSecondary
-                  : AppColors.textPrimary,
-              fontFamily: 'PlusJakartaSans',
-              fontWeight: FontWeight.w600,
-              fontSize: 14,
+          Flexible(
+            child: Text(
+              text,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: isEnded ? AppColors.textSecondary : AppColors.textPrimary,
+                fontFamily: 'PlusJakartaSans',
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
             ),
           ),
         ],
@@ -544,58 +688,46 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
-// RSVP Action Row
-class _RsvpActionRow extends StatefulWidget {
+/// Three-option RSVP row. Writes through the single shared path
+/// ([EventService.submitResponse]) which toggles off a repeated tap and
+/// no-ops once the event has ended; the stream pushes the updated counts.
+class _RsvpRow extends StatelessWidget {
   final ChatEvent event;
   final String currentUid;
-  final Map<String, String> memberNames;
-  final VoidCallback onRsvpChanged;
 
-  const _RsvpActionRow({
-    required this.event,
-    required this.currentUid,
-    required this.memberNames,
-    required this.onRsvpChanged,
-  });
+  const _RsvpRow({required this.event, required this.currentUid});
 
-  @override
-  State<_RsvpActionRow> createState() => _RsvpActionRowState();
-}
-
-class _RsvpActionRowState extends State<_RsvpActionRow> {
-  final _eventService = EventService();
-
-  Future<void> _rsvp(EventResponse response) async {
-    if (widget.event.isEnded) return;
-    await _eventService.submitResponse(
-      event: widget.event,
-      uid: widget.currentUid,
-      response: response,
-    );
-    widget.onRsvpChanged();
+  Future<void> _submit(EventResponse response) async {
+    if (event.isEnded || currentUid.isEmpty) return;
+    try {
+      await EventService().submitResponse(
+        event: event,
+        uid: currentUid,
+        response: response,
+      );
+    } catch (_) {
+      // Silent — the stream simply won't change and counts stay put.
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final event = widget.event;
     final isLocked = event.isEnded;
-    final myResponse = event.myResponse(widget.currentUid);
+    final myResponse = event.myResponse(currentUid);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
               child: _RsvpButton(
                 label: EventResponse.interested.label,
                 count: event.interestedCount,
                 isSelected: myResponse == EventResponse.interested,
-                isActive: true,
                 isLocked: isLocked,
                 icon: Icons.check,
-                onTap: () => _rsvp(EventResponse.interested),
+                onTap: () => _submit(EventResponse.interested),
               ),
             ),
             const SizedBox(width: 8),
@@ -604,10 +736,9 @@ class _RsvpActionRowState extends State<_RsvpActionRow> {
                 label: EventResponse.notSure.label,
                 count: event.notSureCount,
                 isSelected: myResponse == EventResponse.notSure,
-                isActive: false,
                 isLocked: isLocked,
                 icon: Icons.question_mark,
-                onTap: () => _rsvp(EventResponse.notSure),
+                onTap: () => _submit(EventResponse.notSure),
               ),
             ),
             const SizedBox(width: 8),
@@ -616,10 +747,9 @@ class _RsvpActionRowState extends State<_RsvpActionRow> {
                 label: EventResponse.notInterested.label,
                 count: event.notInterestedCount,
                 isSelected: myResponse == EventResponse.notInterested,
-                isActive: false,
                 isLocked: isLocked,
                 icon: Icons.close,
-                onTap: () => _rsvp(EventResponse.notInterested),
+                onTap: () => _submit(EventResponse.notInterested),
               ),
             ),
           ],
@@ -629,14 +759,21 @@ class _RsvpActionRowState extends State<_RsvpActionRow> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.lock, size: 12, color: AppColors.textSecondary.withValues(alpha: 0.5)),
+              Icon(
+                Icons.lock,
+                size: 12,
+                color: AppColors.textSecondary.withValues(alpha: 0.5),
+              ),
               const SizedBox(width: 6),
-              Text(
-                'Responses closed \u2014 event has ended',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textSecondary.withValues(alpha: 0.5),
-                  fontFamily: 'PlusJakartaSans',
+              Flexible(
+                child: Text(
+                  'Responses closed \u2014 event has ended',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary.withValues(alpha: 0.5),
+                    fontFamily: 'PlusJakartaSans',
+                  ),
                 ),
               ),
             ],
@@ -647,12 +784,10 @@ class _RsvpActionRowState extends State<_RsvpActionRow> {
   }
 }
 
-// RSVP Button
 class _RsvpButton extends StatelessWidget {
   final String label;
   final int count;
   final bool isSelected;
-  final bool isActive;
   final bool isLocked;
   final IconData icon;
   final VoidCallback onTap;
@@ -661,8 +796,7 @@ class _RsvpButton extends StatelessWidget {
     required this.label,
     required this.count,
     required this.isSelected,
-    required this.isActive,
-    this.isLocked = false,
+    required this.isLocked,
     required this.icon,
     required this.onTap,
   });
@@ -672,29 +806,21 @@ class _RsvpButton extends StatelessWidget {
     final Color bgColor;
     final Color borderColor;
     final Color textColor;
-    final Color iconColor;
 
-    if (isSelected && isActive) {
+    if (isSelected) {
       bgColor = AppColors.lavenderAccent;
       borderColor = AppColors.lavenderAccent;
       textColor = AppColors.midnightBg;
-      iconColor = AppColors.midnightBg;
-    } else if (isSelected) {
-      bgColor = AppColors.lavenderAccent;
-      borderColor = AppColors.lavenderAccent;
-      textColor = AppColors.midnightBg;
-      iconColor = AppColors.midnightBg;
     } else if (isLocked) {
       bgColor = AppColors.glassBg;
       borderColor = AppColors.glassBorder;
       textColor = AppColors.textSecondary.withValues(alpha: 0.4);
-      iconColor = AppColors.textSecondary.withValues(alpha: 0.4);
     } else {
       bgColor = Colors.transparent;
       borderColor = AppColors.glassBorder;
       textColor = AppColors.textSecondary;
-      iconColor = AppColors.textSecondary;
     }
+    final iconColor = textColor;
 
     return GestureDetector(
       onTap: isLocked ? null : onTap,
@@ -742,30 +868,50 @@ class _RsvpButton extends StatelessWidget {
   }
 }
 
-// Response Tile
 class _ResponseTile extends StatelessWidget {
   final String name;
+  final String uid;
   final String response;
 
-  const _ResponseTile({required this.name, required this.response});
+  const _ResponseTile({
+    required this.name,
+    required this.uid,
+    required this.response,
+  });
+
+  String get _initials {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      return uid.isNotEmpty ? uid.substring(0, 1).toUpperCase() : '?';
+    }
+    final parts = trimmed.split(RegExp(r'\s+'));
+    if (parts.length >= 2) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    }
+    return trimmed
+        .substring(0, trimmed.length.clamp(0, 2))
+        .toUpperCase();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final color = response == 'yes'
-        ? Colors.green
-        : response == 'no'
-            ? Colors.red
-            : Colors.orange;
-    final icon = response == 'yes'
-        ? Icons.check_circle
-        : response == 'no'
-            ? Icons.cancel
-            : Icons.help_outline;
-
-    final initials = name.trim().split(RegExp(r'\s+'));
-    final displayInitials = initials.length >= 2
-        ? '${initials[0][0]}${initials[1][0]}'
-        : name.substring(0, name.length.clamp(0, 2));
+    final parsed = EventResponse.parse(response);
+    final Color color;
+    final IconData icon;
+    switch (parsed) {
+      case EventResponse.interested:
+        color = Colors.green;
+        icon = Icons.check_circle;
+      case EventResponse.notInterested:
+        color = Colors.red;
+        icon = Icons.cancel;
+      case EventResponse.notSure:
+        color = Colors.orange;
+        icon = Icons.help_outline;
+      case null:
+        color = Colors.orange;
+        icon = Icons.help_outline;
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -788,15 +934,14 @@ class _ResponseTile extends StatelessWidget {
                 width: 1,
               ),
             ),
-            child: Center(
-              child: Text(
-                displayInitials.toUpperCase(),
-                style: const TextStyle(
-                  color: AppColors.lavenderAccent,
-                  fontFamily: 'PlusJakartaSans',
-                  fontWeight: FontWeight.w700,
-                  fontSize: 11,
-                ),
+            alignment: Alignment.center,
+            child: Text(
+              _initials,
+              style: const TextStyle(
+                color: AppColors.lavenderAccent,
+                fontFamily: 'PlusJakartaSans',
+                fontWeight: FontWeight.w700,
+                fontSize: 11,
               ),
             ),
           ),
@@ -804,6 +949,7 @@ class _ResponseTile extends StatelessWidget {
           Expanded(
             child: Text(
               name,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: AppColors.textPrimary,
                 fontFamily: 'PlusJakartaSans',
@@ -812,6 +958,7 @@ class _ResponseTile extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(width: 8),
           Icon(icon, color: color, size: 20),
         ],
       ),

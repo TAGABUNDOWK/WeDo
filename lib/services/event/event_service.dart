@@ -111,6 +111,15 @@ class EventService {
     return ChatEvent.fromFirestore(doc);
   }
 
+  /// Live list of every event in the chat's events subcollection. Used by the
+  /// calendar screen; grouping by day happens client-side so no Firestore
+  /// queries (or composite indexes) are needed.
+  Stream<List<ChatEvent>> getEventsStream({String? chatId, String? groupId}) {
+    return _events(chatId, groupId: groupId).snapshots().map(
+          (snap) => snap.docs.map(ChatEvent.fromFirestore).toList(),
+        );
+  }
+
   Future<void> rsvpEvent({
     required String eventId,
     required String uid,
