@@ -73,6 +73,8 @@ class CallManager extends ChangeNotifier {
   final _currentUser = FirebaseAuth.instance.currentUser;
   bool _isTransitioningToActive = false;
   bool _isRejoining = false;
+  bool _outgoingScreenVisible = false;
+  int _participantCount = 0;
   ActiveCallData? _leftCall;
   StreamSubscription? _leftWatchCallSub;
   StreamSubscription? _leftWatchParticipantsSub;
@@ -97,6 +99,11 @@ class CallManager extends ChangeNotifier {
   RTCVideoRenderer? get remoteRenderer =>
       _remoteRenderers.isNotEmpty ? _remoteRenderers.values.first : null;
   int get remoteParticipantCount => _remoteRenderers.length;
+
+  /// Participants Firestore currently reports as `active` in the call this
+  /// device is in (or is waiting to rejoin). 0 when there is no such call.
+  int get participantCount => _participantCount;
+  bool get isTransitioningToActive => _isTransitioningToActive;
 
   StreamController<MediaStream>? _localStreamController;
   StreamController<MediaStream>? _remoteStreamController;
@@ -140,7 +147,6 @@ class CallManager extends ChangeNotifier {
     _outgoingRingTimeout?.cancel();
     _outgoingRingTimeout = Timer(const Duration(seconds: 45), () {
       if (_outgoingCall != null && _outgoingCall!.callId == callId) {
-        _callService.endCall(callId);
         cancelOutgoingCall();
       }
     });
@@ -179,6 +185,10 @@ class CallManager extends ChangeNotifier {
           _outgoingCallSub = null;
           _outgoingRingTimeout?.cancel();
           _outgoingRingTimeout = null;
+          // The preview stream is camera-only and is not handed to WebRTC
+          // (it has no mic track), so stop it here - otherwise the native
+          // camera stays lit for the rest of the call.
+          _outgoingLocalStream?.getTracks().forEach((t) => t.stop());
           _outgoingLocalStream = null;
           _outgoingCall = null;
           removeCallOverlay();
@@ -196,33 +206,48 @@ class CallManager extends ChangeNotifier {
             startedAt: DateTime.now(),
           );
 
-          await startNewCall(
-            callData: newCallData,
-            audioOnly: outgoing.callType == CallType.audio,
-          );
+          try {
+            await startNewCall(
+              callData: newCallData,
+              audioOnly: outgoing.callType == CallType.audio,
+            );
 
-          navigatorKey.currentState?.pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => CallScreen(
-                callId: outgoing.callId,
-                callName: outgoing.callName,
-                callType: outgoing.callType,
-                members: outgoing.members,
-                createdBy: outgoing.createdBy,
-                isGroup: outgoing.isGroup,
-                chatId: outgoing.chatId,
-                groupId: outgoing.groupId,
-              ),
-            ),
-          );
-          _isTransitioningToActive = false;
+            // Only swap the outgoing screen for the call screen when that
+            // screen is actually the one on top - otherwise a replace would
+            // destroy the chat route underneath the minimized overlay.
+            if (_outgoingScreenVisible) {
+              navigatorKey.currentState?.pushReplacement(
+                MaterialPageRoute(
+                  builder: (_) => CallScreen(
+                    callId: outgoing.callId,
+                    callName: outgoing.callName,
+                    callType: outgoing.callType,
+                    members: outgoing.members,
+                    createdBy: outgoing.createdBy,
+                    isGroup: outgoing.isGroup,
+                    chatId: outgoing.chatId,
+                    groupId: outgoing.groupId,
+                  ),
+                ),
+              );
+            }
+          } finally {
+            _isTransitioningToActive = false;
+          }
         }
       }
     });
   }
 
+  /// Toggled by [OutgoingCallScreen] so the transition above knows whether
+  /// it is safe to replace the top route.
+  void setOutgoingScreenVisible(bool visible) {
+    _outgoingScreenVisible = visible;
+  }
+
   void cancelOutgoingCall() {
     if (_isTransitioningToActive) return;
+    final outgoing = _outgoingCall;
     _outgoingCallSub?.cancel();
     _outgoingCallSub = null;
     _outgoingRingTimeout?.cancel();
@@ -234,6 +259,12 @@ class CallManager extends ChangeNotifier {
     _outgoingCall = null;
     removeCallOverlay();
     notifyListeners();
+    if (outgoing != null) {
+      // Without this the callee keeps ringing until the scheduled timeout.
+      _callService.endCall(outgoing.callId).catchError((Object e) {
+        debugPrint('Error ending cancelled call: $e');
+      });
+    }
   }
 
   Future<void> _sendMissedCallMessageForCall(ActiveCallData call) async {
@@ -273,7 +304,11 @@ class CallManager extends ChangeNotifier {
     _callOverlay = OverlayEntry(
       builder: (_) => _CallOverlayBanner(
         onReturnToCall: returnToCall,
-        onEndCall: _activeCall != null ? endActiveCall : _cancelOutgoingFromOverlay,
+        // Hanging up a group call only removes you from it; the call dies
+        // by itself once the last participant leaves.
+        onEndCall: _activeCall == null
+            ? _cancelOutgoingFromOverlay
+            : (_activeCall!.isGroup ? leaveGroupCall : endActiveCall),
       ),
     );
     overlay.insert(_callOverlay!);
@@ -327,14 +362,87 @@ class CallManager extends ChangeNotifier {
   }
 
   void _cancelOutgoingFromOverlay() {
-    final outgoing = _outgoingCall;
-    if (outgoing != null) {
-      _callService.endCall(outgoing.callId);
-    }
     cancelOutgoingCall();
   }
 
   Future<void> startNewCall({
+    required ActiveCallData callData,
+    bool audioOnly = false,
+  }) async {
+    try {
+      await _startNewCallInternal(callData: callData, audioOnly: audioOnly);
+    } catch (e) {
+      debugPrint('Error starting call: $e');
+      if (_activeCall != null && _activeCall!.callId == callData.callId) {
+        _abortCallStart();
+      }
+      rethrow;
+    }
+  }
+
+  /// Local-only teardown for a [startNewCall] that failed half way through,
+  /// so the app never believes it is in a call that never came up.
+  void _abortCallStart() {
+    _callTimer?.cancel();
+    _callTimer = null;
+    _callSub?.cancel();
+    _callSub = null;
+    _signalsSub?.cancel();
+    _signalsSub = null;
+    _participantsSub?.cancel();
+    _participantsSub = null;
+    _webrtcLocalStreamSub?.cancel();
+    _webrtcLocalStreamSub = null;
+    _webrtcRemoteStreamSub?.cancel();
+    _webrtcRemoteStreamSub = null;
+    _groupCallDebounce?.cancel();
+    for (final t in _reconnectTimers.values) {
+      t.cancel();
+    }
+    _reconnectTimers.clear();
+    _reconnectingPeers.clear();
+    _pendingOfferPeers.clear();
+    _outgoingOfferPeers.clear();
+    _noPcSince.clear();
+    _departedPeers.clear();
+    _processedSignals.clear();
+    _activeCall = null;
+    _participantCount = 0;
+    _callDuration = 0;
+    _durationNotifier.value = 0;
+    WakelockPlus.disable();
+    removeCallOverlay();
+
+    final oldWebrtc = _webrtcService;
+    final oldLocalCtrl = _localStreamController;
+    final oldRemoteCtrl = _remoteStreamController;
+    final oldLocalRenderer = _localRenderer;
+    final oldRemoteRenderers =
+        Map<String, RTCVideoRenderer>.from(_remoteRenderers);
+    _webrtcService = null;
+    _localStreamController = null;
+    _remoteStreamController = null;
+    _localRenderer = null;
+    _remoteRenderers.clear();
+    _rendererReady.clear();
+    _pendingRemoteStreams.clear();
+
+    notifyListeners();
+
+    Future.microtask(() async {
+      await oldWebrtc?.dispose();
+      await oldLocalCtrl?.close();
+      await oldRemoteCtrl?.close();
+      oldLocalRenderer?.srcObject = null;
+      await oldLocalRenderer?.dispose();
+      for (final renderer in oldRemoteRenderers.values) {
+        renderer.srcObject = null;
+        await renderer.dispose();
+      }
+    });
+  }
+
+  Future<void> _startNewCallInternal({
     required ActiveCallData callData,
     bool audioOnly = false,
   }) async {
@@ -358,6 +466,7 @@ class CallManager extends ChangeNotifier {
     _departedPeers.clear();
     _leftCall = null;
     _stopLeftCallWatch();
+    _participantCount = 0;
 
     _webrtcService = webrtc.WebRTCService();
     _localStreamController = StreamController<MediaStream>.broadcast();
@@ -476,6 +585,7 @@ class CallManager extends ChangeNotifier {
         _noPcSince.putIfAbsent(peerId, () => DateTime.now());
         if (callData.isGroup && !_reconnectingPeers.contains(peerId)) {
           _disposeRemoteRenderer(peerId);
+          notifyListeners();
 
           _reconnectingPeers.add(peerId);
           _pendingOfferPeers.remove(peerId);
@@ -495,6 +605,7 @@ class CallManager extends ChangeNotifier {
           });
         } else if (!callData.isGroup) {
           _disposeRemoteRenderer(peerId);
+          notifyListeners();
 
           if (_reconnectTimers.isEmpty) {
             _reconnectTimers['single'] = Timer(const Duration(seconds: 5), () {
@@ -576,6 +687,9 @@ class CallManager extends ChangeNotifier {
     if (callData.isGroup) {
       _participantsSub =
           _callService.getParticipantsStream(callData.callId).listen((snapshot) {
+        _updateParticipantCount(snapshot.docs
+            .map((doc) => doc.data())
+            .toList());
         for (final doc in snapshot.docs) {
           final data = doc.data();
           final uid = data['uid'] as String?;
@@ -635,6 +749,18 @@ class CallManager extends ChangeNotifier {
     _processedSignals.remove('offer_${uid}_$peerId');
     _processedSignals.remove('answer_${peerId}_$uid');
     _processedSignals.remove('answer_${uid}_$peerId');
+  }
+
+  /// Recomputes the number of participants Firestore reports as active and
+  /// notifies only when it actually changed.
+  void _updateParticipantCount(List<Map<String, dynamic>> docs) {
+    var count = 0;
+    for (final data in docs) {
+      if (data['status'] == 'active') count++;
+    }
+    if (count == _participantCount) return;
+    _participantCount = count;
+    notifyListeners();
   }
 
   String _signalSignature(Map<String, dynamic> data) {
@@ -767,9 +893,19 @@ class CallManager extends ChangeNotifier {
     }
   }
 
-  Future<void> endActiveCall() async {
-    if (_activeCall == null) return;
+  Future<void> endActiveCall() {
+    if (_activeCall == null) return Future<void>.value();
+    // Callers race each other here (the call-doc listener, the connection
+    // watchdog and the UI can all fire at once) - share one teardown so the
+    // "call ended" message and the Firestore writes happen exactly once.
+    return _endCallFuture ??= _endActiveCallInternal().whenComplete(() {
+      _endCallFuture = null;
+    });
+  }
 
+  Future<void>? _endCallFuture;
+
+  Future<void> _endActiveCallInternal() async {
     removeCallOverlay();
 
     final callId = _activeCall!.callId;
@@ -790,18 +926,27 @@ class CallManager extends ChangeNotifier {
     _reconnectingPeers.clear();
 
     final callMessageStatus = _callDuration > 0 ? 'active' : 'ended';
-    await _sendCallMessage(callStatus: callMessageStatus);
+    try {
+      await _sendCallMessage(callStatus: callMessageStatus);
+    } catch (e) {
+      // A failed chat message must never block hanging up.
+      debugPrint('Error sending end-call message: $e');
+    }
 
+    // Whether the call itself is now over for everybody (as opposed to just
+    // us having stepped out of a call other people are still in).
+    var callFinished = false;
     final uid = _currentUser?.uid;
     if (uid != null && uid.isNotEmpty) {
       try {
-        await _callService.leaveCall(callId, uid);
+        callFinished = await _callService.leaveCall(callId, uid);
       } catch (e) {
         debugPrint('Error leaving call: $e');
       }
     } else {
       try {
         await _callService.endCall(callId);
+        callFinished = true;
       } catch (e) {
         debugPrint('Error ending call: $e');
       }
@@ -810,6 +955,7 @@ class CallManager extends ChangeNotifier {
     _activeCall = null;
     _callDuration = 0;
     _durationNotifier.value = 0;
+    _participantCount = 0;
     _processedSignals.clear();
     _pendingOfferPeers.clear();
     _outgoingOfferPeers.clear();
@@ -851,25 +997,39 @@ class CallManager extends ChangeNotifier {
         renderer.dispose();
       }
 
-      Future.delayed(const Duration(seconds: 2), () async {
+      if (callFinished) {
+        // Only wipe the call's signals/participants once nobody is in it any
+        // more - doing this while others are still talking silently destroys
+        // their signaling and makes rejoin impossible for everyone.
+        Future.delayed(const Duration(seconds: 2), () async {
+          try {
+            await _callService.cleanupCallData(callId);
+          } catch (e) {
+            debugPrint('Error cleaning up call data: $e');
+          }
+        });
+      } else if (uid != null && uid.isNotEmpty) {
         try {
-          await _callService.cleanupCallData(callId);
+          await _callService.deleteUserSignals(callId, uid);
         } catch (e) {
-          debugPrint('Error cleaning up call data: $e');
+          debugPrint('Error deleting user call signals: $e');
         }
-      });
+      }
     });
   }
 
-  Future<void> leaveGroupCall() async {
-    if (_activeCall == null) return;
-    if (!_activeCall!.isGroup) {
-      await endActiveCall();
-      return;
-    }
+  Future<void> leaveGroupCall() {
+    if (_activeCall == null) return Future<void>.value();
+    if (!_activeCall!.isGroup) return endActiveCall();
+    return _leaveFuture ??= _leaveGroupCallInternal().whenComplete(() {
+      _leaveFuture = null;
+    });
+  }
 
+  Future<void>? _leaveFuture;
+
+  Future<void> _leaveGroupCallInternal() async {
     final callId = _activeCall!.callId;
-    _leftCall = _activeCall;
 
     removeCallOverlay();
 
@@ -894,12 +1054,19 @@ class CallManager extends ChangeNotifier {
     _departedPeers.clear();
 
     final callMessageStatus = _callDuration > 0 ? 'active' : 'ended';
-    await _sendCallMessage(callStatus: callMessageStatus);
+    try {
+      await _sendCallMessage(callStatus: callMessageStatus);
+    } catch (e) {
+      // A failed chat message must never block leaving the call.
+      debugPrint('Error sending leave-call message: $e');
+    }
 
+    // true when we were the last one out and the call ended with us.
+    var callFinished = false;
     final uid = _currentUser?.uid;
     if (uid != null && uid.isNotEmpty) {
       try {
-        await _callService.leaveCall(callId, uid);
+        callFinished = await _callService.leaveCall(callId, uid);
       } catch (e) {
         debugPrint('Error leaving call: $e');
       }
@@ -910,12 +1077,20 @@ class CallManager extends ChangeNotifier {
       }
     }
 
+    // Nothing left to rejoin when the call died with us, so don't offer it.
+    final leftCall = callFinished ? null : _activeCall;
+
     _activeCall = null;
     _callDuration = 0;
     _durationNotifier.value = 0;
     WakelockPlus.disable();
+    _leftCall = leftCall;
+    if (leftCall == null) {
+      _participantCount = 0;
+      _stopLeftCallWatch();
+    }
 
-    _startLeftCallWatch(callId);
+    if (leftCall != null) _startLeftCallWatch(callId);
 
     final oldWebrtc = _webrtcService;
     final oldLocalCtrl = _localStreamController;
@@ -947,6 +1122,16 @@ class CallManager extends ChangeNotifier {
       for (final renderer in oldRemoteRenderers.values) {
         renderer.srcObject = null;
         renderer.dispose();
+      }
+
+      if (callFinished) {
+        Future.delayed(const Duration(seconds: 2), () async {
+          try {
+            await _callService.cleanupCallData(callId);
+          } catch (e) {
+            debugPrint('Error cleaning up call data: $e');
+          }
+        });
       }
     });
   }
@@ -962,6 +1147,7 @@ class CallManager extends ChangeNotifier {
     _stopLeftCallWatch();
     if (_leftCall == null) return;
     _leftCall = null;
+    _participantCount = 0;
     notifyListeners();
   }
 
@@ -988,6 +1174,7 @@ class CallManager extends ChangeNotifier {
         .listen(
       (snapshot) {
         if (_leftCall == null) return;
+        _updateParticipantCount(snapshot.docs.map((doc) => doc.data()).toList());
         final hasOtherActive = snapshot.docs.any((doc) {
           final data = doc.data();
           final status = data['status'] as String?;
@@ -1062,6 +1249,7 @@ class CallManager extends ChangeNotifier {
       final callName = left.callName;
       _leftCall = null;
       _stopLeftCallWatch();
+      _participantCount = 0;
 
       try {
         await startNewCall(
@@ -1088,7 +1276,9 @@ class CallManager extends ChangeNotifier {
         return;
       }
 
-      navigatorKey.currentState?.pushReplacement(
+      // Push (not replace): the chat screen underneath must survive so the
+      // user returns to it when the call is over.
+      navigatorKey.currentState?.push(
         MaterialPageRoute(
           builder: (_) => CallScreen(
             callId: callId,
@@ -1102,6 +1292,84 @@ class CallManager extends ChangeNotifier {
           ),
         ),
       );
+    } finally {
+      _isRejoining = false;
+    }
+  }
+
+  /// Joins a call that is already in progress (late join) - for members who
+  /// never got, or never answered, the original ring.
+  ///
+  /// With [replaceTop] the current top route is swapped for [CallScreen]
+  /// instead of a new route being pushed (used when the top route is a
+  /// throw-away incoming-call route).
+  Future<bool> joinExistingCall(
+    Call call,
+    String callName, {
+    bool replaceTop = false,
+  }) async {
+    if (_isRejoining) return false;
+    final user = _currentUser;
+    if (user == null) return false;
+    if (_activeCall != null || _outgoingCall != null) {
+      // Already busy in some call (possibly this one) - the caller should
+      // have used returnToCall()/rejoinCall() instead.
+      return false;
+    }
+    if (!call.members.contains(user.uid)) return false;
+
+    _isRejoining = true;
+    try {
+      final callDoc = await _callService
+          .getCallStream(call.id)
+          .first
+          .timeout(const Duration(seconds: 10));
+      if (callDoc == null ||
+          callDoc.status == CallStatus.ended ||
+          callDoc.status == CallStatus.missed ||
+          callDoc.status == CallStatus.cancelled ||
+          callDoc.status == CallStatus.declined) {
+        return false;
+      }
+
+      await startNewCall(
+        callData: ActiveCallData(
+          callId: callDoc.id,
+          callName: callName,
+          callType: callDoc.type,
+          members: callDoc.members,
+          createdBy: callDoc.createdBy,
+          isGroup: callDoc.groupId != null,
+          chatId: callDoc.chatId,
+          groupId: callDoc.groupId,
+          startedAt: DateTime.now(),
+        ),
+        audioOnly: callDoc.type == CallType.audio,
+      );
+
+      final nav = navigatorKey.currentState;
+      if (nav == null) return false;
+      final route = MaterialPageRoute(
+        builder: (_) => CallScreen(
+          callId: callDoc.id,
+          callName: callName,
+          callType: callDoc.type,
+          members: callDoc.members,
+          createdBy: callDoc.createdBy,
+          isGroup: callDoc.groupId != null,
+          chatId: callDoc.chatId,
+          groupId: callDoc.groupId,
+        ),
+      );
+      if (replaceTop) {
+        nav.pushReplacement(route);
+      } else {
+        nav.push(route);
+      }
+      return true;
+    } catch (e) {
+      debugPrint('Error joining call: $e');
+      return false;
     } finally {
       _isRejoining = false;
     }
@@ -1278,7 +1546,11 @@ class _CallOverlayBannerState extends State<_CallOverlayBanner> {
                           ValueListenableBuilder<int>(
                             valueListenable: _callManager.callDurationListenable,
                             builder: (context, value, _) => Text(
-                              isActive ? formatSeconds(value) : 'Ringing...',
+                              isActive
+                                  ? (_callManager.activeCall?.isGroup == true
+                                      ? '${_callManager.participantCount} in call \u2022 ${formatSeconds(value)}'
+                                      : formatSeconds(value))
+                                  : 'Ringing...',
                               style: TextStyle(
                                 color: Colors.white.withValues(alpha: 0.7),
                                 fontSize: 11,

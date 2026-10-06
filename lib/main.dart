@@ -9,6 +9,7 @@ import 'firebase_options.dart';
 import 'app.dart';
 import 'models/call.dart';
 import 'services/auth/user_service.dart';
+import 'services/call/call_manager.dart';
 import 'services/call/call_service.dart';
 import 'screens/call/incoming_call_screen.dart';
 
@@ -30,13 +31,19 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 }
 
+bool incomingCallFlowActive = false;
+
 void _handleIncomingCall(Map<String, dynamic> data) {
   final callId = data['callId'] as String?;
   if (callId == null) return;
+  // Already talking (or already showing a ring screen) - don't stack another
+  // listener route on top of the app.
+  if (incomingCallFlowActive || CallManager().hasAnyCall) return;
 
   final context = navigatorKey.currentContext;
   if (context == null) return;
 
+  incomingCallFlowActive = true;
   Navigator.of(context).push(
     MaterialPageRoute(
       fullscreenDialog: true,
@@ -143,6 +150,11 @@ class _IncomingCallListenerState extends State<_IncomingCallListener> {
   final _userService = UserService();
   StreamSubscription<Call?>? _callSub;
   bool _navigated = false;
+  bool _handedOff = false;
+  bool _replaced = false;
+  bool _closed = false;
+  bool _handling = false;
+  bool _pendingClose = false;
 
   @override
   void initState() {
@@ -150,21 +162,45 @@ class _IncomingCallListenerState extends State<_IncomingCallListener> {
     _listenForCall();
   }
 
+  static bool _isTerminal(CallStatus status) {
+    return status == CallStatus.ended ||
+        status == CallStatus.declined ||
+        status == CallStatus.missed ||
+        status == CallStatus.cancelled;
+  }
+
+  /// Pops this loading route, but never once another route has replaced it -
+  /// a late Firestore snapshot must not pop the screen underneath. Close
+  /// requests arriving while a previous snapshot is still being handled are
+  /// deferred until that handler is done.
+  void _close() {
+    if (_closed || _replaced || !mounted) return;
+    if (_handling) {
+      _pendingClose = true;
+      return;
+    }
+    _closed = true;
+    Navigator.of(context).pop();
+  }
+
   void _listenForCall() {
     _callSub = _callService.getCallStream(widget.callId).listen((call) async {
-      if (call == null ||
-          call.status == CallStatus.ended ||
-          call.status == CallStatus.declined ||
-          call.status == CallStatus.missed ||
-          call.status == CallStatus.cancelled) {
-        if (mounted) Navigator.of(context).pop();
+      if (call == null || _isTerminal(call.status)) {
+        _navigated = true;
+        _close();
         return;
       }
+      if (_navigated || !mounted) return;
+      _navigated = true;
+      _handling = true;
+      try {
+        if (CallManager().hasAnyCall) {
+          // Already in a call - nothing to show for this push.
+          _close();
+          return;
+        }
 
-      if (call.status.name == 'ringing' && mounted && !_navigated) {
-        _navigated = true;
-
-        String callerDisplayName = call.createdBy;
+        var callerDisplayName = call.createdBy;
         try {
           final userDoc = await _userService.getUserDocument(call.createdBy);
           if (userDoc != null && userDoc.displayName.isNotEmpty) {
@@ -172,7 +208,27 @@ class _IncomingCallListenerState extends State<_IncomingCallListener> {
           }
         } catch (_) {}
 
-        if (mounted) {
+        if (!mounted) return;
+
+        if (call.status == CallStatus.active) {
+          // The call got going while the push was in flight (we were late).
+          // Join it rather than leaving the user on a loading screen forever.
+          // _handedOff stays false so dispose() clears the flow flag: from
+          // here on the call itself (hasAnyCall) guards against duplicates.
+          final joined = await CallManager()
+              .joinExistingCall(call, callerDisplayName, replaceTop: true);
+          if (!mounted) return;
+          if (joined) {
+            _replaced = true;
+            return;
+          }
+          _close();
+          return;
+        }
+
+        if (call.status == CallStatus.ringing) {
+          _handedOff = true;
+          _replaced = true;
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
               builder: (_) => IncomingCallScreen(
@@ -181,6 +237,14 @@ class _IncomingCallListenerState extends State<_IncomingCallListener> {
               ),
             ),
           );
+        } else {
+          _close();
+        }
+      } finally {
+        _handling = false;
+        if (_pendingClose) {
+          _pendingClose = false;
+          _close();
         }
       }
     });
@@ -188,7 +252,11 @@ class _IncomingCallListenerState extends State<_IncomingCallListener> {
 
   @override
   void dispose() {
+    // When we handed over to a screen that owns the flow, that screen clears
+    // the flag - only clear it here if this route is the end of the line.
+    if (!_handedOff) incomingCallFlowActive = false;
     _callSub?.cancel();
+    _callService.dispose();
     super.dispose();
   }
 

@@ -240,11 +240,55 @@ async function timeoutUnansweredCalls() {
   console.log(`Timed out ${staleCalls.size} unanswered calls`);
 }
 
+// Safety net: a call must never outlive its last participant. Clients end it
+// themselves on leave, but a crash or a lost write would otherwise leave a
+// zombie "active" call that members can see (and try to join) forever.
+async function endEmptyActiveCalls() {
+  const now = new Date();
+  const oneMinuteAgo = new Date(now.getTime() - 60 * 1000);
+
+  const activeCalls = await db.collection('calls')
+    .where('status', '==', 'active')
+    .limit(25)
+    .get();
+
+  if (activeCalls.empty) return;
+
+  const ended = [];
+  for (const doc of activeCalls.docs) {
+    const data = doc.data();
+    const startedAt = (data.startedAt || data.createdAt)?.toDate?.() || null;
+    // Never reap a call that is still spinning up.
+    if (startedAt && startedAt > oneMinuteAgo) continue;
+
+    const activeParticipants = await doc.ref
+      .collection('participants')
+      .where('status', '==', 'active')
+      .limit(1)
+      .get();
+
+    if (activeParticipants.empty) ended.push(doc.ref);
+  }
+
+  if (ended.length === 0) return;
+
+  const batch = db.batch();
+  for (const ref of ended) {
+    batch.update(ref, {
+      status: 'ended',
+      endedAt: new Date(),
+    });
+  }
+  await batch.commit();
+  console.log(`Ended ${ended.length} empty active calls`);
+}
+
 exports.scheduledCallTimeout = functions.pubsub
   .schedule('every 1 minutes')
   .timeZone('Asia/Manila')
   .onRun(async (context) => {
     await timeoutUnansweredCalls();
+    await endEmptyActiveCalls();
   });
 
 // ──────────────────── Poll Vote Aggregation ────────────────────

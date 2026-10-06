@@ -59,6 +59,8 @@ class _CallScreenState extends State<CallScreen> {
   bool _pipInitialized = false;
   String? _focusedPeerId;
   bool _isEndingCall = false;
+  String _lastCallSignature = '';
+  final Set<RTCVideoRenderer> _attachedRenderers = {};
 
   bool _pinchTriggered = false;
   bool _showFlipFlash = false;
@@ -67,13 +69,65 @@ class _CallScreenState extends State<CallScreen> {
   void initState() {
     super.initState();
     _callManager.addListener(_onCallUpdate);
+    _syncRendererListeners();
     _loadParticipantNames();
   }
 
   @override
   void dispose() {
     _callManager.removeListener(_onCallUpdate);
+    for (final renderer in _attachedRenderers) {
+      renderer.removeListener(_onRendererChanged);
+    }
+    _attachedRenderers.clear();
     super.dispose();
+  }
+
+  /// Remote/local renderers change size or render their first frame without
+  /// CallManager ever knowing - listen to them directly so the avatar ->
+  /// video switch does not wait for an unrelated notification.
+  void _syncRendererListeners() {
+    final wanted = <RTCVideoRenderer>{
+      ..._callManager.remoteRenderers.values,
+      if (_callManager.localRenderer != null) _callManager.localRenderer!,
+    };
+    for (final renderer in wanted) {
+      if (_attachedRenderers.add(renderer)) {
+        renderer.addListener(_onRendererChanged);
+      }
+    }
+    final stale = _attachedRenderers.difference(wanted).toList();
+    for (final renderer in stale) {
+      _attachedRenderers.remove(renderer);
+      renderer.removeListener(_onRendererChanged);
+    }
+  }
+
+  void _onRendererChanged() {
+    if (!mounted) return;
+    safeNav(() {
+      if (mounted) setState(() {});
+    }, label: 'call renderer update');
+  }
+
+  /// Everything the call screen actually renders, so a stream of CallManager
+  /// notifications (ICE, offers, answers, connection state...) does not
+  /// rebuild a screen full of video textures for nothing.
+  String _computeCallSignature() {
+    final mgr = _callManager;
+    final buffer = StringBuffer()
+      ..write(mgr.activeCall?.callId ?? '')
+      ..write('|${mgr.participantCount}')
+      ..write('|${mgr.isMuted}|${mgr.isVideoOff}|${mgr.isSpeakerOn}')
+      ..write('|${mgr.localRenderer?.srcObject != null}')
+      ..write('|${mgr.remoteRenderers.keys.join(',')}');
+    if (mgr.localRenderer != null) {
+      buffer.write('|L${_hasActiveVideo(mgr.localRenderer!)}');
+    }
+    for (final entry in mgr.remoteRenderers.entries) {
+      buffer.write('|${entry.key}:${_hasActiveVideo(entry.value)}');
+    }
+    return buffer.toString();
   }
 
   void _onCallUpdate() {
@@ -86,6 +140,10 @@ class _CallScreenState extends State<CallScreen> {
         _exitToChat();
         return;
       }
+      _syncRendererListeners();
+      final signature = _computeCallSignature();
+      if (signature == _lastCallSignature) return;
+      _lastCallSignature = signature;
       setState(() {});
     }, label: 'call update');
   }
@@ -197,33 +255,34 @@ class _CallScreenState extends State<CallScreen> {
     };
     if (pending.isEmpty) return;
 
-    final names = <String, String>{};
-    final photos = <String, String>{};
-
-    for (final uid in pending) {
+    // All lookups at once - a sequential await per member made joining a
+    // large group crawl one Firestore round trip at a time.
+    final results = await Future.wait(pending.map((uid) async {
+      var name = uid;
+      String? photo;
       try {
         final user = await _userService.getUserDocument(uid);
         if (user != null) {
-          names[uid] = user.displayName.isNotEmpty
+          name = user.displayName.isNotEmpty
               ? user.displayName
               : (user.username.isNotEmpty ? user.username : uid);
           if (user.photoUrl != null && user.photoUrl!.isNotEmpty) {
-            photos[uid] = user.photoUrl!;
-          } else if (user.avatarAsset != null && user.avatarAsset!.isNotEmpty) {
-            photos[uid] = 'asset:${user.avatarAsset!}';
+            photo = user.photoUrl!;
+          } else if (user.avatarAsset != null &&
+              user.avatarAsset!.isNotEmpty) {
+            photo = 'asset:${user.avatarAsset!}';
           }
-        } else {
-          names[uid] = uid;
         }
-      } catch (_) {
-        names[uid] = uid;
-      }
-    }
+      } catch (_) {}
+      return (uid, name, photo);
+    }));
 
-    if (!mounted || names.isEmpty) return;
+    if (!mounted) return;
     setState(() {
-      _participantNames.addAll(names);
-      _participantPhotos.addAll(photos);
+      for (final (uid, name, photo) in results) {
+        _participantNames[uid] = name;
+        if (photo != null) _participantPhotos[uid] = photo;
+      }
     });
   }
 
@@ -865,7 +924,9 @@ class _CallScreenState extends State<CallScreen> {
                     ValueListenableBuilder<int>(
                       valueListenable: _callManager.callDurationListenable,
                       builder: (context, value, _) => Text(
-                        formatSeconds(value),
+                        widget.isGroup && _callManager.participantCount > 0
+                            ? '${formatSeconds(value)} \u2022 ${_callManager.participantCount} in call'
+                            : formatSeconds(value),
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           color: Colors.white70,
@@ -941,9 +1002,9 @@ class _CallScreenState extends State<CallScreen> {
           if (widget.isGroup) ...[
             const SizedBox(height: 8),
             Text(
-              _callManager.remoteParticipantCount == 0
-                  ? 'Waiting for other participants to join...'
-                  : '${_callManager.remoteParticipantCount + 1} participants',
+              _callManager.participantCount > 0
+                  ? '${_callManager.participantCount} participants'
+                  : 'Waiting for other participants to join...',
               textAlign: TextAlign.center,
               style:
                   const TextStyle(color: Colors.white54, fontSize: 14),
